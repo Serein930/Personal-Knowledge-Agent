@@ -2,6 +2,7 @@
 target/
 *.class
 *.log
+.m2/
 
 # Frontend
 node_modules/
