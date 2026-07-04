@@ -5,13 +5,14 @@ import { DashboardPage } from './pages/DashboardPage';
 import { EvaluationPage } from './pages/EvaluationPage';
 import { IngestionPage } from './pages/IngestionPage';
 import { KnowledgeBasePage } from './pages/KnowledgeBasePage';
+import { SettingsPage } from './pages/SettingsPage';
 import { StudyPlanPage } from './pages/StudyPlanPage';
 import type { PageKey } from './types';
 
 export default function App() {
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
 
-  // 第一阶段暂不引入路由库，使用页面状态保持导航结构轻量。
+  // 暂不引入路由库，先用页面状态支撑前端早期阶段的快速迭代。
   const pageContent = useMemo(() => {
     switch (activePage) {
       case 'knowledge':
@@ -24,6 +25,8 @@ export default function App() {
         return <StudyPlanPage />;
       case 'evaluation':
         return <EvaluationPage />;
+      case 'settings':
+        return <SettingsPage />;
       default:
         return <DashboardPage />;
     }

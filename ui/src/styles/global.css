@@ -295,6 +295,11 @@ textarea {
   font-weight: 600;
 }
 
+.switch-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .chat-layout {
   align-items: start;
   grid-template-columns: minmax(0, 1fr) 360px;

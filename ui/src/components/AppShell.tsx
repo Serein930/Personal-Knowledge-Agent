@@ -6,22 +6,25 @@
   FileUp,
   GraduationCap,
   LayoutDashboard,
+  Settings,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { PageKey } from '../types';
 
 interface AppShellProps {
   activePage: PageKey;
   onPageChange: (page: PageKey) => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-const navItems: Array<{ key: PageKey; label: string; icon: React.ReactNode }> = [
+const navItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
   { key: 'dashboard', label: '工作台', icon: <LayoutDashboard size={18} /> },
   { key: 'knowledge', label: '知识库', icon: <Database size={18} /> },
   { key: 'ingestion', label: '采集中心', icon: <FileUp size={18} /> },
   { key: 'chat', label: 'Agent 问答', icon: <BrainCircuit size={18} /> },
   { key: 'study', label: '学习计划', icon: <GraduationCap size={18} /> },
   { key: 'evaluation', label: '评估观测', icon: <BarChart3 size={18} /> },
+  { key: 'settings', label: '设置', icon: <Settings size={18} /> },
 ];
 
 export function AppShell({ activePage, onPageChange, children }: AppShellProps) {
@@ -58,8 +61,8 @@ export function AppShell({ activePage, onPageChange, children }: AppShellProps) 
             <h1>面向个人学习资料的智能知识中枢</h1>
           </div>
           <div className="topbar__status">
-            <span>Stage 1</span>
-            <strong>前端框架设计中</strong>
+            <span>Stage 3</span>
+            <strong>前端联调准备中</strong>
           </div>
         </header>
 

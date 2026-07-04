@@ -4,7 +4,8 @@
   | 'ingestion'
   | 'chat'
   | 'study'
-  | 'evaluation';
+  | 'evaluation'
+  | 'settings';
 
 export type KnowledgeSourceType = 'PDF' | 'Markdown' | '网页文章' | '代码片段';
 
@@ -37,4 +38,10 @@ export interface StudyTask {
   title: string;
   progress: number;
   focus: string;
+}
+
+export interface RuntimeSetting {
+  label: string;
+  value: string;
+  description: string;
 }
