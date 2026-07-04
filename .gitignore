@@ -26,3 +26,10 @@ Thumbs.db
 uploads/
 logs/
 tmp/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Generated config build output
+ui/vite.config.js
+ui/vite.config.d.ts
