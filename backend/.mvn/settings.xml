@@ -5,8 +5,8 @@
     <!--
       项目级 Maven 设置。
 
-      当前用户机器的全局 Maven settings 指向只读仓库目录，容易导致依赖解析失败。
-      本项目显式使用仓库内 .m2/repository，保证后端构建可重复且不污染全局环境。
+      当前用户机器的全局 Maven settings 可能指向只读仓库目录，容易导致依赖解析失败。
+      本项目显式使用用户目录下的标准 .m2/repository，避免受全局 Maven 配置影响。
     -->
-    <localRepository>${user.dir}/../.m2/repository</localRepository>
+    <localRepository>${user.home}/.m2/repository</localRepository>
 </settings>

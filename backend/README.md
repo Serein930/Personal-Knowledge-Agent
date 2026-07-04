@@ -65,8 +65,8 @@ cd D:\Program\AgentMind\backend
 mvn test
 ```
 
-本项目在 `backend/.mvn/settings.xml` 中指定了仓库内 `.m2/repository` 作为 Maven 本地仓库，
-用于避免受开发机器全局 Maven 配置影响。`.m2/` 目录不提交到 Git。
+本项目在 `backend/.mvn/settings.xml` 中指定 `${user.home}/.m2/repository` 作为 Maven 本地仓库，
+用于避免受开发机器全局 Maven 配置影响。
 
 ## 当前环境验证记录
 
