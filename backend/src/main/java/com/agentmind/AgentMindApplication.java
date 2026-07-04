@@ -1,4 +1,4 @@
-﻿package com.agentmind;
+package com.agentmind;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -1,4 +1,4 @@
-﻿package com.agentmind.common.response;
+package com.agentmind.common.response;
 
 import java.time.OffsetDateTime;
 

@@ -1,4 +1,4 @@
-﻿package com.agentmind.common.exception;
+package com.agentmind.common.exception;
 
 /**
  * 后端统一错误码。

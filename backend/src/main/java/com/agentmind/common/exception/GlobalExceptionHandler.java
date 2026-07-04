@@ -1,4 +1,4 @@
-﻿package com.agentmind.common.exception;
+package com.agentmind.common.exception;
 
 import com.agentmind.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;

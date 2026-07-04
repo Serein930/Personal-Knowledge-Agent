@@ -1,4 +1,4 @@
-﻿package com.agentmind;
+package com.agentmind;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

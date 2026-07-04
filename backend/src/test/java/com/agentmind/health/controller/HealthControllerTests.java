@@ -1,4 +1,4 @@
-﻿package com.agentmind.health.controller;
+package com.agentmind.health.controller;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;

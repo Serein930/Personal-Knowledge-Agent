@@ -1,4 +1,4 @@
-﻿package com.agentmind.health.controller;
+package com.agentmind.health.controller;
 
 import com.agentmind.common.response.ApiResponse;
 import java.time.OffsetDateTime;
