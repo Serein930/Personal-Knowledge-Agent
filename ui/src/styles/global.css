@@ -252,6 +252,13 @@ textarea {
   color: #182230;
 }
 
+.item-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .compact-list span {
   color: #64748b;
   font-size: 13px;

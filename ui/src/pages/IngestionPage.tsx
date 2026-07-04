@@ -1,13 +1,33 @@
-﻿import { Button, Input, Select, Upload } from 'antd';
+﻿import { Button, Input, Progress, Select, Tag, Upload } from 'antd';
 import { Link, UploadCloud } from 'lucide-react';
+import type { IngestionTaskDto } from '../api/contracts';
 import { SectionHeader } from '../components/SectionHeader';
+
+const recentTasks: IngestionTaskDto[] = [
+  {
+    id: 'task-001',
+    title: 'Spring AI 官方文档摘录',
+    source: 'https://docs.spring.io/spring-ai/reference/',
+    status: '处理中',
+    progress: 62,
+    createdAt: '2026-07-04 20:40',
+  },
+  {
+    id: 'task-002',
+    title: 'Java 并发编程笔记',
+    source: '本地 Markdown 文件',
+    status: '已完成',
+    progress: 100,
+    createdAt: '2026-07-04 20:28',
+  },
+];
 
 export function IngestionPage() {
   return (
     <div className="page-stack">
       <SectionHeader
         title="采集中心"
-        description="第一阶段仅设计文件上传和网页链接提交的前端形态，后续接入摄取任务 API。"
+        description="第二阶段补充任务状态雏形，后续接入文件上传、网页采集和异步摄取 API。"
       />
 
       <div className="two-column">
@@ -17,7 +37,7 @@ export function IngestionPage() {
           <Upload.Dragger multiple beforeUpload={() => false} className="upload-zone">
             <UploadCloud size={32} />
             <p>拖拽文件到此处，或点击选择文件</p>
-            <span>第一阶段不会真正上传文件</span>
+            <span>第二阶段仍不会真正上传文件</span>
           </Upload.Dragger>
         </section>
 
@@ -44,6 +64,22 @@ export function IngestionPage() {
           </div>
         </section>
       </div>
+
+      <section className="panel">
+        <h3>最近采集任务</h3>
+        <div className="compact-list">
+          {recentTasks.map((task) => (
+            <article key={task.id}>
+              <div className="item-line">
+                <strong>{task.title}</strong>
+                <Tag>{task.status}</Tag>
+              </div>
+              <span>{task.source} · {task.createdAt}</span>
+              <Progress percent={task.progress} size="small" />
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

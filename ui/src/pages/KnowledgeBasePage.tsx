@@ -1,17 +1,20 @@
 ﻿import { Badge, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import type { KnowledgeDocumentDto } from '../api/contracts';
+import { PageState } from '../components/PageState';
 import { SectionHeader } from '../components/SectionHeader';
+import { toKnowledgeDocumentDto } from '../data/adapters';
 import { knowledgeItems } from '../data/mockData';
-import type { KnowledgeItem } from '../types';
+import type { IngestionStatus } from '../types';
 
-const statusColor: Record<KnowledgeItem['status'], 'success' | 'processing' | 'default' | 'error'> = {
+const statusColor: Record<IngestionStatus, 'success' | 'processing' | 'default' | 'error'> = {
   已完成: 'success',
   处理中: 'processing',
   等待中: 'default',
   失败: 'error',
 };
 
-const columns: ColumnsType<KnowledgeItem> = [
+const columns: ColumnsType<KnowledgeDocumentDto> = [
   {
     title: '标题',
     dataIndex: 'title',
@@ -24,8 +27,8 @@ const columns: ColumnsType<KnowledgeItem> = [
   },
   {
     title: '知识空间',
-    dataIndex: 'workspace',
-    key: 'workspace',
+    dataIndex: 'workspaceName',
+    key: 'workspaceName',
   },
   {
     title: '标签',
@@ -35,14 +38,14 @@ const columns: ColumnsType<KnowledgeItem> = [
   },
   {
     title: '摄取状态',
-    dataIndex: 'status',
-    key: 'status',
-    render: (status: KnowledgeItem['status']) => <Badge status={statusColor[status]} text={status} />,
+    dataIndex: 'ingestionStatus',
+    key: 'ingestionStatus',
+    render: (status: IngestionStatus) => <Badge status={statusColor[status]} text={status} />,
   },
   {
     title: 'Chunks',
-    dataIndex: 'chunks',
-    key: 'chunks',
+    dataIndex: 'chunkCount',
+    key: 'chunkCount',
   },
   {
     title: '更新时间',
@@ -52,6 +55,9 @@ const columns: ColumnsType<KnowledgeItem> = [
 ];
 
 export function KnowledgeBasePage() {
+  // 第二阶段使用 DTO 形态的 mock 数据，后续替换为 apiClient.get<PageResult<KnowledgeDocumentDto>>()。
+  const documents = knowledgeItems.map(toKnowledgeDocumentDto);
+
   return (
     <div className="page-stack">
       <SectionHeader
@@ -59,16 +65,17 @@ export function KnowledgeBasePage() {
         description="管理文档、网页文章和后续向量化后的知识片段。"
       />
 
-      <section className="panel">
-        {/* 第一阶段使用静态表格，后续会替换为分页 API 和筛选条件。 */}
-        <Table
-          columns={columns}
-          dataSource={knowledgeItems}
-          pagination={false}
-          rowKey="id"
-          scroll={{ x: 920 }}
-        />
-      </section>
+      <PageState empty={documents.length === 0} emptyDescription="暂无知识资产，请先在采集中心提交文件或网页链接。">
+        <section className="panel">
+          <Table
+            columns={columns}
+            dataSource={documents}
+            pagination={false}
+            rowKey="id"
+            scroll={{ x: 920 }}
+          />
+        </section>
+      </PageState>
     </div>
   );
 }
