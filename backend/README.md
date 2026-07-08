@@ -19,6 +19,7 @@ Implemented:
 - Temporary in-memory chunk preview endpoint for development verification.
 - Deterministic local embedding client for development.
 - In-memory vector store with workspace-scoped semantic search.
+- PostgreSQL + pgvector schema and `VectorStore` adapter skeleton.
 
 Not implemented yet:
 
@@ -27,7 +28,7 @@ Not implemented yet:
 - Real MinIO deployment adapter.
 - PDF/Word text extraction.
 - Real Spring AI embedding model integration.
-- PostgreSQL + pgvector persistence and semantic retrieval.
+- Production validation of PostgreSQL + pgvector retrieval quality.
 - Spring AI RAG chat.
 
 ## Run
@@ -104,11 +105,45 @@ Invoke-RestMethod `
   -Body '{"query":"thread pool worker threads","topK":5}'
 ```
 
+## PostgreSQL + pgvector Adapter
+
+The default vector store is still memory:
+
+```yaml
+agentmind:
+  vector-store:
+    type: memory
+    embedding-dimensions: 128
+```
+
+To switch to PostgreSQL + pgvector later:
+
+1. Create a PostgreSQL database with pgvector installed.
+2. Run `backend/src/main/resources/db/schema/knowledge_vector_chunks.sql`.
+3. Configure datasource properties locally, for example in an ignored profile file:
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/agentmind
+    username: agentmind
+    password: your-local-password
+
+agentmind:
+  vector-store:
+    type: pgvector
+    embedding-dimensions: 128
+```
+
+The application service still depends on the `VectorStore` interface, so the memory adapter and pgvector adapter can
+be swapped by configuration.
+
 Notes:
 
 - Uploaded files and fetched HTML snapshots are stored under `.agentmind-storage`, which is ignored by Git.
 - Markdown, TXT/code and HTML can generate chunks in the current stage.
 - Generated chunks are indexed into the current in-memory vector store.
 - The current embedding implementation is deterministic and dependency-free; it is only for verifying retrieval flow.
+- The pgvector adapter is available behind a configuration switch, but it is not enabled by default.
 - PDF and Word files can still be stored, but parser support is reserved for a later stage.
 - Document, task, chunk and vector data are currently stored in memory and reset when the service restarts.

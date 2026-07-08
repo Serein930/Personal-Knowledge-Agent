@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Repository;
  * replace vectors per document, delete vectors on failed ingestion, and search only inside the requested workspace.</p>
  */
 @Repository
+@ConditionalOnProperty(prefix = "agentmind.vector-store", name = "type", havingValue = "memory", matchIfMissing = true)
 public class InMemoryVectorStore implements VectorStore {
 
     private final Map<String, KnowledgeVector> vectors = new ConcurrentHashMap<>();
