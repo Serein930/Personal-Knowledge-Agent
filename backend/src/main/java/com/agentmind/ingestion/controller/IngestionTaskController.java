@@ -11,10 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 摄取任务查询接口骨架。
- *
- * <p>当前阶段任务数据来自内存 mock service。后续异步摄取流程落地后，
- * 该接口会改为查询任务表或任务状态存储。</p>
+ * HTTP API for ingestion task status queries.
  */
 @Validated
 @RestController
@@ -29,8 +26,8 @@ public class IngestionTaskController {
 
     @GetMapping("/{taskId}")
     public ApiResponse<IngestionTaskResponse> getTask(
-            @PathVariable @Positive(message = "workspaceId 必须为正数") Long workspaceId,
-            @PathVariable @Positive(message = "taskId 必须为正数") Long taskId
+            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
+            @PathVariable @Positive(message = "taskId must be positive") Long taskId
     ) {
         return ApiResponse.success(documentApplicationService.getTask(workspaceId, taskId));
     }

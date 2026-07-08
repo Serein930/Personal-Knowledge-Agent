@@ -1,34 +1,36 @@
 # AgentMind Backend
 
-Personal Knowledge Agent 后端服务。
+Personal Knowledge Agent backend service.
 
-## 当前阶段
+## Current Stage
 
-当前处于后端 Stage 4：文件与网页摄取流程实现。
+The backend is now in the document parsing and chunking preparation stage.
 
-已包含：
+Implemented:
 
-- Java 21 + Spring Boot 3.x Maven 工程。
-- 统一 API 响应结构、分页响应结构和全局异常处理。
-- 健康检查接口。
-- 文档、摄取任务相关 DTO 和枚举契约。
-- 文件上传接口骨架，并接入真实文件大小、文件名、扩展名校验。
-- 本地对象存储适配层，默认写入运行目录下的 `.agentmind-storage`。
-- URL 采集接口骨架，并接入基础 SSRF 防护和 HTML 抓取骨架。
-- 内存版文档与摄取任务状态流转，用于前后端联调。
-- 针对当前摄取流程的单元测试。
+- Java 21 + Spring Boot 3.x Maven project.
+- Unified API response, page response and global exception handling.
+- Health check endpoint.
+- Document and ingestion task DTO contracts.
+- File upload validation and local object storage adapter.
+- URL safety validation and raw HTML fetch skeleton.
+- Markdown, TXT/code and HTML text extraction.
+- Basic deterministic chunking with Markdown heading awareness.
+- Temporary in-memory chunk preview endpoint for development verification.
 
-暂未包含：
+Not implemented yet:
 
-- 数据库持久化。
-- 用户登录与权限。
-- MinIO 真实部署适配。
-- 文档正文解析、chunk 切分和向量化。
-- Spring AI 与 RAG 问答。
+- Database persistence.
+- Authentication and authorization.
+- Real MinIO deployment adapter.
+- PDF/Word text extraction.
+- Embedding model integration.
+- pgvector semantic retrieval.
+- Spring AI RAG chat.
 
-## 运行方式
+## Run
 
-要求：
+Requirements:
 
 - JDK 21
 - Maven 3.9+
@@ -38,58 +40,61 @@ cd D:\Program\AgentMind\backend
 mvn spring-boot:run
 ```
 
-健康检查：
+Health check:
 
 ```text
 GET http://localhost:8080/api/v1/health
 ```
 
-## 测试
+## Test
 
 ```powershell
 cd D:\Program\AgentMind\backend
 mvn test
 ```
 
-本项目在 `backend/.mvn/settings.xml` 中指定 `${user.home}/.m2/repository` 作为 Maven 本地仓库，
-用于避免受开发机器全局 Maven 配置影响。
+## Ingestion APIs
 
-## Stage 4 摄取接口
-
-文档列表：
+List documents:
 
 ```text
 GET http://localhost:8080/api/v1/workspaces/1/documents?page=1&pageSize=20
 ```
 
-URL 采集任务：
+Upload a Markdown/TXT/HTML file:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/documents/files" `
+  -Form @{ file = Get-Item ".\README.md"; title = "README document"; tags = "docs" }
+```
+
+Capture a web page:
 
 ```powershell
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/v1/workspaces/1/documents/web-pages" `
   -ContentType "application/json" `
-  -Body '{"url":"https://example.com/article","title":"示例文章","tags":["Web","测试"]}'
+  -Body '{"url":"https://example.com/article","title":"Example article","tags":["Web","Test"]}'
 ```
 
-摄取任务查询：
+Query ingestion task:
 
 ```text
 GET http://localhost:8080/api/v1/workspaces/1/ingestion-tasks/{taskId}
 ```
 
-文件上传任务：
+Preview generated chunks:
 
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://localhost:8080/api/v1/workspaces/1/documents/files" `
-  -Form @{ file = Get-Item ".\README.md"; title = "README 文档"; tags = "文档" }
+```text
+GET http://localhost:8080/api/v1/workspaces/1/documents/{documentId}/chunks
 ```
 
-说明：
+Notes:
 
-- 文件上传成功后，原始文件会保存到 `.agentmind-storage`，该目录已加入 `.gitignore`。
-- URL 采集会校验 `http` / `https` 协议，并拒绝 localhost、回环地址和常见内网地址。
-- URL 采集当前只保存原始 HTML 快照，正文提取、去噪、重复检测和版本管理会在后续阶段实现。
-- 当前文档与任务数据仍保存在内存中，服务重启后会恢复为 mock 初始数据。
+- Uploaded files and fetched HTML snapshots are stored under `.agentmind-storage`, which is ignored by Git.
+- Markdown, TXT/code and HTML can generate chunks in the current stage.
+- PDF and Word files can still be stored, but parser support is reserved for a later stage.
+- Document, task and chunk data are currently stored in memory and reset when the service restarts.

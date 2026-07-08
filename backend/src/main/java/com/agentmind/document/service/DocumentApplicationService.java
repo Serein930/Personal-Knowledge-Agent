@@ -5,12 +5,17 @@ import com.agentmind.common.exception.ErrorCode;
 import com.agentmind.common.response.PageResponse;
 import com.agentmind.common.storage.ObjectStorageService;
 import com.agentmind.common.storage.StoredObject;
+import com.agentmind.document.chunk.DocumentChunk;
+import com.agentmind.document.chunk.TextChunker;
 import com.agentmind.document.model.DocumentSourceType;
 import com.agentmind.document.model.IngestionStatus;
+import com.agentmind.document.model.dto.DocumentChunkResponse;
 import com.agentmind.document.model.dto.DocumentSummaryResponse;
 import com.agentmind.document.model.dto.FileDocumentUploadResponse;
 import com.agentmind.document.model.dto.WebPageCaptureRequest;
 import com.agentmind.document.model.dto.WebPageCaptureResponse;
+import com.agentmind.document.parser.DocumentTextExtractionService;
+import com.agentmind.document.parser.ExtractedDocumentText;
 import com.agentmind.ingestion.model.IngestionTaskStatus;
 import com.agentmind.ingestion.model.IngestionTaskType;
 import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
@@ -35,45 +40,53 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 文档摄取应用服务。
+ * Application service for document ingestion use cases.
  *
- * <p>该类负责把 Controller 收到的文件上传、URL 采集请求编排成明确的摄取流程。当前仍然使用内存
- * Map 保存文档和任务状态，但已经接入真实文件校验、本地对象存储、URL 安全校验和 HTML 抓取骨架。
- * 后续替换为数据库、消息队列和 MinIO 时，Controller 的 API 契约可以保持稳定。</p>
+ * <p>The service keeps controllers thin and owns the current use-case flow: validate input, store raw content,
+ * extract text, split text into chunks and update task/document state. Persistence is still in-memory in this
+ * stage, but the parser and chunker boundaries are close to what will be used by the future database/vector flow.</p>
  */
 @Service
 public class DocumentApplicationService {
 
-    private static final String DEFAULT_WORKSPACE_NAME = "Java 后端学习";
+    private static final String DEFAULT_WORKSPACE_NAME = "Java Backend Learning";
     private static final int MAX_PAGE_SIZE = 100;
 
     private final FileUploadValidator fileUploadValidator;
     private final ObjectStorageService objectStorageService;
     private final UrlSafetyValidator urlSafetyValidator;
     private final HtmlFetchService htmlFetchService;
+    private final DocumentTextExtractionService textExtractionService;
+    private final TextChunker textChunker;
     private final AtomicLong documentIdGenerator = new AtomicLong(100);
     private final AtomicLong taskIdGenerator = new AtomicLong(1000);
     private final Map<Long, DocumentSummaryResponse> documents = new ConcurrentHashMap<>();
     private final Map<Long, IngestionTaskResponse> tasks = new ConcurrentHashMap<>();
+    private final Map<Long, List<DocumentChunk>> chunksByDocumentId = new ConcurrentHashMap<>();
 
     public DocumentApplicationService(
             FileUploadValidator fileUploadValidator,
             ObjectStorageService objectStorageService,
             UrlSafetyValidator urlSafetyValidator,
-            HtmlFetchService htmlFetchService
+            HtmlFetchService htmlFetchService,
+            DocumentTextExtractionService textExtractionService,
+            TextChunker textChunker
     ) {
         this.fileUploadValidator = fileUploadValidator;
         this.objectStorageService = objectStorageService;
         this.urlSafetyValidator = urlSafetyValidator;
         this.htmlFetchService = htmlFetchService;
+        this.textExtractionService = textExtractionService;
+        this.textChunker = textChunker;
         seedMockDocuments();
     }
 
     /**
-     * 创建文件上传摄取任务。
+     * Creates a file ingestion task and performs the current synchronous ingestion skeleton.
      *
-     * <p>Stage 4 先同步完成“校验 -> 保存原始文件 -> 更新任务状态”的最小闭环。真实生产项目中，
-     * 保存完成后通常会把解析、分块、向量化投递到异步任务队列，因此这里的 chunkCount 仍然保持为 0。</p>
+     * <p>The method reads uploaded bytes once, stores the original object, extracts text for supported formats
+     * (Markdown, TXT, HTML and code), and writes generated chunks into the in-memory chunk store. Later stages can
+     * move extraction/chunking to an async worker without changing the HTTP contract.</p>
      */
     public FileDocumentUploadResponse createFileUploadTask(
             Long workspaceId,
@@ -86,41 +99,47 @@ public class DocumentApplicationService {
 
         Long documentId = documentIdGenerator.incrementAndGet();
         Long taskId = taskIdGenerator.incrementAndGet();
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime createdAt = OffsetDateTime.now();
         String displayTitle = resolveDocumentTitle(title, validation.safeFilename());
+        List<String> normalizedTags = normalizeTags(tags);
 
-        putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizeTags(tags),
-                IngestionStatus.RUNNING, 0, now);
+        putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizedTags,
+                IngestionStatus.RUNNING, 0, createdAt);
         putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.RUNNING,
-                30, validation.safeFilename(), null, now);
+                20, validation.safeFilename(), null, createdAt);
 
         try {
+            byte[] fileBytes = file.getBytes();
             StoredObject storedObject = objectStorageService.store(
                     buildWorkspaceStorageCategory(workspaceId, "documents"),
                     validation.safeFilename(),
-                    file.getInputStream(),
+                    new ByteArrayInputStream(fileBytes),
                     validation.size(),
                     validation.contentType()
             );
 
-            putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizeTags(tags),
-                    IngestionStatus.SUCCEEDED, 0, OffsetDateTime.now());
+            List<DocumentChunk> generatedChunks = extractAndChunk(documentId, validation.sourceType(),
+                    validation.safeFilename(), fileBytes);
+            chunksByDocumentId.put(documentId, generatedChunks);
+
+            putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizedTags,
+                    IngestionStatus.SUCCEEDED, generatedChunks.size(), OffsetDateTime.now());
             putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.SUCCEEDED,
-                    100, storedObject.storageKey(), null, now);
+                    100, storedObject.storageKey(), null, createdAt);
             return new FileDocumentUploadResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
         } catch (IOException exception) {
             markTaskFailed(documentId, taskId, displayTitle, validation.sourceType(), workspaceId,
-                    normalizeTags(tags), IngestionTaskType.FILE_UPLOAD, validation.safeFilename(),
-                    "文件保存失败，请稍后重试");
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "文件保存失败，请稍后重试");
+                    normalizedTags, IngestionTaskType.FILE_UPLOAD, validation.safeFilename(),
+                    "File ingestion failed");
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "File ingestion failed");
         }
     }
 
     /**
-     * 创建网页文章采集任务。
+     * Creates a web-page ingestion task.
      *
-     * <p>当前阶段会做 SSRF 基础防护并抓取原始 HTML 快照，再把快照保存到对象存储适配层。正文提取、
-     * 去噪、重复检测和版本管理会在后续阶段继续基于保存下来的 HTML 结果推进。</p>
+     * <p>URL safety validation and HTML fetching are still separated from parsing. That keeps SSRF protection,
+     * network fetching, text extraction and chunking independently testable.</p>
      */
     public WebPageCaptureResponse createWebPageCaptureTask(Long workspaceId, WebPageCaptureRequest request) {
         validateWorkspaceId(workspaceId);
@@ -128,14 +147,14 @@ public class DocumentApplicationService {
 
         Long documentId = documentIdGenerator.incrementAndGet();
         Long taskId = taskIdGenerator.incrementAndGet();
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime createdAt = OffsetDateTime.now();
         String displayTitle = StringUtils.hasText(request.title()) ? request.title().trim() : uri.getHost();
         List<String> normalizedTags = normalizeTags(request.tags());
 
         putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
-                IngestionStatus.RUNNING, 0, now);
+                IngestionStatus.RUNNING, 0, createdAt);
         putTask(taskId, documentId, IngestionTaskType.WEB_PAGE_CAPTURE, IngestionTaskStatus.RUNNING,
-                30, uri.toString(), null, now);
+                20, uri.toString(), null, createdAt);
 
         try {
             HtmlFetchResult html = htmlFetchService.fetch(uri);
@@ -144,14 +163,18 @@ public class DocumentApplicationService {
                     buildWorkspaceStorageCategory(workspaceId, "web-snapshots"),
                     documentId + ".html",
                     new ByteArrayInputStream(htmlBytes),
-                    html.byteSize(),
+                    htmlBytes.length,
                     html.contentType()
             );
 
+            List<DocumentChunk> generatedChunks = extractAndChunk(documentId, DocumentSourceType.WEB_PAGE,
+                    uri.toString(), htmlBytes);
+            chunksByDocumentId.put(documentId, generatedChunks);
+
             putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
-                    IngestionStatus.SUCCEEDED, 0, OffsetDateTime.now());
+                    IngestionStatus.SUCCEEDED, generatedChunks.size(), OffsetDateTime.now());
             putTask(taskId, documentId, IngestionTaskType.WEB_PAGE_CAPTURE, IngestionTaskStatus.SUCCEEDED,
-                    100, storedObject.storageKey(), null, now);
+                    100, storedObject.storageKey(), null, createdAt);
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
         } catch (BusinessException exception) {
             markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
@@ -159,22 +182,16 @@ public class DocumentApplicationService {
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
         } catch (IOException exception) {
             markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
-                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "网页抓取失败，请稍后重试");
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "Web page ingestion failed");
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
-                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "网页抓取任务被中断");
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "Web page ingestion interrupted");
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
         }
     }
 
-    /**
-     * 查询文档列表。
-     *
-     * <p>这里仍然模拟分页、关键词、来源类型、状态和标签过滤。接入数据库后，该方法会替换为 Repository
-     * 查询，但 Controller、DTO 和前端联调方式不需要发生大变化。</p>
-     */
     public PageResponse<DocumentSummaryResponse> listDocuments(
             Long workspaceId,
             int page,
@@ -202,43 +219,67 @@ public class DocumentApplicationService {
         return new PageResponse<>(filtered.subList(fromIndex, toIndex), safePage, safePageSize, filtered.size());
     }
 
-    /**
-     * 查询单个摄取任务。
-     */
+    public List<DocumentChunkResponse> listDocumentChunks(Long workspaceId, Long documentId) {
+        validateWorkspaceId(workspaceId);
+        DocumentSummaryResponse document = documents.get(documentId);
+        if (document == null || !Objects.equals(document.workspaceId(), workspaceId)) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Document not found");
+        }
+        return chunksByDocumentId.getOrDefault(documentId, List.of()).stream()
+                .map(this::toChunkResponse)
+                .toList();
+    }
+
     public IngestionTaskResponse getTask(Long workspaceId, Long taskId) {
         validateWorkspaceId(workspaceId);
         if (taskId == null || taskId <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "taskId 必须为正数");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "taskId must be positive");
         }
         IngestionTaskResponse task = tasks.get(taskId);
         if (task == null || !Objects.equals(resolveTaskWorkspaceId(task), workspaceId)) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "摄取任务不存在");
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Ingestion task not found");
         }
         return task;
+    }
+
+    private List<DocumentChunk> extractAndChunk(
+            Long documentId,
+            DocumentSourceType sourceType,
+            String sourceName,
+            byte[] content
+    ) {
+        ExtractedDocumentText extracted = textExtractionService.extract(sourceType, sourceName, content);
+        return textChunker.chunk(documentId, sourceType, extracted.text());
     }
 
     private void seedMockDocuments() {
         OffsetDateTime now = OffsetDateTime.now();
         documents.put(1L, new DocumentSummaryResponse(
                 1L,
-                "Java 并发编程笔记",
+                "Java concurrency notes",
                 DocumentSourceType.MARKDOWN,
                 1L,
                 DEFAULT_WORKSPACE_NAME,
-                List.of("Java", "并发", "线程池"),
+                List.of("Java", "Concurrency", "Thread Pool"),
                 IngestionStatus.SUCCEEDED,
-                48,
+                2,
                 now.minusDays(1)
+        ));
+        chunksByDocumentId.put(1L, List.of(
+                new DocumentChunk("1-0", 1L, 0, "Thread Pool Basics",
+                        "Thread pools reuse worker threads and reduce task creation overhead.", 0, 72),
+                new DocumentChunk("1-1", 1L, 1, "Executor Tuning",
+                        "Core size, max size and queue policy should match workload characteristics.", 73, 146)
         ));
         documents.put(2L, new DocumentSummaryResponse(
                 2L,
-                "Spring AI 官方文档摘录",
+                "Spring AI reference excerpt",
                 DocumentSourceType.WEB_PAGE,
                 1L,
-                "Agent 工程化",
+                "Agent Engineering",
                 List.of("Spring AI", "RAG", "Tool Calling"),
                 IngestionStatus.RUNNING,
-                21,
+                0,
                 now
         ));
         tasks.put(1L, new IngestionTaskResponse(
@@ -256,7 +297,7 @@ public class DocumentApplicationService {
 
     private void validateWorkspaceId(Long workspaceId) {
         if (workspaceId == null || workspaceId <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "workspaceId 必须为正数");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "workspaceId must be positive");
         }
     }
 
@@ -264,7 +305,7 @@ public class DocumentApplicationService {
         if (StringUtils.hasText(title)) {
             return title.trim();
         }
-        return StringUtils.hasText(fallbackFilename) ? fallbackFilename : "未命名文件";
+        return StringUtils.hasText(fallbackFilename) ? fallbackFilename : "Untitled document";
     }
 
     private List<String> normalizeTags(List<String> tags) {
@@ -341,6 +382,7 @@ public class DocumentApplicationService {
             String source,
             String errorMessage
     ) {
+        chunksByDocumentId.remove(documentId);
         putDocument(documentId, title, sourceType, workspaceId, tags, IngestionStatus.FAILED, 0, OffsetDateTime.now());
         putTask(taskId, documentId, taskType, IngestionTaskStatus.FAILED, 100, source, errorMessage, OffsetDateTime.now());
     }
@@ -352,6 +394,18 @@ public class DocumentApplicationService {
         String lowerKeyword = keyword.toLowerCase(Locale.ROOT);
         return document.title().toLowerCase(Locale.ROOT).contains(lowerKeyword)
                 || document.tags().stream().anyMatch(tag -> tag.toLowerCase(Locale.ROOT).contains(lowerKeyword));
+    }
+
+    private DocumentChunkResponse toChunkResponse(DocumentChunk chunk) {
+        return new DocumentChunkResponse(
+                chunk.id(),
+                chunk.documentId(),
+                chunk.sequence(),
+                chunk.headingPath(),
+                chunk.content(),
+                chunk.charStart(),
+                chunk.charEnd()
+        );
     }
 
     private Long resolveTaskWorkspaceId(IngestionTaskResponse task) {

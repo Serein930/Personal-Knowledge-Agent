@@ -7,12 +7,18 @@ import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.response.PageResponse;
 import com.agentmind.common.storage.ObjectStorageService;
 import com.agentmind.common.storage.StoredObject;
+import com.agentmind.document.chunk.MarkdownAwareTextChunker;
 import com.agentmind.document.model.DocumentSourceType;
 import com.agentmind.document.model.IngestionStatus;
+import com.agentmind.document.model.dto.DocumentChunkResponse;
 import com.agentmind.document.model.dto.DocumentSummaryResponse;
 import com.agentmind.document.model.dto.FileDocumentUploadResponse;
 import com.agentmind.document.model.dto.WebPageCaptureRequest;
 import com.agentmind.document.model.dto.WebPageCaptureResponse;
+import com.agentmind.document.parser.DocumentTextExtractionService;
+import com.agentmind.document.parser.HtmlTextExtractor;
+import com.agentmind.document.parser.MarkdownTextExtractor;
+import com.agentmind.document.parser.PlainTextExtractor;
 import com.agentmind.ingestion.model.IngestionTaskStatus;
 import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
 import com.agentmind.ingestion.web.HtmlFetchResult;
@@ -23,14 +29,15 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
 /**
- * Stage 4 文档摄取服务测试。
+ * Tests the current in-memory document ingestion pipeline.
  *
- * <p>这些测试不启动 Spring 容器，也不访问真实网络。通过内存版对象存储和固定 HTML 抓取器，
- * 验证文件校验、URL 安全校验、存储调用和任务状态流转是否符合当前阶段契约。</p>
+ * <p>The test uses fake storage and fake HTML fetching so it can verify validation, extraction, chunking and task
+ * state transitions without starting Spring or accessing the network.</p>
  */
 class DocumentApplicationServiceTests {
 
@@ -39,33 +46,47 @@ class DocumentApplicationServiceTests {
             new FileUploadValidator(20_971_520L),
             objectStorageService,
             new UrlSafetyValidator(),
-            new StaticHtmlFetchService()
+            new StaticHtmlFetchService(),
+            new DocumentTextExtractionService(List.of(
+                    new MarkdownTextExtractor(),
+                    new PlainTextExtractor(),
+                    new HtmlTextExtractor()
+            )),
+            new MarkdownAwareTextChunker()
     );
 
     @Test
-    void createFileUploadTaskShouldStoreFileAndMarkTaskSucceeded() {
+    void createFileUploadTaskShouldExtractMarkdownAndCreateChunks() {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "thread-pool.md",
                 "text/markdown",
-                "# Java 线程池".getBytes(StandardCharsets.UTF_8)
+                """
+                # Java Thread Pool
+
+                Thread pools reuse worker threads and reduce task creation overhead.
+
+                ## Tuning
+
+                Core size, max size and queue policy should match workload characteristics.
+                """.getBytes(StandardCharsets.UTF_8)
         );
 
         FileDocumentUploadResponse response = service.createFileUploadTask(
                 1L,
                 file,
-                "线程池学习笔记",
-                java.util.List.of("Java", "并发")
+                "Thread pool learning note",
+                List.of("Java", "Concurrency")
         );
-
         IngestionTaskResponse task = service.getTask(1L, response.taskId());
+        List<DocumentChunkResponse> chunks = service.listDocumentChunks(1L, response.documentId());
 
-        assertThat(response.documentId()).isPositive();
-        assertThat(response.taskId()).isPositive();
         assertThat(response.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
         assertThat(task.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
         assertThat(task.progress()).isEqualTo(100);
         assertThat(task.source()).contains("documents");
+        assertThat(chunks).isNotEmpty();
+        assertThat(chunks.getFirst().content()).contains("Java Thread Pool");
         assertThat(objectStorageService.storeCount).isEqualTo(1);
     }
 
@@ -78,7 +99,7 @@ class DocumentApplicationServiceTests {
                 "not allowed".getBytes(StandardCharsets.UTF_8)
         );
 
-        assertThatThrownBy(() -> service.createFileUploadTask(1L, file, null, java.util.List.of()))
+        assertThatThrownBy(() -> service.createFileUploadTask(1L, file, null, List.of()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Unsupported file type");
     }
@@ -104,8 +125,8 @@ class DocumentApplicationServiceTests {
     void createWebPageCaptureTaskShouldRejectLocalhostUrl() {
         WebPageCaptureRequest request = new WebPageCaptureRequest(
                 "http://localhost:8080/private",
-                "本地地址",
-                java.util.List.of("安全")
+                "Local address",
+                List.of("Security")
         );
 
         assertThatThrownBy(() -> service.createWebPageCaptureTask(1L, request))
@@ -114,31 +135,32 @@ class DocumentApplicationServiceTests {
     }
 
     @Test
-    void createWebPageCaptureTaskShouldFetchHtmlSnapshotAndMarkTaskSucceeded() {
+    void createWebPageCaptureTaskShouldExtractHtmlTextAndCreateChunks() {
         WebPageCaptureRequest request = new WebPageCaptureRequest(
                 "https://example.com/article",
-                "示例文章",
-                java.util.List.of("Web")
+                "Example article",
+                List.of("Web")
         );
 
         WebPageCaptureResponse response = service.createWebPageCaptureTask(1L, request);
         IngestionTaskResponse task = service.getTask(1L, response.taskId());
+        List<DocumentChunkResponse> chunks = service.listDocumentChunks(1L, response.documentId());
         PageResponse<DocumentSummaryResponse> documents = service.listDocuments(
                 1L,
                 1,
                 20,
-                "示例文章",
+                "Example article",
                 DocumentSourceType.WEB_PAGE,
                 IngestionStatus.SUCCEEDED,
                 null
         );
 
-        assertThat(response.documentId()).isPositive();
-        assertThat(response.taskId()).isPositive();
         assertThat(response.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
         assertThat(task.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
-        assertThat(task.progress()).isEqualTo(100);
         assertThat(task.source()).contains("web-snapshots");
+        assertThat(chunks).hasSize(1);
+        assertThat(chunks.getFirst().content()).contains("AgentMind article body");
+        assertThat(chunks.getFirst().content()).doesNotContain("<script>");
         assertThat(documents.records()).hasSize(1);
     }
 
@@ -161,7 +183,13 @@ class DocumentApplicationServiceTests {
 
         @Override
         public HtmlFetchResult fetch(URI uri) {
-            return new HtmlFetchResult(uri, 200, "text/html; charset=utf-8", "<html><body>AgentMind</body></html>");
+            String html = """
+                    <html>
+                      <head><title>AgentMind Test Page</title><script>alert('skip');</script></head>
+                      <body><h1>AgentMind article body</h1><p>HTML text should become clean chunks.</p></body>
+                    </html>
+                    """;
+            return new HtmlFetchResult(uri, 200, "text/html; charset=utf-8", html);
         }
     }
 }
