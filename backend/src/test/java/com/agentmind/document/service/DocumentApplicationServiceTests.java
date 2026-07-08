@@ -24,6 +24,9 @@ import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
 import com.agentmind.ingestion.web.HtmlFetchResult;
 import com.agentmind.ingestion.web.HtmlFetchService;
 import com.agentmind.ingestion.web.UrlSafetyValidator;
+import com.agentmind.knowledge.service.KnowledgeIndexingService;
+import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
+import com.agentmind.knowledge.vector.InMemoryVectorStore;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -42,6 +45,8 @@ import org.springframework.mock.web.MockMultipartFile;
 class DocumentApplicationServiceTests {
 
     private final InMemoryObjectStorageService objectStorageService = new InMemoryObjectStorageService();
+    private final DeterministicEmbeddingClient embeddingClient = new DeterministicEmbeddingClient();
+    private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
     private final DocumentApplicationService service = new DocumentApplicationService(
             new FileUploadValidator(20_971_520L),
             objectStorageService,
@@ -52,7 +57,8 @@ class DocumentApplicationServiceTests {
                     new PlainTextExtractor(),
                     new HtmlTextExtractor()
             )),
-            new MarkdownAwareTextChunker()
+            new MarkdownAwareTextChunker(),
+            new KnowledgeIndexingService(embeddingClient, vectorStore)
     );
 
     @Test
@@ -87,6 +93,8 @@ class DocumentApplicationServiceTests {
         assertThat(task.source()).contains("documents");
         assertThat(chunks).isNotEmpty();
         assertThat(chunks.getFirst().content()).contains("Java Thread Pool");
+        assertThat(vectorStore.search(1L, embeddingClient.embed("thread pool overhead"), 3))
+                .isNotEmpty();
         assertThat(objectStorageService.storeCount).isEqualTo(1);
     }
 

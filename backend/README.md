@@ -4,7 +4,7 @@ Personal Knowledge Agent backend service.
 
 ## Current Stage
 
-The backend is now in the document parsing and chunking preparation stage.
+The backend is now in Stage 5 preparation: local embeddings and workspace-scoped mock vector search.
 
 Implemented:
 
@@ -17,6 +17,8 @@ Implemented:
 - Markdown, TXT/code and HTML text extraction.
 - Basic deterministic chunking with Markdown heading awareness.
 - Temporary in-memory chunk preview endpoint for development verification.
+- Deterministic local embedding client for development.
+- In-memory vector store with workspace-scoped semantic search.
 
 Not implemented yet:
 
@@ -24,8 +26,8 @@ Not implemented yet:
 - Authentication and authorization.
 - Real MinIO deployment adapter.
 - PDF/Word text extraction.
-- Embedding model integration.
-- pgvector semantic retrieval.
+- Real Spring AI embedding model integration.
+- PostgreSQL + pgvector persistence and semantic retrieval.
 - Spring AI RAG chat.
 
 ## Run
@@ -92,9 +94,21 @@ Preview generated chunks:
 GET http://localhost:8080/api/v1/workspaces/1/documents/{documentId}/chunks
 ```
 
+Search indexed chunks in the current workspace:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/knowledge/search" `
+  -ContentType "application/json" `
+  -Body '{"query":"thread pool worker threads","topK":5}'
+```
+
 Notes:
 
 - Uploaded files and fetched HTML snapshots are stored under `.agentmind-storage`, which is ignored by Git.
 - Markdown, TXT/code and HTML can generate chunks in the current stage.
+- Generated chunks are indexed into the current in-memory vector store.
+- The current embedding implementation is deterministic and dependency-free; it is only for verifying retrieval flow.
 - PDF and Word files can still be stored, but parser support is reserved for a later stage.
-- Document, task and chunk data are currently stored in memory and reset when the service restarts.
+- Document, task, chunk and vector data are currently stored in memory and reset when the service restarts.

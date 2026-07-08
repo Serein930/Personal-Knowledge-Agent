@@ -22,6 +22,7 @@ import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
 import com.agentmind.ingestion.web.HtmlFetchResult;
 import com.agentmind.ingestion.web.HtmlFetchService;
 import com.agentmind.ingestion.web.UrlSafetyValidator;
+import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -58,6 +59,7 @@ public class DocumentApplicationService {
     private final HtmlFetchService htmlFetchService;
     private final DocumentTextExtractionService textExtractionService;
     private final TextChunker textChunker;
+    private final KnowledgeIndexingService knowledgeIndexingService;
     private final AtomicLong documentIdGenerator = new AtomicLong(100);
     private final AtomicLong taskIdGenerator = new AtomicLong(1000);
     private final Map<Long, DocumentSummaryResponse> documents = new ConcurrentHashMap<>();
@@ -70,7 +72,8 @@ public class DocumentApplicationService {
             UrlSafetyValidator urlSafetyValidator,
             HtmlFetchService htmlFetchService,
             DocumentTextExtractionService textExtractionService,
-            TextChunker textChunker
+            TextChunker textChunker,
+            KnowledgeIndexingService knowledgeIndexingService
     ) {
         this.fileUploadValidator = fileUploadValidator;
         this.objectStorageService = objectStorageService;
@@ -78,6 +81,7 @@ public class DocumentApplicationService {
         this.htmlFetchService = htmlFetchService;
         this.textExtractionService = textExtractionService;
         this.textChunker = textChunker;
+        this.knowledgeIndexingService = knowledgeIndexingService;
         seedMockDocuments();
     }
 
@@ -121,6 +125,7 @@ public class DocumentApplicationService {
             List<DocumentChunk> generatedChunks = extractAndChunk(documentId, validation.sourceType(),
                     validation.safeFilename(), fileBytes);
             chunksByDocumentId.put(documentId, generatedChunks);
+            knowledgeIndexingService.indexChunks(workspaceId, documentId, generatedChunks);
 
             putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizedTags,
                     IngestionStatus.SUCCEEDED, generatedChunks.size(), OffsetDateTime.now());
@@ -170,6 +175,7 @@ public class DocumentApplicationService {
             List<DocumentChunk> generatedChunks = extractAndChunk(documentId, DocumentSourceType.WEB_PAGE,
                     uri.toString(), htmlBytes);
             chunksByDocumentId.put(documentId, generatedChunks);
+            knowledgeIndexingService.indexChunks(workspaceId, documentId, generatedChunks);
 
             putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
                     IngestionStatus.SUCCEEDED, generatedChunks.size(), OffsetDateTime.now());
@@ -271,6 +277,7 @@ public class DocumentApplicationService {
                 new DocumentChunk("1-1", 1L, 1, "Executor Tuning",
                         "Core size, max size and queue policy should match workload characteristics.", 73, 146)
         ));
+        knowledgeIndexingService.indexChunks(1L, 1L, chunksByDocumentId.get(1L));
         documents.put(2L, new DocumentSummaryResponse(
                 2L,
                 "Spring AI reference excerpt",
@@ -383,6 +390,7 @@ public class DocumentApplicationService {
             String errorMessage
     ) {
         chunksByDocumentId.remove(documentId);
+        knowledgeIndexingService.deleteDocumentIndex(workspaceId, documentId);
         putDocument(documentId, title, sourceType, workspaceId, tags, IngestionStatus.FAILED, 0, OffsetDateTime.now());
         putTask(taskId, documentId, taskType, IngestionTaskStatus.FAILED, 100, source, errorMessage, OffsetDateTime.now());
     }
