@@ -3,6 +3,8 @@ package com.agentmind.document.service;
 import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.exception.ErrorCode;
 import com.agentmind.common.response.PageResponse;
+import com.agentmind.common.storage.ObjectStorageService;
+import com.agentmind.common.storage.StoredObject;
 import com.agentmind.document.model.DocumentSourceType;
 import com.agentmind.document.model.IngestionStatus;
 import com.agentmind.document.model.dto.DocumentSummaryResponse;
@@ -12,8 +14,13 @@ import com.agentmind.document.model.dto.WebPageCaptureResponse;
 import com.agentmind.ingestion.model.IngestionTaskStatus;
 import com.agentmind.ingestion.model.IngestionTaskType;
 import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
+import com.agentmind.ingestion.web.HtmlFetchResult;
+import com.agentmind.ingestion.web.HtmlFetchService;
+import com.agentmind.ingestion.web.UrlSafetyValidator;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -30,30 +37,43 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 文档摄取应用服务。
  *
- * <p>当前阶段只使用内存 Map 模拟文档和摄取任务，目的是让前端知识库、采集中心
- * 可以尽早联调接口契约。该类不连接数据库、不保存真实文件、不执行网页抓取。</p>
+ * <p>该类负责把 Controller 收到的文件上传、URL 采集请求编排成明确的摄取流程。当前仍然使用内存
+ * Map 保存文档和任务状态，但已经接入真实文件校验、本地对象存储、URL 安全校验和 HTML 抓取骨架。
+ * 后续替换为数据库、消息队列和 MinIO 时，Controller 的 API 契约可以保持稳定。</p>
  */
 @Service
 public class DocumentApplicationService {
 
-    private static final long MOCK_USER_ID = 1L;
     private static final String DEFAULT_WORKSPACE_NAME = "Java 后端学习";
     private static final int MAX_PAGE_SIZE = 100;
 
+    private final FileUploadValidator fileUploadValidator;
+    private final ObjectStorageService objectStorageService;
+    private final UrlSafetyValidator urlSafetyValidator;
+    private final HtmlFetchService htmlFetchService;
     private final AtomicLong documentIdGenerator = new AtomicLong(100);
     private final AtomicLong taskIdGenerator = new AtomicLong(1000);
     private final Map<Long, DocumentSummaryResponse> documents = new ConcurrentHashMap<>();
     private final Map<Long, IngestionTaskResponse> tasks = new ConcurrentHashMap<>();
 
-    public DocumentApplicationService() {
+    public DocumentApplicationService(
+            FileUploadValidator fileUploadValidator,
+            ObjectStorageService objectStorageService,
+            UrlSafetyValidator urlSafetyValidator,
+            HtmlFetchService htmlFetchService
+    ) {
+        this.fileUploadValidator = fileUploadValidator;
+        this.objectStorageService = objectStorageService;
+        this.urlSafetyValidator = urlSafetyValidator;
+        this.htmlFetchService = htmlFetchService;
         seedMockDocuments();
     }
 
     /**
      * 创建文件上传摄取任务。
      *
-     * <p>Stage 3 只验证接口和任务流转契约，因此文件不会写入磁盘或对象存储。
-     * 后续接入 MinIO 时，可在该方法中替换为真实文件存储和异步任务创建。</p>
+     * <p>Stage 4 先同步完成“校验 -> 保存原始文件 -> 更新任务状态”的最小闭环。真实生产项目中，
+     * 保存完成后通常会把解析、分块、向量化投递到异步任务队列，因此这里的 chunkCount 仍然保持为 0。</p>
      */
     public FileDocumentUploadResponse createFileUploadTask(
             Long workspaceId,
@@ -62,88 +82,98 @@ public class DocumentApplicationService {
             List<String> tags
     ) {
         validateWorkspaceId(workspaceId);
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "上传文件不能为空");
-        }
+        FileValidationResult validation = fileUploadValidator.validate(file);
 
         Long documentId = documentIdGenerator.incrementAndGet();
         Long taskId = taskIdGenerator.incrementAndGet();
-        String displayTitle = StringUtils.hasText(title) ? title : file.getOriginalFilename();
-        String safeTitle = StringUtils.hasText(displayTitle) ? displayTitle : "未命名文件";
         OffsetDateTime now = OffsetDateTime.now();
+        String displayTitle = resolveDocumentTitle(title, validation.safeFilename());
 
-        documents.put(documentId, new DocumentSummaryResponse(
-                documentId,
-                safeTitle,
-                resolveSourceType(file.getOriginalFilename()),
-                workspaceId,
-                DEFAULT_WORKSPACE_NAME,
-                normalizeTags(tags),
-                IngestionStatus.PENDING,
-                0,
-                now
-        ));
-        tasks.put(taskId, new IngestionTaskResponse(
-                taskId,
-                documentId,
-                IngestionTaskType.FILE_UPLOAD,
-                IngestionTaskStatus.PENDING,
-                0,
-                file.getOriginalFilename(),
-                null,
-                now,
-                now
-        ));
+        putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizeTags(tags),
+                IngestionStatus.RUNNING, 0, now);
+        putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.RUNNING,
+                30, validation.safeFilename(), null, now);
 
-        return new FileDocumentUploadResponse(documentId, taskId, IngestionTaskStatus.PENDING);
+        try {
+            StoredObject storedObject = objectStorageService.store(
+                    buildWorkspaceStorageCategory(workspaceId, "documents"),
+                    validation.safeFilename(),
+                    file.getInputStream(),
+                    validation.size(),
+                    validation.contentType()
+            );
+
+            putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizeTags(tags),
+                    IngestionStatus.SUCCEEDED, 0, OffsetDateTime.now());
+            putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.SUCCEEDED,
+                    100, storedObject.storageKey(), null, now);
+            return new FileDocumentUploadResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
+        } catch (IOException exception) {
+            markTaskFailed(documentId, taskId, displayTitle, validation.sourceType(), workspaceId,
+                    normalizeTags(tags), IngestionTaskType.FILE_UPLOAD, validation.safeFilename(),
+                    "文件保存失败，请稍后重试");
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "文件保存失败，请稍后重试");
+        }
     }
 
     /**
-     * 创建网页采集摄取任务。
+     * 创建网页文章采集任务。
      *
-     * <p>当前只做基础 URL 安全校验和内存任务创建。真正的 HTML 抓取、正文提取、
-     * 去噪、重复检测和版本管理会在后续网页采集阶段实现。</p>
+     * <p>当前阶段会做 SSRF 基础防护并抓取原始 HTML 快照，再把快照保存到对象存储适配层。正文提取、
+     * 去噪、重复检测和版本管理会在后续阶段继续基于保存下来的 HTML 结果推进。</p>
      */
     public WebPageCaptureResponse createWebPageCaptureTask(Long workspaceId, WebPageCaptureRequest request) {
         validateWorkspaceId(workspaceId);
-        URI uri = parseAndValidatePublicHttpUrl(request.url());
+        URI uri = urlSafetyValidator.validatePublicHttpUrl(request.url());
 
         Long documentId = documentIdGenerator.incrementAndGet();
         Long taskId = taskIdGenerator.incrementAndGet();
         OffsetDateTime now = OffsetDateTime.now();
-        String title = StringUtils.hasText(request.title()) ? request.title() : uri.getHost();
+        String displayTitle = StringUtils.hasText(request.title()) ? request.title().trim() : uri.getHost();
+        List<String> normalizedTags = normalizeTags(request.tags());
 
-        documents.put(documentId, new DocumentSummaryResponse(
-                documentId,
-                title,
-                DocumentSourceType.WEB_PAGE,
-                workspaceId,
-                DEFAULT_WORKSPACE_NAME,
-                normalizeTags(request.tags()),
-                IngestionStatus.PENDING,
-                0,
-                now
-        ));
-        tasks.put(taskId, new IngestionTaskResponse(
-                taskId,
-                documentId,
-                IngestionTaskType.WEB_PAGE_CAPTURE,
-                IngestionTaskStatus.PENDING,
-                0,
-                uri.toString(),
-                null,
-                now,
-                now
-        ));
+        putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
+                IngestionStatus.RUNNING, 0, now);
+        putTask(taskId, documentId, IngestionTaskType.WEB_PAGE_CAPTURE, IngestionTaskStatus.RUNNING,
+                30, uri.toString(), null, now);
 
-        return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.PENDING);
+        try {
+            HtmlFetchResult html = htmlFetchService.fetch(uri);
+            byte[] htmlBytes = html.html().getBytes(StandardCharsets.UTF_8);
+            StoredObject storedObject = objectStorageService.store(
+                    buildWorkspaceStorageCategory(workspaceId, "web-snapshots"),
+                    documentId + ".html",
+                    new ByteArrayInputStream(htmlBytes),
+                    html.byteSize(),
+                    html.contentType()
+            );
+
+            putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
+                    IngestionStatus.SUCCEEDED, 0, OffsetDateTime.now());
+            putTask(taskId, documentId, IngestionTaskType.WEB_PAGE_CAPTURE, IngestionTaskStatus.SUCCEEDED,
+                    100, storedObject.storageKey(), null, now);
+            return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
+        } catch (BusinessException exception) {
+            markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), exception.getMessage());
+            return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
+        } catch (IOException exception) {
+            markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "网页抓取失败，请稍后重试");
+            return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "网页抓取任务被中断");
+            return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
+        }
     }
 
     /**
      * 查询文档列表。
      *
-     * <p>这里模拟分页、关键词、来源类型、状态和标签过滤。后续接入数据库时，
-     * 该方法会替换为 Repository 查询，但 Controller 契约保持不变。</p>
+     * <p>这里仍然模拟分页、关键词、来源类型、状态和标签过滤。接入数据库后，该方法会替换为 Repository
+     * 查询，但 Controller、DTO 和前端联调方式不需要发生大变化。</p>
      */
     public PageResponse<DocumentSummaryResponse> listDocuments(
             Long workspaceId,
@@ -230,24 +260,11 @@ public class DocumentApplicationService {
         }
     }
 
-    private DocumentSourceType resolveSourceType(String filename) {
-        if (!StringUtils.hasText(filename)) {
-            return DocumentSourceType.TEXT;
+    private String resolveDocumentTitle(String title, String fallbackFilename) {
+        if (StringUtils.hasText(title)) {
+            return title.trim();
         }
-        String lowerName = filename.toLowerCase(Locale.ROOT);
-        if (lowerName.endsWith(".pdf")) {
-            return DocumentSourceType.PDF;
-        }
-        if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
-            return DocumentSourceType.MARKDOWN;
-        }
-        if (lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
-            return DocumentSourceType.WORD;
-        }
-        if (lowerName.endsWith(".java") || lowerName.endsWith(".kt") || lowerName.endsWith(".ts")) {
-            return DocumentSourceType.CODE;
-        }
-        return DocumentSourceType.TEXT;
+        return StringUtils.hasText(fallbackFilename) ? fallbackFilename : "未命名文件";
     }
 
     private List<String> normalizeTags(List<String> tags) {
@@ -263,32 +280,69 @@ public class DocumentApplicationService {
         return List.copyOf(normalized);
     }
 
-    private URI parseAndValidatePublicHttpUrl(String url) {
-        try {
-            URI uri = new URI(url);
-            String scheme = uri.getScheme();
-            String host = uri.getHost();
-            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "URL 只允许 http 或 https");
-            }
-            if (!StringUtils.hasText(host) || isBlockedHost(host)) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "URL 主机地址不允许访问");
-            }
-            return uri;
-        } catch (URISyntaxException exception) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "URL 格式不合法");
-        }
+    private String buildWorkspaceStorageCategory(Long workspaceId, String category) {
+        return "workspace-" + workspaceId + "/" + category;
     }
 
-    private boolean isBlockedHost(String host) {
-        String normalizedHost = host.toLowerCase(Locale.ROOT);
-        return "localhost".equals(normalizedHost)
-                || normalizedHost.startsWith("127.")
-                || normalizedHost.startsWith("10.")
-                || normalizedHost.startsWith("192.168.")
-                || normalizedHost.startsWith("169.254.")
-                || normalizedHost.equals("0.0.0.0")
-                || normalizedHost.equals("::1");
+    private void putDocument(
+            Long documentId,
+            String title,
+            DocumentSourceType sourceType,
+            Long workspaceId,
+            List<String> tags,
+            IngestionStatus ingestionStatus,
+            int chunkCount,
+            OffsetDateTime updatedAt
+    ) {
+        documents.put(documentId, new DocumentSummaryResponse(
+                documentId,
+                title,
+                sourceType,
+                workspaceId,
+                DEFAULT_WORKSPACE_NAME,
+                tags,
+                ingestionStatus,
+                chunkCount,
+                updatedAt
+        ));
+    }
+
+    private void putTask(
+            Long taskId,
+            Long documentId,
+            IngestionTaskType taskType,
+            IngestionTaskStatus status,
+            int progress,
+            String source,
+            String errorMessage,
+            OffsetDateTime createdAt
+    ) {
+        tasks.put(taskId, new IngestionTaskResponse(
+                taskId,
+                documentId,
+                taskType,
+                status,
+                progress,
+                source,
+                errorMessage,
+                createdAt,
+                OffsetDateTime.now()
+        ));
+    }
+
+    private void markTaskFailed(
+            Long documentId,
+            Long taskId,
+            String title,
+            DocumentSourceType sourceType,
+            Long workspaceId,
+            List<String> tags,
+            IngestionTaskType taskType,
+            String source,
+            String errorMessage
+    ) {
+        putDocument(documentId, title, sourceType, workspaceId, tags, IngestionStatus.FAILED, 0, OffsetDateTime.now());
+        putTask(taskId, documentId, taskType, IngestionTaskStatus.FAILED, 100, source, errorMessage, OffsetDateTime.now());
     }
 
     private boolean matchesKeyword(DocumentSummaryResponse document, String keyword) {

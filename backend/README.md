@@ -1,28 +1,30 @@
-﻿# AgentMind Backend
+# AgentMind Backend
 
 Personal Knowledge Agent 后端服务。
 
 ## 当前阶段
 
-当前处于 Stage 1：Spring Boot 基础工程搭建。
+当前处于后端 Stage 4：文件与网页摄取流程实现。
 
 已包含：
 
 - Java 21 + Spring Boot 3.x Maven 工程。
-- 统一 API 响应结构。
-- 统一分页响应结构。
-- 全局异常处理。
+- 统一 API 响应结构、分页响应结构和全局异常处理。
 - 健康检查接口。
-- 基础测试用例。
+- 文档、摄取任务相关 DTO 和枚举契约。
+- 文件上传接口骨架，并接入真实文件大小、文件名、扩展名校验。
+- 本地对象存储适配层，默认写入运行目录下的 `.agentmind-storage`。
+- URL 采集接口骨架，并接入基础 SSRF 防护和 HTML 抓取骨架。
+- 内存版文档与摄取任务状态流转，用于前后端联调。
+- 针对当前摄取流程的单元测试。
 
 暂未包含：
 
 - 数据库持久化。
 - 用户登录与权限。
-- 文件上传。
-- URL 采集。
-- Spring AI。
-- RAG 问答。
+- MinIO 真实部署适配。
+- 文档正文解析、chunk 切分和向量化。
+- Spring AI 与 RAG 问答。
 
 ## 运行方式
 
@@ -42,22 +44,6 @@ mvn spring-boot:run
 GET http://localhost:8080/api/v1/health
 ```
 
-预期响应：
-
-```json
-{
-  "code": "SUCCESS",
-  "message": "success",
-  "data": {
-    "application": "agentmind-backend",
-    "status": "UP",
-    "checkedAt": "2026-07-04T22:30:00+08:00"
-  },
-  "traceId": null,
-  "timestamp": "2026-07-04T22:30:00+08:00"
-}
-```
-
 ## 测试
 
 ```powershell
@@ -68,30 +54,7 @@ mvn test
 本项目在 `backend/.mvn/settings.xml` 中指定 `${user.home}/.m2/repository` 作为 Maven 本地仓库，
 用于避免受开发机器全局 Maven 配置影响。
 
-## 当前环境验证记录
-
-本阶段已尝试执行：
-
-```powershell
-mvn test
-```
-
-验证结果：
-
-- 已确认项目级 Maven 配置生效，不再写入机器全局只读仓库。
-- 当前环境无法联网访问 Maven Central，Spring Boot 依赖下载失败。
-- 当前机器 Maven 默认使用 Java 17，而项目规划要求 Java 21；后续本地完整验证需要切换到 JDK 21。
-
-因此，具备网络和 JDK 21 后，应重新执行：
-
-```powershell
-cd D:\Program\AgentMind\backend
-mvn test
-```
-
-## Stage 3 接口骨架
-
-当前阶段提供内存 mock 接口，用于前端采集中心和知识库页面联调。
+## Stage 4 摄取接口
 
 文档列表：
 
@@ -126,6 +89,7 @@ Invoke-RestMethod `
 
 说明：
 
-- 当前接口只创建内存 mock 数据，不写入数据库。
-- 文件上传接口不保存真实文件。
-- URL 采集接口只做基础 URL 校验，不抓取网页正文。
+- 文件上传成功后，原始文件会保存到 `.agentmind-storage`，该目录已加入 `.gitignore`。
+- URL 采集会校验 `http` / `https` 协议，并拒绝 localhost、回环地址和常见内网地址。
+- URL 采集当前只保存原始 HTML 快照，正文提取、去噪、重复检测和版本管理会在后续阶段实现。
+- 当前文档与任务数据仍保存在内存中，服务重启后会恢复为 mock 初始数据。

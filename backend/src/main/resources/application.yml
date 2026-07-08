@@ -1,6 +1,10 @@
-﻿spring:
+spring:
   application:
     name: agentmind-backend
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
 
 server:
   port: 8080
@@ -14,3 +18,11 @@ management:
 logging:
   level:
     com.agentmind: INFO
+
+agentmind:
+  storage:
+    local-root: .agentmind-storage
+  ingestion:
+    max-upload-size-bytes: 20971520
+    web-fetch-timeout-seconds: 8
+    web-fetch-max-bytes: 1048576

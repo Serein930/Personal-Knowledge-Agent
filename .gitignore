@@ -27,6 +27,7 @@ Thumbs.db
 uploads/
 logs/
 tmp/
+.agentmind-storage/
 
 # TypeScript build cache
 *.tsbuildinfo
