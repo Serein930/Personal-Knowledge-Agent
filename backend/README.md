@@ -88,3 +88,44 @@ mvn test
 cd D:\Program\AgentMind\backend
 mvn test
 ```
+
+## Stage 3 接口骨架
+
+当前阶段提供内存 mock 接口，用于前端采集中心和知识库页面联调。
+
+文档列表：
+
+```text
+GET http://localhost:8080/api/v1/workspaces/1/documents?page=1&pageSize=20
+```
+
+URL 采集任务：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/documents/web-pages" `
+  -ContentType "application/json" `
+  -Body '{"url":"https://example.com/article","title":"示例文章","tags":["Web","测试"]}'
+```
+
+摄取任务查询：
+
+```text
+GET http://localhost:8080/api/v1/workspaces/1/ingestion-tasks/{taskId}
+```
+
+文件上传任务：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/documents/files" `
+  -Form @{ file = Get-Item ".\README.md"; title = "README 文档"; tags = "文档" }
+```
+
+说明：
+
+- 当前接口只创建内存 mock 数据，不写入数据库。
+- 文件上传接口不保存真实文件。
+- URL 采集接口只做基础 URL 校验，不抓取网页正文。
