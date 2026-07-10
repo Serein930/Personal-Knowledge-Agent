@@ -11,11 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * Local disk implementation of {@link ObjectStorageService}.
+ * 本地磁盘对象存储实现。
  *
- * <p>This adapter is for Stage 4 development and API integration. It stores uploaded files and fetched HTML
- * snapshots under `.agentmind-storage`, which is ignored by Git. A future MinIO adapter can implement the same
- * interface without changing the document ingestion API.</p>
+ * <p>该适配器用于开发阶段和接口联调，会把上传文件与抓取到的网页快照存放在版本控制忽略的
+ * 本地存储目录下。后续对象存储适配器只需要实现同一个接口，不需要改文档摄取流程。</p>
  */
 @Service
 public class LocalObjectStorageService implements ObjectStorageService {
@@ -36,7 +35,7 @@ public class LocalObjectStorageService implements ObjectStorageService {
         Path targetPath = targetDirectory.resolve(objectName).normalize();
 
         if (!targetPath.startsWith(rootPath)) {
-            throw new IOException("Invalid storage path");
+            throw new IOException("存储路径不合法");
         }
 
         Files.createDirectories(targetDirectory);

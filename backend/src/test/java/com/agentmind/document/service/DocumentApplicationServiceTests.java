@@ -37,10 +37,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
 /**
- * Tests the current in-memory document ingestion pipeline.
+ * 测试当前基于内存的文档摄取流程。
  *
- * <p>The test uses fake storage and fake HTML fetching so it can verify validation, extraction, chunking and task
- * state transitions without starting Spring or accessing the network.</p>
+ * <p>该测试使用假的对象存储和假的网页抓取器，在不启动应用框架、不访问网络的情况下，
+ * 验证校验、提取、切分和任务状态流转。</p>
  */
 class DocumentApplicationServiceTests {
 
@@ -109,7 +109,7 @@ class DocumentApplicationServiceTests {
 
         assertThatThrownBy(() -> service.createFileUploadTask(1L, file, null, List.of()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("Unsupported file type");
+                .hasMessageContaining("不支持的文件类型");
     }
 
     @Test
@@ -139,7 +139,7 @@ class DocumentApplicationServiceTests {
 
         assertThatThrownBy(() -> service.createWebPageCaptureTask(1L, request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("URL host is not allowed");
+                .hasMessageContaining("链接主机不允许访问");
     }
 
     @Test

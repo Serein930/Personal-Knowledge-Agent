@@ -10,7 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests the local semantic retrieval skeleton before pgvector integration.
+ * 测试数据库向量扩展接入前的本地语义检索骨架。
  */
 class KnowledgeSearchServiceTests {
 

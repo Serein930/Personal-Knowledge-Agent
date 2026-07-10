@@ -41,11 +41,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Application service for document ingestion use cases.
+ * 文档摄取用例的应用服务。
  *
- * <p>The service keeps controllers thin and owns the current use-case flow: validate input, store raw content,
- * extract text, split text into chunks and update task/document state. Persistence is still in-memory in this
- * stage, but the parser and chunker boundaries are close to what will be used by the future database/vector flow.</p>
+ * <p>该服务让控制层保持轻量，并负责当前用例流程：校验入参、保存原始内容、提取文本、切分片段，
+ * 更新任务和文档状态。当前阶段仍使用内存存储，但解析器和切分器边界已经贴近后续数据库与向量库流程。</p>
  */
 @Service
 public class DocumentApplicationService {
@@ -86,11 +85,10 @@ public class DocumentApplicationService {
     }
 
     /**
-     * Creates a file ingestion task and performs the current synchronous ingestion skeleton.
+     * 创建文件摄取任务，并执行当前同步摄取流程。
      *
-     * <p>The method reads uploaded bytes once, stores the original object, extracts text for supported formats
-     * (Markdown, TXT, HTML and code), and writes generated chunks into the in-memory chunk store. Later stages can
-     * move extraction/chunking to an async worker without changing the HTTP contract.</p>
+     * <p>该方法只读取一次上传字节，保存原始对象，为已支持格式提取文本，并把生成片段写入内存片段仓库。
+     * 后续阶段可以把解析和切分迁移到异步任务中，而不改变接口契约。</p>
      */
     public FileDocumentUploadResponse createFileUploadTask(
             Long workspaceId,
@@ -135,16 +133,16 @@ public class DocumentApplicationService {
         } catch (IOException exception) {
             markTaskFailed(documentId, taskId, displayTitle, validation.sourceType(), workspaceId,
                     normalizedTags, IngestionTaskType.FILE_UPLOAD, validation.safeFilename(),
-                    "File ingestion failed");
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "File ingestion failed");
+                    "文件摄取失败");
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "文件摄取失败");
         }
     }
 
     /**
-     * Creates a web-page ingestion task.
+     * 创建网页摄取任务。
      *
-     * <p>URL safety validation and HTML fetching are still separated from parsing. That keeps SSRF protection,
-     * network fetching, text extraction and chunking independently testable.</p>
+     * <p>链接安全校验和网页抓取仍与解析流程分离。这样可以让服务端请求伪造防护、网络抓取、
+     * 文本提取和切分策略分别测试。</p>
      */
     public WebPageCaptureResponse createWebPageCaptureTask(Long workspaceId, WebPageCaptureRequest request) {
         validateWorkspaceId(workspaceId);
@@ -188,12 +186,12 @@ public class DocumentApplicationService {
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
         } catch (IOException exception) {
             markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
-                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "Web page ingestion failed");
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "网页摄取失败");
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             markTaskFailed(documentId, taskId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId,
-                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "Web page ingestion interrupted");
+                    normalizedTags, IngestionTaskType.WEB_PAGE_CAPTURE, uri.toString(), "网页摄取被中断");
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.FAILED);
         }
     }
@@ -229,7 +227,7 @@ public class DocumentApplicationService {
         validateWorkspaceId(workspaceId);
         DocumentSummaryResponse document = documents.get(documentId);
         if (document == null || !Objects.equals(document.workspaceId(), workspaceId)) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Document not found");
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文档不存在");
         }
         return chunksByDocumentId.getOrDefault(documentId, List.of()).stream()
                 .map(this::toChunkResponse)
@@ -239,11 +237,11 @@ public class DocumentApplicationService {
     public IngestionTaskResponse getTask(Long workspaceId, Long taskId) {
         validateWorkspaceId(workspaceId);
         if (taskId == null || taskId <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "taskId must be positive");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "任务ID必须为正数");
         }
         IngestionTaskResponse task = tasks.get(taskId);
         if (task == null || !Objects.equals(resolveTaskWorkspaceId(task), workspaceId)) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Ingestion task not found");
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "摄取任务不存在");
         }
         return task;
     }
@@ -304,7 +302,7 @@ public class DocumentApplicationService {
 
     private void validateWorkspaceId(Long workspaceId) {
         if (workspaceId == null || workspaceId <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "workspaceId must be positive");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "知识空间ID必须为正数");
         }
     }
 
@@ -312,7 +310,7 @@ public class DocumentApplicationService {
         if (StringUtils.hasText(title)) {
             return title.trim();
         }
-        return StringUtils.hasText(fallbackFilename) ? fallbackFilename : "Untitled document";
+        return StringUtils.hasText(fallbackFilename) ? fallbackFilename : "未命名文档";
     }
 
     private List<String> normalizeTags(List<String> tags) {

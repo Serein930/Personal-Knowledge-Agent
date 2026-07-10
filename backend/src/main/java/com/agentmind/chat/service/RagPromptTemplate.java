@@ -7,7 +7,7 @@ import java.util.Locale;
 import org.springframework.stereotype.Component;
 
 /**
- * RAG 提示词模板。
+ * 检索增强生成提示词模板。
  *
  * <p>提示词模板集中维护检索上下文格式和回答生成指令。后续做提示词版本对比、检索增强生成评估或
  * 真实聊天模型接入时，只需要替换或扩展这里，而不需要改控制层。</p>

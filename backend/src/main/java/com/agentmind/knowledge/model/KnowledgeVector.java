@@ -3,10 +3,10 @@ package com.agentmind.knowledge.model;
 import java.time.OffsetDateTime;
 
 /**
- * Vector record generated from one document chunk.
+ * 由单个文档片段生成的向量记录。
  *
- * <p>This model deliberately carries workspaceId and documentId because all future retrieval must be scoped by
- * user workspace. When pgvector is introduced, these fields should become queryable columns beside the vector.</p>
+ * <p>该模型刻意携带知识空间和文档编号，因为所有检索都必须限定在用户知识空间内。
+ * 接入数据库向量扩展后，这些字段应成为向量字段旁边可查询的普通列。</p>
  */
 public record KnowledgeVector(
         String id,

@@ -5,10 +5,10 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * Selects a parser for the current document source type.
+ * 根据文档来源类型选择文本解析器。
  *
- * <p>Unsupported formats return an empty extraction result instead of failing the whole upload. This lets PDF/Word
- * files be stored now while making it obvious that parsing support still needs to be implemented.</p>
+ * <p>暂不支持解析的格式会返回空文本，而不是让整个上传流程失败。这样当前阶段可以先保存
+ * 便携式文档和办公文档原始文件，同时清楚标记解析能力还需要后续补齐。</p>
  */
 @Service
 public class DocumentTextExtractionService {

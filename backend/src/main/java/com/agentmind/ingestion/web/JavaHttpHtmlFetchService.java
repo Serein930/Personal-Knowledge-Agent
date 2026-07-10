@@ -14,11 +14,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * HTML fetch implementation based on the JDK HttpClient.
+ * 基于标准库网络客户端的网页内容抓取实现。
  *
- * <p>The adapter sets a timeout, follows normal redirects and caps the response body size. It deliberately keeps
- * JavaScript-rendered pages out of scope for this stage; Playwright or Selenium can be introduced later as a fallback
- * adapter behind the same interface.</p>
+ * <p>该适配器设置超时时间、跟随常规重定向，并限制响应体大小。本阶段暂不处理依赖脚本渲染的页面；
+ * 后续可以在同一接口后增加浏览器渲染兜底适配器。</p>
  */
 @Service
 public class JavaHttpHtmlFetchService implements HtmlFetchService {
@@ -50,7 +49,7 @@ public class JavaHttpHtmlFetchService implements HtmlFetchService {
         HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         int statusCode = response.statusCode();
         if (statusCode < 200 || statusCode >= 300) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "HTML fetch failed with HTTP status: " + statusCode);
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "HTML 抓取失败，HTTP 状态码：" + statusCode);
         }
 
         byte[] bytes;
@@ -58,7 +57,7 @@ public class JavaHttpHtmlFetchService implements HtmlFetchService {
             bytes = body.readNBytes(maxBytes + 1);
         }
         if (bytes.length > maxBytes) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "HTML response exceeds fetch size limit");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "HTML 响应体超过抓取大小限制");
         }
 
         String contentType = response.headers().firstValue("content-type").orElse("text/html");

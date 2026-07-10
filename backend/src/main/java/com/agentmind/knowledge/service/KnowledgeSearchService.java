@@ -12,10 +12,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * Application service for workspace-scoped semantic search.
+ * 按知识空间隔离的语义检索应用服务。
  *
- * <p>The current implementation uses a deterministic local embedding and an in-memory vector store. The service
- * already enforces workspace scope, which is the core contract that must remain when pgvector is introduced.</p>
+ * <p>当前实现使用确定性本地向量和内存向量库。服务层已经强制按知识空间检索，
+ * 这是后续切换到数据库向量扩展时必须保持的核心契约。</p>
  */
 @Service
 public class KnowledgeSearchService {
@@ -34,7 +34,7 @@ public class KnowledgeSearchService {
     public KnowledgeSearchResponse search(Long workspaceId, String query, Integer topK) {
         validateWorkspaceId(workspaceId);
         if (!StringUtils.hasText(query)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "query must not be blank");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "查询内容不能为空");
         }
         int safeTopK = normalizeTopK(topK);
         float[] queryEmbedding = embeddingClient.embed(query);
@@ -54,7 +54,7 @@ public class KnowledgeSearchService {
 
     private void validateWorkspaceId(Long workspaceId) {
         if (workspaceId == null || workspaceId <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "workspaceId must be positive");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "知识空间ID必须为正数");
         }
     }
 

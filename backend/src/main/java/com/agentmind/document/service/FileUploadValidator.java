@@ -13,11 +13,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Validates uploaded knowledge files before they enter the ingestion pipeline.
+ * 文件进入摄取流程前的上传校验器。
  *
- * <p>Stage 4 keeps this validator intentionally focused: empty file, size, filename and extension checks.
- * Content sniffing, virus scanning, PDF page limits and archive restrictions can be added here later without
- * changing the controller contract.</p>
+ * <p>当前阶段只聚焦空文件、大小、文件名和扩展名校验。内容嗅探、病毒扫描、便携式文档 页数限制和压缩包限制
+ * 后续可以继续加在这里，不需要改变控制层契约。</p>
  */
 @Component
 public class FileUploadValidator {
@@ -48,16 +47,16 @@ public class FileUploadValidator {
 
     public FileValidationResult validate(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Uploaded file must not be empty");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "上传文件不能为空");
         }
         if (file.getSize() > maxUploadSizeBytes) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Uploaded file exceeds size limit");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "上传文件超过大小限制");
         }
 
         String safeFilename = sanitizeFilename(file.getOriginalFilename());
         String extension = extractExtension(safeFilename);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported file type: " + extension);
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "不支持的文件类型：" + extension);
         }
 
         DocumentSourceType sourceType = SOURCE_TYPE_BY_EXTENSION.getOrDefault(extension, DocumentSourceType.TEXT);
@@ -69,7 +68,7 @@ public class FileUploadValidator {
 
     private String sanitizeFilename(String filename) {
         if (!StringUtils.hasText(filename)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Filename must not be blank");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "文件名不能为空");
         }
         String normalized = Path.of(filename).getFileName().toString();
         return normalized.replaceAll("[\\\\/:*?\"<>|]", "-");
@@ -78,7 +77,7 @@ public class FileUploadValidator {
     private String extractExtension(String filename) {
         int dotIndex = filename.lastIndexOf('.');
         if (dotIndex < 0 || dotIndex == filename.length() - 1) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Filename must contain an extension");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "文件名必须包含扩展名");
         }
         return filename.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
     }

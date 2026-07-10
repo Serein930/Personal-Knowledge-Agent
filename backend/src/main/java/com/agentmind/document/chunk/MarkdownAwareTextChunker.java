@@ -7,11 +7,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * Basic chunker that respects Markdown headings and paragraph boundaries when possible.
+ * 尽量尊重标记文档标题和段落边界的基础切分器。
  *
- * <p>The algorithm is intentionally deterministic and dependency-free. It first groups text by heading section,
- * then splits long sections with a fixed overlap. That gives the future vector store stable chunk ids and enough
- * context for citation previews.</p>
+ * <p>该算法刻意保持确定性且不依赖外部组件。它先按标题分组，再对过长小节做固定重叠切分。
+ * 这样可以为向量库提供稳定片段编号，并为引用预览保留足够上下文。</p>
  */
 @Service
 public class MarkdownAwareTextChunker implements TextChunker {

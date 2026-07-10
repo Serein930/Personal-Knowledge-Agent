@@ -1,6 +1,11 @@
 spring:
   application:
     name: agentmind-backend
+  ai:
+    model:
+      chat: none
+    openai:
+      api-key: ${OPENAI_API_KEY:agentmind-local-placeholder}
   servlet:
     multipart:
       max-file-size: 20MB
@@ -28,6 +33,7 @@ agentmind:
   rag:
     answer-generator: mock
     prompt-version: rag-chat-v1
+    model-name: mock-local
     minimum-citation-score: 0.05
     max-context-citations: 5
   ingestion:

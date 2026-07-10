@@ -8,7 +8,7 @@ import java.util.List;
  * 文档元数据模型骨架。
  *
  * <p>该模型只保存文档的业务元数据，不保存完整正文和向量。
- * 正文 chunk、embedding 和原始文件存储会在后续文档摄取阶段拆分到独立模型或存储适配器。</p>
+ * 正文片段、向量和原始文件存储会在后续文档摄取阶段拆分到独立模型或存储适配器。</p>
  */
 public class KnowledgeDocument {
 

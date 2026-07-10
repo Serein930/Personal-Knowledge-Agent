@@ -3,11 +3,10 @@ package com.agentmind.knowledge.repository;
 import java.util.Locale;
 
 /**
- * Small SQL helper for pgvector values.
+ * 数据库向量扩展值使用的轻量结构化查询语句辅助工具。
  *
- * <p>pgvector accepts vector literals in the form `[0.1,0.2,...]`. Keeping the conversion in one helper avoids
- * scattering string formatting across the JDBC adapter and makes it easy to replace with a dedicated pgvector JDBC
- * type later.</p>
+ * <p>数据库向量扩展接受向量字面量格式。把转换逻辑集中到一个工具类中，
+ * 可以避免在原生数据库访问适配器中散落字符串格式化逻辑，后续也方便替换为专用向量类型。</p>
  */
 public final class PgVectorSqlSupport {
 

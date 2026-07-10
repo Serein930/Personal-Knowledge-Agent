@@ -5,14 +5,14 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * Request body for temporary semantic search API.
+ * 临时语义检索接口请求体。
  */
 public record KnowledgeSearchRequest(
-        @NotBlank(message = "query must not be blank")
+        @NotBlank(message = "查询内容不能为空")
         String query,
 
-        @Min(value = 1, message = "topK must be at least 1")
-        @Max(value = 20, message = "topK must not be greater than 20")
+        @Min(value = 1, message = "topK 至少为 1")
+        @Max(value = 20, message = "topK 不能大于 20")
         Integer topK
 ) {
 }

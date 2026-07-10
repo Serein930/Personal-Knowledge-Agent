@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Storage abstraction used by ingestion services.
+ * 摄取服务使用的对象存储抽象。
  *
- * <p>The application layer depends on this interface instead of a concrete local disk or MinIO implementation.
- * That keeps the current local development adapter replaceable when the project moves to real object storage.</p>
+ * <p>应用层依赖该接口，而不是直接依赖本地磁盘或对象存储实现。这样当前本地开发适配器可以在后续
+ * 平滑替换为真实对象存储。</p>
  */
 public interface ObjectStorageService {
 

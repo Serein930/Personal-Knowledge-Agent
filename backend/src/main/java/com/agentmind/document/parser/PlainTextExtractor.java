@@ -4,10 +4,9 @@ import com.agentmind.document.model.DocumentSourceType;
 import org.springframework.stereotype.Component;
 
 /**
- * Extracts UTF-8 text and source code files.
+ * 提取纯文本和源代码文件。
  *
- * <p>No syntax-specific parsing is done yet. Keeping the extractor simple gives the project a reliable baseline
- * before language-aware code chunking is added.</p>
+ * <p>当前阶段暂不做语言语法级解析。先保持提取器简单可靠，后续再加入按编程语言感知的代码切分能力。</p>
  */
 @Component
 public class PlainTextExtractor implements DocumentTextExtractor {

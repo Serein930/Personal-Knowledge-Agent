@@ -1,6 +1,6 @@
 ﻿import type { ChatCitation, KnowledgeItem, StudyTask, ToolTrace } from '../types';
 
-// 第一阶段只使用本地 mock 数据。后续接入后端时，可用同名 DTO 逐步替换这些结构。
+// 第一阶段只使用本地 模拟 数据。后续接入后端时，可用同名 数据传输对象 逐步替换这些结构。
 export const knowledgeItems: KnowledgeItem[] = [
   {
     id: 'doc-001',

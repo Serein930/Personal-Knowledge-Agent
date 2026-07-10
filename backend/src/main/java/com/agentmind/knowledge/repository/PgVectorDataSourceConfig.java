@@ -15,11 +15,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
 /**
- * Minimal DataSource configuration for the pgvector adapter.
+ * 数据库向量扩展适配器使用的轻量数据源配置。
  *
- * <p>The project does not enable a database by default. This configuration creates a simple DriverManager-backed
- * DataSource only when `agentmind.vector-store.type=pgvector`. It keeps the current memory mode startup clean while
- * giving the next stage a concrete switch point for PostgreSQL.</p>
+ * <p>项目默认不启用数据库。只有当向量库类型切换为数据库向量扩展时，该配置才会创建基于驱动管理器的简单数据源。
+ * 这样既能保持内存模式启动轻量，也给后续关系数据库接入留下明确切换点。</p>
  */
 @Configuration
 @ConditionalOnProperty(prefix = "agentmind.vector-store", name = "type", havingValue = "pgvector")
@@ -33,7 +32,7 @@ public class PgVectorDataSourceConfig {
             @Value("${spring.datasource.password:}") String password
     ) {
         if (!StringUtils.hasText(url)) {
-            throw new IllegalStateException("spring.datasource.url is required when pgvector vector store is enabled");
+            throw new IllegalStateException("启用 pgvector 向量库时必须配置 spring.datasource.url");
         }
         return new DriverManagerBackedDataSource(url, username, password);
     }
@@ -88,7 +87,7 @@ public class PgVectorDataSourceConfig {
 
         @Override
         public Logger getParentLogger() throws SQLFeatureNotSupportedException {
-            throw new SQLFeatureNotSupportedException("DriverManager does not expose a parent logger");
+            throw new SQLFeatureNotSupportedException("驱动管理器不暴露父级日志器");
         }
 
         @Override
@@ -96,7 +95,7 @@ public class PgVectorDataSourceConfig {
             if (iface.isInstance(this)) {
                 return iface.cast(this);
             }
-            throw new SQLException("DataSource cannot unwrap to " + iface.getName());
+            throw new SQLException("数据源不能解包为 " + iface.getName());
         }
 
         @Override

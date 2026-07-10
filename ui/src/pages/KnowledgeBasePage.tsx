@@ -55,7 +55,7 @@ const columns: ColumnsType<KnowledgeDocumentDto> = [
 ];
 
 export function KnowledgeBasePage() {
-  // 第二阶段使用 DTO 形态的 mock 数据，后续替换为 apiClient.get<PageResult<KnowledgeDocumentDto>>()。
+  // 第二阶段使用数据传输对象形态的模拟数据，后续由接口客户端读取分页文档列表。
   const documents = knowledgeItems.map(toKnowledgeDocumentDto);
 
   return (

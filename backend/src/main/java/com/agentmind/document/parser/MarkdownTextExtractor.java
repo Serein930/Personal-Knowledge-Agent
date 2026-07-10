@@ -5,10 +5,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Extracts Markdown content while preserving headings.
+ * 提取标记文档内容并保留标题。
  *
- * <p>Headings are intentionally kept because the chunker uses them to build heading paths. Inline formatting is
- * lightly normalized, but code blocks are preserved because technical notes often depend on exact code snippets.</p>
+ * <p>标题会被保留下来，因为切分器会使用标题构造标题路径。行内格式只做轻量规范化，
+ * 代码块会保留原样，因为技术笔记通常依赖准确的代码片段。</p>
  */
 @Component
 public class MarkdownTextExtractor implements DocumentTextExtractor {

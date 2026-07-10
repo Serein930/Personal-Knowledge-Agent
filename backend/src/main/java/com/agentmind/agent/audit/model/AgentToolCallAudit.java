@@ -3,10 +3,10 @@ package com.agentmind.agent.audit.model;
 import java.time.OffsetDateTime;
 
 /**
- * Agent 工具调用审计模型骨架。
+ * 智能体工具调用审计模型骨架。
  *
- * <p>每一次 Agent 工具调用都应该保留审计记录，尤其是会写入笔记、复习卡片或学习计划的工具。
- * requestPayload 和 responseSummary 在后续实现时需要做敏感信息脱敏。</p>
+ * <p>每一次智能体工具调用都应该保留审计记录，尤其是会写入笔记、复习卡片或学习计划的工具。
+ * 请求载荷和响应摘要在后续实现时需要做敏感信息脱敏。</p>
  */
 public class AgentToolCallAudit {
 

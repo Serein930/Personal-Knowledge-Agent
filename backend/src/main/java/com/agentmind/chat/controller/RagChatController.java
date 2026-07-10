@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * RAG 问答接口。
+ * 检索增强生成问答接口。
  *
  * <p>该接口负责接收用户问题并返回回答、检索上下文和引用来源。真实模型调用不会放在控制层中，
  * 而是通过后端服务层的回答生成端口进行适配。</p>
@@ -32,7 +32,7 @@ public class RagChatController {
 
     @PostMapping("/chat")
     public ApiResponse<RagChatResponse> chat(
-            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @Valid @RequestBody RagChatRequest request
     ) {
         return ApiResponse.success(ragContextAssemblyService.prepareChatContext(workspaceId, request));

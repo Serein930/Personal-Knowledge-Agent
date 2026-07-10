@@ -26,10 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * HTTP API for document ingestion and document query use cases.
+ * 文档摄取与文档查询接口。
  *
- * <p>The controller only handles request/response mapping and validation. All ingestion, parsing and chunking
- * decisions are delegated to {@link DocumentApplicationService}.</p>
+ * <p>该控制层只负责请求响应映射和参数校验。所有摄取、解析和切分决策都委托给文档应用服务。</p>
  */
 @Validated
 @RestController
@@ -44,7 +43,7 @@ public class DocumentController {
 
     @PostMapping("/files")
     public ApiResponse<FileDocumentUploadResponse> uploadFile(
-            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
+            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) List<String> tags
@@ -54,7 +53,7 @@ public class DocumentController {
 
     @PostMapping("/web-pages")
     public ApiResponse<WebPageCaptureResponse> captureWebPage(
-            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
+            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @Valid @RequestBody WebPageCaptureRequest request
     ) {
         return ApiResponse.success(documentApplicationService.createWebPageCaptureTask(workspaceId, request));
@@ -62,10 +61,10 @@ public class DocumentController {
 
     @GetMapping
     public ApiResponse<PageResponse<DocumentSummaryResponse>> listDocuments(
-            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
-            @RequestParam(defaultValue = "1") @Min(value = 1, message = "page must be greater than 0") int page,
-            @RequestParam(defaultValue = "20") @Min(value = 1, message = "pageSize must be greater than 0")
-            @Max(value = 100, message = "pageSize must not be greater than 100") int pageSize,
+            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") int page,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能大于 100") int pageSize,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) DocumentSourceType sourceType,
             @RequestParam(required = false) IngestionStatus status,
@@ -84,8 +83,8 @@ public class DocumentController {
 
     @GetMapping("/{documentId}/chunks")
     public ApiResponse<List<DocumentChunkResponse>> listDocumentChunks(
-            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
-            @PathVariable @Positive(message = "documentId must be positive") Long documentId
+            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "文档ID必须为正数") Long documentId
     ) {
         return ApiResponse.success(documentApplicationService.listDocumentChunks(workspaceId, documentId));
     }

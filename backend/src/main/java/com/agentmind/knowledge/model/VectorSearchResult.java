@@ -1,7 +1,7 @@
 package com.agentmind.knowledge.model;
 
 /**
- * One semantic retrieval hit.
+ * 单条语义检索命中结果。
  */
 public record VectorSearchResult(
         String chunkId,

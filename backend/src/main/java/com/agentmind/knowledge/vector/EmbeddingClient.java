@@ -1,10 +1,9 @@
 package com.agentmind.knowledge.vector;
 
 /**
- * Port for converting text into an embedding vector.
+ * 将文本转换为向量的端口。
  *
- * <p>Keeping this as a project-level abstraction lets the current deterministic local implementation be replaced by
- * Spring AI's EmbeddingModel later without changing ingestion or retrieval services.</p>
+ * <p>该项目级抽象可以让当前确定性本地实现，在后续替换为真实向量模型时不影响摄取和检索服务。</p>
  */
 public interface EmbeddingClient {
 

@@ -12,10 +12,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
- * In-memory vector store used before PostgreSQL + pgvector is introduced.
+ * 关系数据库与数据库向量扩展接入前使用的内存向量库。
  *
- * <p>The implementation is intentionally simple but keeps the same responsibilities as a real vector store:
- * replace vectors per document, delete vectors on failed ingestion, and search only inside the requested workspace.</p>
+ * <p>该实现刻意保持简单，但职责与真实向量库一致：按文档替换向量、摄取失败时删除向量、
+ * 并且只在指定知识空间内检索。</p>
  */
 @Repository
 @ConditionalOnProperty(prefix = "agentmind.vector-store", name = "type", havingValue = "memory", matchIfMissing = true)

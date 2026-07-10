@@ -14,10 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Temporary semantic search API.
+ * 临时语义检索接口。
  *
- * <p>This endpoint exposes the retrieval skeleton before RAG chat is implemented. It lets the frontend and backend
- * verify whether uploaded/captured chunks are indexed and searched within the selected workspace.</p>
+ * <p>该接口用于在检索增强生成问答完善前暴露检索骨架，帮助前后端验证上传或采集得到的片段
+ * 是否已经在当前知识空间内完成索引和检索。</p>
  */
 @Validated
 @RestController
@@ -32,7 +32,7 @@ public class KnowledgeSearchController {
 
     @PostMapping("/search")
     public ApiResponse<KnowledgeSearchResponse> search(
-            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
+            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @Valid @RequestBody KnowledgeSearchRequest request
     ) {
         return ApiResponse.success(knowledgeSearchService.search(workspaceId, request.query(), request.topK()));

@@ -19,15 +19,13 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * Manual integration test for the PostgreSQL + pgvector adapter.
+ * 关系数据库与数据库向量扩展适配器的手动集成测试。
  *
- * <p>This test is disabled by default because it needs a local Docker database. To run it, start
- * `docker compose up -d agentmind-postgres`, remove or temporarily override {@link Disabled}, and execute this
- * test class from IDEA or Maven. It verifies the same {@link com.agentmind.knowledge.vector.VectorStore} contract
- * that the in-memory adapter implements.</p>
+ * <p>该测试默认禁用，因为它依赖本地容器数据库。运行前需要先启动数据库容器，
+ * 再临时移除禁用标记，并在开发工具或构建工具中执行该测试类。它验证的是与内存适配器相同的向量库契约。</p>
  */
 @Tag("pgvector")
-@Disabled("Manual test: requires docker compose pgvector database")
+@Disabled("手动测试：需要先启动数据库向量扩展容器")
 class PgVectorStoreIntegrationTests {
 
     private static final String JDBC_URL = "jdbc:postgresql://localhost:5432/agentmind";

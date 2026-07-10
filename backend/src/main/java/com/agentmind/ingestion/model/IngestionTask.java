@@ -6,7 +6,7 @@ import java.time.OffsetDateTime;
  * 摄取任务模型骨架。
  *
  * <p>摄取任务用于跟踪文件上传、网页采集、文本解析、分块和向量化流程。
- * Stage 2 只定义字段，Stage 3/Stage 4 再实现创建任务、状态流转和异步执行。</p>
+ * 第二阶段只定义字段，第三阶段和第四阶段再实现创建任务、状态流转和异步执行。</p>
  */
 public class IngestionTask {
 

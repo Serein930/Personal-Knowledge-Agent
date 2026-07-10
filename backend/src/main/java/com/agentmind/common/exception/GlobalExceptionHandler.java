@@ -19,8 +19,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 /**
  * 全局异常处理器。
  *
- * <p>该类保证所有可预期异常都以统一响应结构返回，避免 Controller 分散处理错误。
- * 未预期异常会记录服务端日志，并向前端返回稳定的 INTERNAL_ERROR。</p>
+ * <p>该类保证所有可预期异常都以统一响应结构返回，避免控制层分散处理错误。
+ * 未预期异常会记录服务端日志，并向前端返回稳定的内部错误码。</p>
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -57,7 +57,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleUnexpectedException(Exception exception) {
-        log.error("Unexpected backend exception", exception);
+        log.error("后端出现未预期异常", exception);
         return ApiResponse.failure(ErrorCode.INTERNAL_ERROR.code(), ErrorCode.INTERNAL_ERROR.defaultMessage());
     }
 

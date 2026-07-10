@@ -6,7 +6,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Port for vector persistence and retrieval.
+ * 向量持久化与检索端口。
  */
 public interface VectorStore {
 

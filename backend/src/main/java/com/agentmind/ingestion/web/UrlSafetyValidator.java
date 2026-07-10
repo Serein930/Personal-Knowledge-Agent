@@ -9,10 +9,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Basic URL safety validator for web ingestion.
+ * 网页摄取使用的基础链接安全校验器。
  *
- * <p>Stage 4 blocks non-HTTP schemes, localhost, loopback hosts, link-local addresses and common private IPv4
- * ranges. DNS resolution based private-address checks can be added in the network adapter before production use.</p>
+ * <p>当前阶段会阻止非网页协议、本地主机、回环地址、链路本地地址和常见私有网段。
+ * 生产使用前可以在网络适配层继续增加基于域名解析结果的内网地址检查。</p>
  */
 @Component
 public class UrlSafetyValidator {
@@ -23,14 +23,14 @@ public class UrlSafetyValidator {
             String scheme = uri.getScheme();
             String host = uri.getHost();
             if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "URL only supports http or https");
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "链接只支持 http 或 https");
             }
             if (!StringUtils.hasText(host) || isBlockedHost(host)) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "URL host is not allowed");
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "链接主机不允许访问");
             }
             return uri;
         } catch (URISyntaxException exception) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid URL format");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "链接格式不合法");
         }
     }
 

@@ -1,10 +1,10 @@
 package com.agentmind.knowledge.model.dto;
 
 /**
- * DTO returned for one retrieved chunk.
+ * 单个命中文档片段的检索结果。
  *
- * <p>The score is cosine similarity from the current mock vector store. Later pgvector integration can keep the
- * same response shape while changing the score source.</p>
+ * <p>当前分数来自本地向量库的余弦相似度。后续接入数据库向量扩展后可以保持同一响应结构，
+ * 只替换分数来源。</p>
  */
 public record KnowledgeSearchResultResponse(
         String chunkId,

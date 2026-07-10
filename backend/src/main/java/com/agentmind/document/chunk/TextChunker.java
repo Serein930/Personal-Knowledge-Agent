@@ -4,7 +4,7 @@ import com.agentmind.document.model.DocumentSourceType;
 import java.util.List;
 
 /**
- * Splits extracted text into RAG-ready chunks.
+ * 将提取后的文本切分为可检索增强生成使用的知识片段。
  */
 public interface TextChunker {
 

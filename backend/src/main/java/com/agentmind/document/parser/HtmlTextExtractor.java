@@ -7,11 +7,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Lightweight HTML text extractor.
+ * 轻量网页文本提取器。
  *
- * <p>This is a Stage 4.5 skeleton rather than a full readability implementation. It removes scripts, styles and
- * tags, extracts a basic title, and decodes common HTML entities. Jsoup/readability can replace this class later
- * when web article quality becomes the focus.</p>
+ * <p>当前实现还不是完整正文提取方案，只负责移除脚本、样式和标签，提取基础标题，并处理常见实体。
+ * 当网页文章质量成为重点时，可以再替换为网页解析库和正文提取实现。</p>
  */
 @Component
 public class HtmlTextExtractor implements DocumentTextExtractor {

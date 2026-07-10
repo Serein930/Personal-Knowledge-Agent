@@ -1,11 +1,10 @@
 package com.agentmind.document.chunk;
 
 /**
- * Chunk generated from extracted document text.
+ * 从文档文本中切分出的知识片段。
  *
- * <p>The model keeps source offsets and heading path so future vector records can preserve citation metadata.
- * These fields are important for RAG answers because they make it possible to show where a retrieved answer came
- * from.</p>
+ * <p>该模型保留原文位置和标题路径，便于后续向量记录携带引用元数据。
+ * 这些字段能让检索增强生成回答清楚展示答案来自哪个文档片段。</p>
  */
 public record DocumentChunk(
         String id,

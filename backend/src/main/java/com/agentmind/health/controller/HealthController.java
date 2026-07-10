@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 应用健康检查接口。
  *
- * <p>该接口用于前端联调、部署探活和基础可用性验证。它不依赖数据库或外部 AI 服务，
- * 因此适合在 Stage 1 作为最小后端验收接口。</p>
+ * <p>该接口用于前端联调、部署探活和基础可用性验证。它不依赖数据库或外部人工智能服务，
+ * 因此适合在第一阶段作为最小后端验收接口。</p>
  */
 @RestController
 @RequestMapping("/api/v1/health")

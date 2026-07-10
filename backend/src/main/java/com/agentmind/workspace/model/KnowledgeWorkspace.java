@@ -6,7 +6,7 @@ import java.time.OffsetDateTime;
  * 知识空间模型骨架。
  *
  * <p>知识空间是文档、向量、会话、学习计划和复习卡片的隔离边界。
- * 后续所有查询都应带上 workspaceId，避免跨空间访问用户私有资料。</p>
+ * 后续所有查询都应带上知识空间编号，避免跨空间访问用户私有资料。</p>
  */
 public class KnowledgeWorkspace {
 

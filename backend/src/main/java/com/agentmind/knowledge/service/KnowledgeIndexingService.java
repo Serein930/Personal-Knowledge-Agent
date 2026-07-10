@@ -9,7 +9,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * Builds and stores vectors for generated document chunks.
+ * 为文档片段生成并保存向量。
  */
 @Service
 public class KnowledgeIndexingService {

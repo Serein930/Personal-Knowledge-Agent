@@ -17,12 +17,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
- * PostgreSQL + pgvector implementation of {@link VectorStore}.
+ * 基于关系数据库与数据库向量扩展的向量库实现。
  *
- * <p>This adapter uses plain JDBC so the project can keep the default memory mode lightweight. It is enabled only
- * when `agentmind.vector-store.type=pgvector` and a {@link DataSource} bean exists. A later infrastructure stage can
- * add Spring JDBC, Flyway and connection-pool configuration without changing the application-facing
- * {@link VectorStore} interface.</p>
+ * <p>该适配器使用原生数据库访问方式，让项目默认内存模式保持轻量。
+ * 只有当向量库类型切换为数据库向量扩展且存在数据源时才启用。
+ * 后续基础设施阶段可以继续加入数据库访问模板、数据库迁移和连接池配置，而不改变面向应用层的向量库端口。</p>
  */
 @Repository
 @ConditionalOnProperty(prefix = "agentmind.vector-store", name = "type", havingValue = "pgvector")
@@ -82,7 +81,7 @@ public class PgVectorStore implements VectorStore {
                 connection.setAutoCommit(previousAutoCommit);
             }
         } catch (SQLException exception) {
-            throw new IllegalStateException("Failed to replace pgvector document vectors", exception);
+            throw new IllegalStateException("替换 pgvector 文档向量失败", exception);
         }
     }
 
@@ -91,7 +90,7 @@ public class PgVectorStore implements VectorStore {
         try (Connection connection = dataSource.getConnection()) {
             deleteDocumentVectors(connection, workspaceId, documentId);
         } catch (SQLException exception) {
-            throw new IllegalStateException("Failed to delete pgvector document vectors", exception);
+            throw new IllegalStateException("删除 pgvector 文档向量失败", exception);
         }
     }
 
@@ -113,7 +112,7 @@ public class PgVectorStore implements VectorStore {
                 return results;
             }
         } catch (SQLException exception) {
-            throw new IllegalStateException("Failed to search pgvector chunks", exception);
+            throw new IllegalStateException("检索 pgvector 文档片段失败", exception);
         }
     }
 
@@ -158,7 +157,7 @@ public class PgVectorStore implements VectorStore {
     private void validateEmbeddingDimensions(float[] embedding) {
         if (embedding.length != embeddingDimensions) {
             throw new IllegalArgumentException(
-                    "Embedding dimensions must be " + embeddingDimensions + ", but was " + embedding.length);
+                    "向量维度必须为 " + embeddingDimensions + "，实际为 " + embedding.length);
         }
     }
 }

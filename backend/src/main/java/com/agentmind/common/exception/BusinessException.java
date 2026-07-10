@@ -3,8 +3,8 @@ package com.agentmind.common.exception;
 /**
  * 业务异常基类。
  *
- * <p>Controller 和 Service 层遇到可预期业务失败时抛出该异常，
- * 由全局异常处理器转换为统一 API 响应。</p>
+ * <p>控制层和服务层遇到可预期业务失败时抛出该异常，
+ * 由全局异常处理器转换为统一接口响应。</p>
  */
 public class BusinessException extends RuntimeException {
 

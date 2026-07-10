@@ -4,7 +4,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Raw HTML fetch result used as the input for later readability extraction and chunking.
+ * 原始网页内容抓取结果。
+ *
+ * <p>该结果会作为后续正文提取和文本切分的输入。</p>
  */
 public record HtmlFetchResult(
         URI uri,

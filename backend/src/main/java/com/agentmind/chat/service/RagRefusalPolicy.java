@@ -7,7 +7,7 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
- * RAG 低置信度拒答策略。
+ * 检索增强生成低置信度拒答策略。
  *
  * <p>当前策略只使用检索结果数量和最高相似度分数，规则足够透明，也方便后续加入
  * 引用覆盖率、重排分数、用户反馈等更细的质量信号。</p>

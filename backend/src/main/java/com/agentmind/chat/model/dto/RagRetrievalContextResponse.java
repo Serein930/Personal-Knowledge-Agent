@@ -11,6 +11,7 @@ import java.util.List;
 public record RagRetrievalContextResponse(
         String question,
         int topK,
+        String promptVersion,
         String promptContext,
         List<RagCitationResponse> citations
 ) {

@@ -5,10 +5,10 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
- * URL 采集请求 DTO。
+ * 链接采集请求数据传输对象。
  *
- * <p>这里只做基础字段约束。SSRF 防护、URL DNS 解析和内网地址拦截会在后续
- * Web 采集服务中实现，避免把安全逻辑塞进 DTO。</p>
+ * <p>这里只做基础字段约束。服务端请求伪造防护、链接域名解析和内网地址拦截会在后续
+ * 网页采集服务中实现，避免把安全逻辑塞进数据传输对象。</p>
  */
 public record WebPageCaptureRequest(
         @NotBlank(message = "url 不能为空")

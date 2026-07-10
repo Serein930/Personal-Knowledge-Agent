@@ -18,10 +18,11 @@ class RagContextAssemblyServiceTests {
     private final DeterministicEmbeddingClient embeddingClient = new DeterministicEmbeddingClient();
     private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
     private final RagAnswerGenerationProperties properties = new RagAnswerGenerationProperties();
+    private final RagModelCallLogger modelCallLogger = new RagModelCallLogger();
     private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
     private final RagContextAssemblyService service = new RagContextAssemblyService(
             new KnowledgeSearchService(embeddingClient, vectorStore),
-            new MockAnswerGenerator(),
+            new MockAnswerGenerator(properties, modelCallLogger),
             new RagPromptTemplate(properties),
             new RagRefusalPolicy(properties)
     );
@@ -51,8 +52,12 @@ class RagContextAssemblyServiceTests {
         assertThat(response.citations()).hasSize(1);
         assertThat(response.citations().getFirst().chunkId()).isEqualTo("100-0");
         assertThat(response.retrievalContext().promptContext()).contains("用户问题：");
+        assertThat(response.retrievalContext().promptVersion()).isEqualTo("rag-chat-v1");
         assertThat(response.retrievalContext().promptContext()).contains("文档ID=100");
         assertThat(response.retrievalContext().promptContext()).contains("片段ID=100-0");
+        assertThat(response.generationMetadata().answerGenerator()).isEqualTo("mock");
+        assertThat(response.generationMetadata().promptVersion()).isEqualTo("rag-chat-v1");
+        assertThat(response.generationMetadata().refused()).isFalse();
         assertThat(response.usage().totalTokens()).isZero();
     }
 
@@ -66,6 +71,8 @@ class RagContextAssemblyServiceTests {
         assertThat(response.answer()).contains("当前知识库没有检索到");
         assertThat(response.citations()).isEmpty();
         assertThat(response.retrievalContext().promptContext()).contains("用户问题：");
+        assertThat(response.generationMetadata().refused()).isTrue();
+        assertThat(response.generationMetadata().refusalReason()).contains("当前知识库没有检索到");
         assertThat(response.usage().totalTokens()).isZero();
     }
 }

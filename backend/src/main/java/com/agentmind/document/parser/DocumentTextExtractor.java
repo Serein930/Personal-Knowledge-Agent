@@ -4,11 +4,10 @@ import com.agentmind.document.model.DocumentSourceType;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Strategy interface for extracting text from one document source type.
+ * 文档文本提取策略接口。
  *
- * <p>Each implementation focuses on one content family, which keeps parser rules replaceable. This matters for
- * web pages because a simple HTML stripper is enough for Stage 4.5, but can later be replaced by Jsoup plus a
- * readability extractor without changing the ingestion service.</p>
+ * <p>每个实现只关注一种内容类型，方便替换解析规则。网页解析当前只需要轻量去标签，
+ * 后续可以替换为网页解析库和正文提取方案，而不需要改摄取服务。</p>
  */
 public interface DocumentTextExtractor {
 

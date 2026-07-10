@@ -3,10 +3,10 @@ package com.agentmind.common.storage;
 import java.nio.file.Path;
 
 /**
- * Metadata returned after an object has been stored.
+ * 对象存储完成后返回的元数据。
  *
- * <p>The absolute path is useful for local development only. Higher layers should use storageKey as the stable
- * reference so the same contract can work with MinIO or another object storage service later.</p>
+ * <p>绝对路径只用于本地开发调试。上层业务应使用存储键作为稳定引用，
+ * 这样同一契约后续也能适配真实对象存储服务。</p>
  */
 public record StoredObject(
         String storageKey,

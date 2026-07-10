@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * HTTP API for ingestion task status queries.
+ * 摄取任务状态查询接口。
  */
 @Validated
 @RestController
@@ -26,8 +26,8 @@ public class IngestionTaskController {
 
     @GetMapping("/{taskId}")
     public ApiResponse<IngestionTaskResponse> getTask(
-            @PathVariable @Positive(message = "workspaceId must be positive") Long workspaceId,
-            @PathVariable @Positive(message = "taskId must be positive") Long taskId
+            @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "任务ID必须为正数") Long taskId
     ) {
         return ApiResponse.success(documentApplicationService.getTask(workspaceId, taskId));
     }

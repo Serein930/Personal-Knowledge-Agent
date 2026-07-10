@@ -6,10 +6,10 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * 文档列表项响应 DTO。
+ * 文档列表项响应 数据传输对象。
  *
  * <p>该结构对齐前端知识库表格。它只暴露列表展示需要的信息，不暴露原始文件路径、
- * password、内部存储桶等敏感或实现细节字段。</p>
+ * 密码、内部存储桶等敏感或实现细节字段。</p>
  */
 public record DocumentSummaryResponse(
         Long id,

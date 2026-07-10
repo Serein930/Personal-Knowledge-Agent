@@ -3,8 +3,8 @@ package com.agentmind.user.model;
 /**
  * 用户角色。
  *
- * <p>Stage 2 只定义角色边界，不实现 Spring Security 权限校验。
- * 后续接入认证授权时，该枚举会用于 JWT Claims、接口鉴权和后台管理能力。</p>
+ * <p>第二阶段只定义角色边界，不实现安全框架权限校验。
+ * 后续接入认证授权时，该枚举会用于令牌声明、接口鉴权和后台管理能力。</p>
  */
 public enum UserRole {
     /**

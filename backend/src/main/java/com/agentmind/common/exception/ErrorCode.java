@@ -3,7 +3,7 @@ package com.agentmind.common.exception;
 /**
  * 后端统一错误码。
  *
- * <p>错误码使用稳定字符串，便于前端根据 code 做提示和分支处理。</p>
+ * <p>错误码使用稳定字符串，便于前端根据错误码字段做提示和分支处理。</p>
  */
 public enum ErrorCode {
     BAD_REQUEST("BAD_REQUEST", "请求参数不合法"),

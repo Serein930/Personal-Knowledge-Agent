@@ -6,7 +6,7 @@ import com.agentmind.document.model.IngestionStatus;
 /**
  * 文档列表查询条件。
  *
- * <p>该 DTO 对应文档列表接口的查询参数。当前阶段不实现 Controller，
+ * <p>该数据传输对象对应文档列表接口的查询参数。当前阶段不实现控制层，
  * 但先稳定字段，便于前端和后续查询服务围绕同一契约开发。</p>
  */
 public record DocumentQueryRequest(
@@ -19,7 +19,7 @@ public record DocumentQueryRequest(
 ) {
 
     /**
-     * 生成默认查询条件，供测试和后续 Controller 兜底使用。
+     * 生成默认查询条件，供测试和后续控制层兜底使用。
      */
     public static DocumentQueryRequest defaults() {
         return new DocumentQueryRequest(1, 20, null, null, null, null);

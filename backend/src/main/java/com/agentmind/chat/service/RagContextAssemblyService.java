@@ -12,10 +12,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Service;
 
 /**
- * RAG 检索上下文与回答生成编排服务。
+ * 检索增强生成检索上下文与回答生成编排服务。
  *
- * <p>该服务负责串联向量检索、引用构造、提示词模板、拒答策略和回答生成端口。控制层不直接接触
- * 检索细节或模型客户端，后续接入真实模型时也可以保持接口稳定。</p>
+ * <p>该服务负责串联向量检索、引用构造、提示词模板、拒答策略和回答生成端口。
+ * 控制层不直接接触检索细节或模型客户端，后续接入真实模型时也可以保持接口稳定。</p>
  */
 @Service
 public class RagContextAssemblyService {
@@ -51,6 +51,7 @@ public class RagContextAssemblyService {
         RagRetrievalContextResponse retrievalContext = new RagRetrievalContextResponse(
                 request.question(),
                 searchResponse.topK(),
+                promptTemplate.promptVersion(),
                 promptContext,
                 citations
         );
@@ -70,6 +71,7 @@ public class RagContextAssemblyService {
                 retrievalContext,
                 citations,
                 List.of(),
+                generatedAnswer.metadata(),
                 generatedAnswer.usage()
         );
     }

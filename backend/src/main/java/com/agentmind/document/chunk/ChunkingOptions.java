@@ -1,7 +1,7 @@
 package com.agentmind.document.chunk;
 
 /**
- * Controls text chunk size and overlap.
+ * 文本切分参数。
  */
 public record ChunkingOptions(
         int maxChars,

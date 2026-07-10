@@ -5,11 +5,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Dependency-free embedding implementation for local development.
+ * 用于本地开发的无外部依赖向量生成实现。
  *
- * <p>This is not a real language model embedding. It hashes tokens into a fixed-size vector and normalizes the
- * result, which is good enough to verify indexing, workspace isolation and retrieval ranking before integrating a
- * paid or local embedding model.</p>
+ * <p>这不是真实语言模型向量。它会把词元哈希到固定维度向量并做归一化，
+ * 足够在接入付费或本地向量模型前验证索引、知识空间隔离和检索排序。</p>
  */
 @Component
 public class DeterministicEmbeddingClient implements EmbeddingClient {
