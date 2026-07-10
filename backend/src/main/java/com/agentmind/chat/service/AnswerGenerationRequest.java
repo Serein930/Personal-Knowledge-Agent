@@ -4,15 +4,17 @@ import com.agentmind.chat.model.dto.RagCitationResponse;
 import java.util.List;
 
 /**
- * Input passed to an answer generator.
+ * 回答生成请求。
  *
- * <p>The request keeps the user question, retrieved prompt context and normalized citations together. A later
- * Spring AI adapter can transform this object into a model prompt while tests can keep using the deterministic mock
- * generator.</p>
+ * <p>该对象集中保存用户问题、检索上下文、最终生成提示词、引用来源和拒答判断。后续真实模型适配器
+ * 可以直接把它转换为模型请求，测试环境则继续使用可重复的模拟实现。</p>
  */
 public record AnswerGenerationRequest(
         String question,
+        String promptVersion,
         String promptContext,
-        List<RagCitationResponse> citations
+        String generationPrompt,
+        List<RagCitationResponse> citations,
+        RagRefusalDecision refusalDecision
 ) {
 }

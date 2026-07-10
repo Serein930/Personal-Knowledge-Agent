@@ -1,67 +1,67 @@
-# pgvector Retrieval Runbook
+# pgvector 检索联调手册
 
-This runbook verifies the Stage 5 real retrieval path:
+本文档用于验证 Stage 5 的真实向量检索链路：
 
 ```text
-Markdown upload -> text extraction -> chunking -> embedding -> pgvector write -> /knowledge/search
+Markdown 上传 -> 文本提取 -> chunk 切分 -> embedding 生成 -> pgvector 写入 -> /knowledge/search
 ```
 
-The current embedding implementation is deterministic and local. It is not a production-quality semantic model, but it
-is enough to verify that the storage and retrieval path works against PostgreSQL + pgvector.
+当前 embedding 实现是本地确定性算法，不是生产级语义模型。它的作用是让我们在不依赖真实模型密钥的情况下，
+验证 PostgreSQL + pgvector 的存储和检索链路是否打通。
 
-## Prerequisites
+## 前置条件
 
 - JDK 21
 - Maven 3.9+
 - Docker Desktop
 - PowerShell
-- Port `5432` available locally
+- 本机 `5432` 端口可用
 
-## 1. Start pgvector
+## 1. 启动 pgvector
 
-From the repository root:
+在仓库根目录执行：
 
 ```powershell
 cd D:\Program\AgentMind
 docker compose up -d agentmind-postgres
 ```
 
-Check container health:
+检查容器状态：
 
 ```powershell
 docker compose ps
 ```
 
-The first startup initializes the `knowledge_vector_chunks` table through:
+首次启动时会通过下面的脚本初始化 `knowledge_vector_chunks` 表：
 
 ```text
 backend/src/main/resources/db/schema/knowledge_vector_chunks.sql
 ```
 
-If you previously started the container before this schema existed, recreate the volume:
+如果你曾经在该表结构存在前启动过容器，需要重建数据卷：
 
 ```powershell
 docker compose down -v
 docker compose up -d agentmind-postgres
 ```
 
-## 2. Start Backend With Local Profile
+## 2. 使用 local profile 启动后端
 
-Use Java 21 for this terminal session:
+当前终端先切换到 Java 21：
 
 ```powershell
 $env:JAVA_HOME='D:\Tools\Java21'
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 ```
 
-Start the backend:
+启动后端：
 
 ```powershell
 cd D:\Program\AgentMind\backend
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-The `local` profile switches the vector store to pgvector:
+`local` profile 会把向量库切换为 pgvector：
 
 ```yaml
 agentmind:
@@ -69,39 +69,39 @@ agentmind:
     type: pgvector
 ```
 
-## 3. Run The Manual Retrieval Script
+## 3. 运行手动检索脚本
 
-Open a second PowerShell window:
+打开第二个 PowerShell 窗口：
 
 ```powershell
 cd D:\Program\AgentMind
 powershell -ExecutionPolicy Bypass -File .\scripts\manual-pgvector-retrieval.ps1
 ```
 
-The script does the following:
+脚本会执行以下动作：
 
-1. Creates a temporary Markdown file.
-2. Uploads it to `POST /api/v1/workspaces/1/documents/files`.
-3. Reads the generated `documentId` and `taskId`.
-4. Calls `GET /api/v1/workspaces/1/documents/{documentId}/chunks`.
-5. Calls `POST /api/v1/workspaces/1/knowledge/search`.
+1. 创建临时 Markdown 文件。
+2. 调用 `POST /api/v1/workspaces/1/documents/files` 上传文件。
+3. 读取返回的 `documentId` 和 `taskId`。
+4. 调用 `GET /api/v1/workspaces/1/documents/{documentId}/chunks` 查看切分结果。
+5. 调用 `POST /api/v1/workspaces/1/knowledge/search` 验证检索结果。
 
-Expected result:
+预期结果：
 
-- Upload response status is `SUCCEEDED`.
-- At least one chunk is returned.
-- Search results include the uploaded document id.
-- The top result content mentions `thread pool` or `backend worker`.
+- 上传响应状态为 `SUCCEEDED`。
+- 至少返回一个 chunk。
+- 检索结果包含刚上传的文档 ID。
+- 排名靠前的检索结果内容包含 `thread pool` 或 `backend worker`。
 
-## 4. Optional Database Check
+## 4. 可选数据库检查
 
-You can verify pgvector rows directly:
+可以直接查看 pgvector 表数据：
 
 ```powershell
 docker exec -it agentmind-postgres psql -U agentmind -d agentmind
 ```
 
-Then run:
+执行 SQL：
 
 ```sql
 select workspace_id, document_id, chunk_id, chunk_sequence, left(content, 80)
@@ -110,23 +110,23 @@ order by created_at desc
 limit 5;
 ```
 
-## 5. Cleanup
+## 5. 清理环境
 
-Stop services but keep data:
+停止服务但保留数据：
 
 ```powershell
 docker compose down
 ```
 
-Remove the local database volume:
+删除本地数据库数据卷：
 
 ```powershell
 docker compose down -v
 ```
 
-## Troubleshooting
+## 常见问题
 
-- If backend startup says `spring.datasource.url is required`, confirm the `local` profile is active.
-- If the backend cannot connect to PostgreSQL, check `docker compose ps` and make sure port `5432` is not occupied.
-- If search returns no results, call the chunks endpoint first. If chunks are empty, parsing/chunking did not produce indexable content.
-- If `mvn` uses Java 17, set `JAVA_HOME` to Java 21 in the current terminal before running Maven.
+- 如果后端启动时报 `spring.datasource.url is required`，请确认已经启用 `local` profile。
+- 如果后端无法连接 PostgreSQL，请检查 `docker compose ps`，并确认 `5432` 端口没有被占用。
+- 如果检索没有返回结果，请先调用 chunks 接口；如果 chunks 为空，说明解析或切分阶段没有产生可索引内容。
+- 如果 `mvn` 使用 Java 17，请在当前终端先把 `JAVA_HOME` 设置为 Java 21。

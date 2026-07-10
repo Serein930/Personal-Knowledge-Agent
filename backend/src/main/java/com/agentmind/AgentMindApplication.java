@@ -6,8 +6,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * AgentMind 后端应用入口。
  *
- * <p>当前阶段只启动基础 Web 服务、统一响应和健康检查能力。数据库、AI 模型、
- * 对象存储等外部依赖会在后续阶段按规划逐步接入。</p>
+ * <p>当前阶段已经具备基础 Web 服务、统一响应、文档摄取、向量检索和 RAG mock 问答能力。
+ * 数据库持久化、真实 AI 模型和对象存储等外部依赖会按后续阶段逐步接入。</p>
  */
 @SpringBootApplication
 public class AgentMindApplication {

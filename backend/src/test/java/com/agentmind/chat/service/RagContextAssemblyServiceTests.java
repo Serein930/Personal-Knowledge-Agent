@@ -2,6 +2,7 @@ package com.agentmind.chat.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.agentmind.chat.config.RagAnswerGenerationProperties;
 import com.agentmind.chat.model.dto.RagChatRequest;
 import com.agentmind.chat.model.dto.RagChatResponse;
 import com.agentmind.document.chunk.DocumentChunk;
@@ -16,10 +17,13 @@ class RagContextAssemblyServiceTests {
 
     private final DeterministicEmbeddingClient embeddingClient = new DeterministicEmbeddingClient();
     private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
+    private final RagAnswerGenerationProperties properties = new RagAnswerGenerationProperties();
     private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
     private final RagContextAssemblyService service = new RagContextAssemblyService(
             new KnowledgeSearchService(embeddingClient, vectorStore),
-            new MockAnswerGenerator()
+            new MockAnswerGenerator(),
+            new RagPromptTemplate(properties),
+            new RagRefusalPolicy(properties)
     );
 
     @Test
@@ -41,14 +45,14 @@ class RagContextAssemblyServiceTests {
                 new RagChatRequest(null, "How do thread pools help backend tasks?", 3, null)
         );
 
-        assertThat(response.answer()).contains("Based on the retrieved knowledge");
+        assertThat(response.answer()).contains("根据当前知识库检索结果");
         assertThat(response.answer()).contains("Thread pools reuse backend worker threads");
         assertThat(response.answer()).contains("[1]");
         assertThat(response.citations()).hasSize(1);
         assertThat(response.citations().getFirst().chunkId()).isEqualTo("100-0");
-        assertThat(response.retrievalContext().promptContext()).contains("Question:");
-        assertThat(response.retrievalContext().promptContext()).contains("documentId=100");
-        assertThat(response.retrievalContext().promptContext()).contains("chunkId=100-0");
+        assertThat(response.retrievalContext().promptContext()).contains("用户问题：");
+        assertThat(response.retrievalContext().promptContext()).contains("文档ID=100");
+        assertThat(response.retrievalContext().promptContext()).contains("片段ID=100-0");
         assertThat(response.usage().totalTokens()).isZero();
     }
 
@@ -59,9 +63,9 @@ class RagContextAssemblyServiceTests {
                 new RagChatRequest(null, "What does the knowledge base say about an unknown topic?", 3, null)
         );
 
-        assertThat(response.answer()).contains("does not contain enough retrieved context");
+        assertThat(response.answer()).contains("当前知识库没有检索到");
         assertThat(response.citations()).isEmpty();
-        assertThat(response.retrievalContext().promptContext()).contains("Question:");
+        assertThat(response.retrievalContext().promptContext()).contains("用户问题：");
         assertThat(response.usage().totalTokens()).isZero();
     }
 }

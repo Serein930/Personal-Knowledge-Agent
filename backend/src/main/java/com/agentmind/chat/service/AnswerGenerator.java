@@ -1,10 +1,10 @@
 package com.agentmind.chat.service;
 
 /**
- * Port for generating a final answer from retrieved RAG context.
+ * RAG 回答生成端口。
  *
- * <p>The application service depends on this small interface instead of a concrete model client. This keeps Stage 6
- * testable without API keys and gives the next Spring AI integration a clean adapter boundary.</p>
+ * <p>应用服务只依赖这个接口，不直接依赖具体模型客户端。这样当前阶段可以使用模拟生成器，
+ * 后续也可以平滑替换为真实模型适配器。</p>
  */
 public interface AnswerGenerator {
 

@@ -1,10 +1,10 @@
 package com.agentmind.chat.model.dto;
 
 /**
- * Token usage summary.
+ * 模型令牌用量摘要。
  *
- * <p>Values stay zero in the retrieval-only stage because no model call is made. Later model adapters should fill
- * this structure from provider usage metadata.</p>
+ * <p>模拟生成阶段不会调用真实模型，因此数值保持为零。后续真实模型适配器应根据供应商返回的
+ * 用量元数据填充该结构。</p>
  */
 public record TokenUsageResponse(
         int promptTokens,

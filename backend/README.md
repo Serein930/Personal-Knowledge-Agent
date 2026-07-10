@@ -1,39 +1,45 @@
-# AgentMind Backend
+# AgentMind 后端服务
 
-Personal Knowledge Agent backend service.
+Personal Knowledge Agent 的后端服务，负责文档摄取、网页采集、知识检索和 RAG 问答编排。
 
-## Current Stage
+## 当前阶段
 
-The backend is now in Stage 5 preparation: local embeddings and workspace-scoped mock vector search.
+后端已经进入 Stage 6 前置阶段：在已有向量检索能力上，补充 RAG 回答生成抽象、提示词模板、拒答策略和模型适配配置开关。
 
-Implemented:
+已实现能力：
 
-- Java 21 + Spring Boot 3.x Maven project.
-- Unified API response, page response and global exception handling.
-- Health check endpoint.
-- Document and ingestion task DTO contracts.
-- File upload validation and local object storage adapter.
-- URL safety validation and raw HTML fetch skeleton.
-- Markdown, TXT/code and HTML text extraction.
-- Basic deterministic chunking with Markdown heading awareness.
-- Temporary in-memory chunk preview endpoint for development verification.
-- Deterministic local embedding client for development.
-- In-memory vector store with workspace-scoped semantic search.
-- PostgreSQL + pgvector schema and `VectorStore` adapter skeleton.
+- Java 21 与 Spring Boot 3.x Maven 工程。
+- 统一接口响应、分页响应和全局异常处理。
+- 健康检查接口。
+- 文档与摄取任务 DTO 契约。
+- 文件上传校验与本地对象存储适配。
+- URL 安全校验与原始 HTML 抓取骨架。
+- Markdown、TXT、代码文本和 HTML 文本提取。
+- 带 Markdown 标题感知的基础 chunk 切分策略。
+- 临时内存 chunk 预览接口，便于开发阶段验证。
+- 本地确定性 embedding 客户端，便于无模型密钥验证检索流程。
+- 内存向量库，支持按知识空间隔离的语义检索。
+- PostgreSQL + pgvector 表结构和 `VectorStore` 适配骨架。
+- RAG 问答接口、引用来源返回和检索上下文组装。
+- `AnswerGenerator` 回答生成端口。
+- 默认 `MockAnswerGenerator`，用于基于引用来源生成可重复的模拟回答。
+- RAG 提示词模板、提示词版本号和低置信度拒答策略。
+- Spring AI ChatModel 回答生成适配器骨架，默认不启用。
 
-Not implemented yet:
+暂未实现能力：
 
-- Database persistence.
-- Authentication and authorization.
-- Real MinIO deployment adapter.
-- PDF/Word text extraction.
-- Real Spring AI embedding model integration.
-- Production validation of PostgreSQL + pgvector retrieval quality.
-- Spring AI RAG chat.
+- 数据库持久化。
+- 用户认证和授权。
+- 真实 MinIO 部署适配。
+- PDF 和 Word 文本提取。
+- 真实 Spring AI Embedding 模型接入。
+- 真实 Spring AI ChatModel 模型调用。
+- PostgreSQL + pgvector 检索质量的生产级验证。
+- SSE 或 WebSocket 流式回答。
 
-## Run
+## 启动
 
-Requirements:
+环境要求：
 
 - JDK 21
 - Maven 3.9+
@@ -43,28 +49,28 @@ cd D:\Program\AgentMind\backend
 mvn spring-boot:run
 ```
 
-Health check:
+健康检查：
 
 ```text
 GET http://localhost:8080/api/v1/health
 ```
 
-## Test
+## 测试
 
 ```powershell
 cd D:\Program\AgentMind\backend
 mvn test
 ```
 
-## Ingestion APIs
+## 文档摄取接口
 
-List documents:
+查询文档列表：
 
 ```text
 GET http://localhost:8080/api/v1/workspaces/1/documents?page=1&pageSize=20
 ```
 
-Upload a Markdown/TXT/HTML file:
+上传 Markdown、TXT 或 HTML 文件：
 
 ```powershell
 Invoke-RestMethod `
@@ -73,7 +79,7 @@ Invoke-RestMethod `
   -Form @{ file = Get-Item ".\README.md"; title = "README document"; tags = "docs" }
 ```
 
-Capture a web page:
+采集网页：
 
 ```powershell
 Invoke-RestMethod `
@@ -83,19 +89,19 @@ Invoke-RestMethod `
   -Body '{"url":"https://example.com/article","title":"Example article","tags":["Web","Test"]}'
 ```
 
-Query ingestion task:
+查询摄取任务：
 
 ```text
 GET http://localhost:8080/api/v1/workspaces/1/ingestion-tasks/{taskId}
 ```
 
-Preview generated chunks:
+预览生成的 chunk：
 
 ```text
 GET http://localhost:8080/api/v1/workspaces/1/documents/{documentId}/chunks
 ```
 
-Search indexed chunks in the current workspace:
+检索当前知识空间中的已索引 chunk：
 
 ```powershell
 Invoke-RestMethod `
@@ -105,7 +111,7 @@ Invoke-RestMethod `
   -Body '{"query":"thread pool worker threads","topK":5}'
 ```
 
-Generate a RAG mock answer with retrieval context:
+生成带引用来源的 RAG 模拟回答：
 
 ```powershell
 Invoke-RestMethod `
@@ -115,20 +121,38 @@ Invoke-RestMethod `
   -Body '{"question":"How do thread pools help backend tasks?","topK":5}'
 ```
 
-Current RAG behavior:
+当前 RAG 行为：
 
-- The endpoint retrieves workspace-scoped chunks.
-- It returns citation metadata for each retrieved chunk.
-- It assembles a plain-text `promptContext` that can later be passed to a Spring AI chat model.
-- It uses the current `AnswerGenerator` abstraction to produce `answer`.
-- The default implementation is `MockAnswerGenerator`, which builds a deterministic answer from the top retrieved
-  citations and keeps token usage at zero.
-- No real LLM is called yet; a later Spring AI `ChatModel` adapter can replace the mock without changing the controller
-  response contract.
+- 接口会先检索当前知识空间内的 chunk。
+- 响应会返回每个命中片段的引用来源。
+- 后端会生成纯文本 `promptContext`，供测试、调试和后续真实模型调用使用。
+- 后端会通过 `RagPromptTemplate` 生成模型提示词。
+- 后端会通过 `RagRefusalPolicy` 判断是否因为资料不足或相关性过低而拒答。
+- 默认回答生成器是 `MockAnswerGenerator`，会根据前几个引用片段生成稳定的模拟回答。
+- 当前不会调用真实大模型，因此令牌用量仍为零。
+- 后续可以通过配置切换到 Spring AI ChatModel 适配器。
 
-## PostgreSQL + pgvector Adapter
+RAG 配置：
 
-The default vector store is still memory:
+```yaml
+agentmind:
+  rag:
+    answer-generator: mock
+    prompt-version: rag-chat-v1
+    minimum-citation-score: 0.05
+    max-context-citations: 5
+```
+
+配置说明：
+
+- `answer-generator`：回答生成器类型，默认 `mock`；可切换为 `spring-ai` 以验证适配器骨架。
+- `prompt-version`：提示词版本号，后续用于提示词评估和回溯。
+- `minimum-citation-score`：最低引用相关性阈值，低于该值时触发拒答。
+- `max-context-citations`：最多放入提示词上下文的引用数量。
+
+## PostgreSQL 与 pgvector 适配
+
+默认向量库仍然是内存实现：
 
 ```yaml
 agentmind:
@@ -137,25 +161,29 @@ agentmind:
     embedding-dimensions: 128
 ```
 
-To switch to PostgreSQL + pgvector later:
+后续切换到 PostgreSQL + pgvector：
 
-1. Start the local pgvector database from the repository root:
+1. 在仓库根目录启动本地 pgvector 数据库：
 
 ```powershell
 cd D:\Program\AgentMind
 docker compose up -d agentmind-postgres
 ```
 
-2. The container automatically runs `backend/src/main/resources/db/schema/knowledge_vector_chunks.sql` on first
-   database initialization.
-3. Start the backend with the `local` profile:
+2. 容器首次初始化时会自动执行表结构脚本：
+
+```text
+backend/src/main/resources/db/schema/knowledge_vector_chunks.sql
+```
+
+3. 使用 `local` profile 启动后端：
 
 ```powershell
 cd D:\Program\AgentMind\backend
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-The committed `application-local.yml` uses the local Docker database:
+已提交的 `application-local.yml` 会使用本地 Docker 数据库：
 
 ```yaml
 spring:
@@ -170,33 +198,29 @@ agentmind:
     embedding-dimensions: 128
 ```
 
-The application service still depends on the `VectorStore` interface, so the memory adapter and pgvector adapter can
-be swapped by configuration.
+应用服务仍然依赖 `VectorStore` 接口，因此内存实现和 pgvector 实现可以通过配置平滑切换。
 
-Manual pgvector integration test:
+手动 pgvector 集成测试：
 
-- Start Docker Compose first.
-- Open `PgVectorStoreIntegrationTests`.
-- Temporarily remove or override `@Disabled`.
-- Run that test class from IDEA or Maven.
+- 先启动 Docker Compose。
+- 打开 `PgVectorStoreIntegrationTests`。
+- 临时移除或覆盖 `@Disabled`。
+- 在 IDEA 或 Maven 中运行该测试类。
 
-The test is intentionally disabled by default so normal CI and local unit tests do not require Docker.
+该测试默认禁用，避免日常单元测试依赖 Docker。
 
-End-to-end pgvector retrieval runbook:
+端到端 pgvector 检索联调文档：
 
 ```text
 docs/PGVECTOR_RETRIEVAL_RUNBOOK.md
 ```
 
-The runbook covers Docker startup, `local` profile startup, Markdown upload, chunk preview, `/knowledge/search`, and
-optional direct database inspection.
+注意事项：
 
-Notes:
-
-- Uploaded files and fetched HTML snapshots are stored under `.agentmind-storage`, which is ignored by Git.
-- Markdown, TXT/code and HTML can generate chunks in the current stage.
-- Generated chunks are indexed into the current in-memory vector store.
-- The current embedding implementation is deterministic and dependency-free; it is only for verifying retrieval flow.
-- The pgvector adapter is available behind a configuration switch, but it is not enabled by default.
-- PDF and Word files can still be stored, but parser support is reserved for a later stage.
-- Document, task, chunk and vector data are currently stored in memory and reset when the service restarts.
+- 上传文件和抓取的 HTML 快照会存放在 `.agentmind-storage`，该目录已被 Git 忽略。
+- 当前阶段 Markdown、TXT、代码文本和 HTML 可以生成 chunk。
+- 生成的 chunk 会写入当前配置的向量库。
+- 当前 embedding 实现是本地确定性算法，只用于验证检索链路，不代表生产语义检索质量。
+- pgvector 适配器已经可以通过配置启用，但默认仍不开启。
+- PDF 和 Word 文件当前可以保存原始文件，解析能力留到后续阶段。
+- 文档、任务、chunk 和向量数据当前主要保存在内存中，服务重启后会重置。
