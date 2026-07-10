@@ -105,6 +105,23 @@ Invoke-RestMethod `
   -Body '{"query":"thread pool worker threads","topK":5}'
 ```
 
+Prepare RAG chat context:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/rag/chat" `
+  -ContentType "application/json" `
+  -Body '{"question":"How do thread pools help backend tasks?","topK":5}'
+```
+
+Current RAG behavior:
+
+- The endpoint retrieves workspace-scoped chunks.
+- It returns citation metadata for each retrieved chunk.
+- It assembles a plain-text `promptContext` that can later be passed to a Spring AI chat model.
+- It does not call an LLM yet, so token usage stays zero and `answer` is a deterministic placeholder.
+
 ## PostgreSQL + pgvector Adapter
 
 The default vector store is still memory:

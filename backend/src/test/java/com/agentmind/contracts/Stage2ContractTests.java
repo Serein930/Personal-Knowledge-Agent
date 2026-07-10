@@ -7,16 +7,17 @@ import com.agentmind.agent.audit.model.AgentToolType;
 import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
 import com.agentmind.chat.model.dto.RagChatResponse;
 import com.agentmind.chat.model.dto.RagCitationResponse;
+import com.agentmind.chat.model.dto.RagRetrievalContextResponse;
 import com.agentmind.chat.model.dto.TokenUsageResponse;
 import com.agentmind.document.model.dto.DocumentQueryRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Stage 2 契约层测试。
+ * Contract-level DTO regression tests.
  *
- * <p>该测试不启动 Spring 容器、不连接数据库，只验证当前阶段新增的 DTO 和基础契约
- * 可以稳定创建和读取。它适合作为后续接口实现前的轻量回归测试。</p>
+ * <p>These tests do not start Spring or connect to external systems. They protect DTO construction and field access
+ * while the project evolves from early contracts to concrete API implementations.</p>
  */
 class Stage2ContractTests {
 
@@ -30,19 +31,28 @@ class Stage2ContractTests {
     }
 
     @Test
-    void ragChatResponseShouldCarryCitationsToolsAndUsage() {
+    void ragChatResponseShouldCarryRetrievalContextCitationsToolsAndUsage() {
         RagCitationResponse citation = new RagCitationResponse(
+                1,
                 1L,
-                "Java 并发编程笔记",
-                100L,
-                "线程池通过核心线程数、队列和拒绝策略控制任务执行。",
+                "Java concurrency notes",
+                "100-0",
+                0,
+                "Thread Pool",
+                "Thread pools reuse worker threads and control backend task execution.",
                 0.91
+        );
+        RagRetrievalContextResponse retrievalContext = new RagRetrievalContextResponse(
+                "How do thread pools help backend tasks?",
+                5,
+                "[1] Thread pools reuse worker threads.",
+                List.of(citation)
         );
         AgentToolCallSummaryResponse toolCall = new AgentToolCallSummaryResponse(
                 "searchDocuments",
                 AgentToolType.READ,
                 AgentToolCallStatus.SUCCEEDED,
-                "检索到 5 个相关片段",
+                "Retrieved 5 related chunks",
                 128
         );
         TokenUsageResponse usage = new TokenUsageResponse(1000, 300, 1300);
@@ -50,12 +60,14 @@ class Stage2ContractTests {
         RagChatResponse response = new RagChatResponse(
                 10L,
                 20L,
-                "线程池核心参数可以从执行能力、排队能力和过载保护三个角度理解。",
+                "Thread pools can be understood through execution capacity, queueing and overload protection.",
+                retrievalContext,
                 List.of(citation),
                 List.of(toolCall),
                 usage
         );
 
+        assertThat(response.retrievalContext().promptContext()).contains("Thread pools");
         assertThat(response.citations()).hasSize(1);
         assertThat(response.toolCalls()).hasSize(1);
         assertThat(response.usage().totalTokens()).isEqualTo(1300);

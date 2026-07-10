@@ -1,15 +1,18 @@
 package com.agentmind.chat.model.dto;
 
 /**
- * RAG 引用来源响应 DTO。
+ * Citation returned with a RAG response.
  *
- * <p>每条引用对应一个被检索命中的文档 chunk。前端展示 citation 时应让用户看到
- * 文档标题、原文片段和相似度分数，从而降低“模型胡说”的风险。</p>
+ * <p>Each citation points to one retrieved document chunk. The chunk id is a string because current chunk ids are
+ * stable logical ids such as `10-0`, and pgvector records keep that same value for source tracing.</p>
  */
 public record RagCitationResponse(
+        int index,
         Long documentId,
-        String title,
-        Long chunkId,
+        String documentTitle,
+        String chunkId,
+        int chunkSequence,
+        String headingPath,
         String excerpt,
         double score
 ) {

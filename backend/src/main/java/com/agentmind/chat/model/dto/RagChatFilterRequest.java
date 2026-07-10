@@ -4,10 +4,10 @@ import com.agentmind.document.model.DocumentSourceType;
 import java.util.List;
 
 /**
- * RAG 问答检索过滤条件。
+ * Optional retrieval filters for RAG chat.
  *
- * <p>过滤条件用于限制检索范围，例如只查某些标签或某类文档。
- * workspaceId 不放在该对象里，因为它来自接口路径并且必须由后端鉴权校验。</p>
+ * <p>Filters are part of the API contract now, even though only workspace-scoped vector search is implemented in
+ * this stage. Tags and source types will be applied when document metadata persistence is introduced.</p>
  */
 public record RagChatFilterRequest(
         List<String> tags,

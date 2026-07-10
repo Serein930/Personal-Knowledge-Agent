@@ -4,15 +4,16 @@ import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
 import java.util.List;
 
 /**
- * RAG 问答响应 DTO。
+ * Response contract for RAG chat.
  *
- * <p>该结构同时承载回答正文、引用来源、工具调用摘要和 Token 用量。
- * 后续如果实现 SSE 流式响应，可继续复用 citation、toolCalls 和 usage 的子结构。</p>
+ * <p>Stage 6 preparation returns retrieval context and citations without calling a model. The `answer` field is a
+ * deterministic placeholder so frontend integration can start before Spring AI chat generation is wired in.</p>
  */
 public record RagChatResponse(
         Long conversationId,
         Long messageId,
         String answer,
+        RagRetrievalContextResponse retrievalContext,
         List<RagCitationResponse> citations,
         List<AgentToolCallSummaryResponse> toolCalls,
         TokenUsageResponse usage
