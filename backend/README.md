@@ -118,9 +118,23 @@ agentmind:
 
 To switch to PostgreSQL + pgvector later:
 
-1. Create a PostgreSQL database with pgvector installed.
-2. Run `backend/src/main/resources/db/schema/knowledge_vector_chunks.sql`.
-3. Configure datasource properties locally, for example in an ignored profile file:
+1. Start the local pgvector database from the repository root:
+
+```powershell
+cd D:\Program\AgentMind
+docker compose up -d agentmind-postgres
+```
+
+2. The container automatically runs `backend/src/main/resources/db/schema/knowledge_vector_chunks.sql` on first
+   database initialization.
+3. Start the backend with the `local` profile:
+
+```powershell
+cd D:\Program\AgentMind\backend
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+The committed `application-local.yml` uses the local Docker database:
 
 ```yaml
 spring:
@@ -137,6 +151,15 @@ agentmind:
 
 The application service still depends on the `VectorStore` interface, so the memory adapter and pgvector adapter can
 be swapped by configuration.
+
+Manual pgvector integration test:
+
+- Start Docker Compose first.
+- Open `PgVectorStoreIntegrationTests`.
+- Temporarily remove or override `@Disabled`.
+- Run that test class from IDEA or Maven.
+
+The test is intentionally disabled by default so normal CI and local unit tests do not require Docker.
 
 Notes:
 

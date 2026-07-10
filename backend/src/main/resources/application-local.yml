@@ -1,0 +1,13 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:postgresql://localhost:5432/agentmind
+    username: agentmind
+    password: agentmind_dev_password
+
+agentmind:
+  vector-store:
+    type: pgvector
+    embedding-dimensions: 128
