@@ -161,6 +161,15 @@ Manual pgvector integration test:
 
 The test is intentionally disabled by default so normal CI and local unit tests do not require Docker.
 
+End-to-end pgvector retrieval runbook:
+
+```text
+docs/PGVECTOR_RETRIEVAL_RUNBOOK.md
+```
+
+The runbook covers Docker startup, `local` profile startup, Markdown upload, chunk preview, `/knowledge/search`, and
+optional direct database inspection.
+
 Notes:
 
 - Uploaded files and fetched HTML snapshots are stored under `.agentmind-storage`, which is ignored by Git.
