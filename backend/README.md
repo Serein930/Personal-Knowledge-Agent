@@ -105,7 +105,7 @@ Invoke-RestMethod `
   -Body '{"query":"thread pool worker threads","topK":5}'
 ```
 
-Prepare RAG chat context:
+Generate a RAG mock answer with retrieval context:
 
 ```powershell
 Invoke-RestMethod `
@@ -120,7 +120,11 @@ Current RAG behavior:
 - The endpoint retrieves workspace-scoped chunks.
 - It returns citation metadata for each retrieved chunk.
 - It assembles a plain-text `promptContext` that can later be passed to a Spring AI chat model.
-- It does not call an LLM yet, so token usage stays zero and `answer` is a deterministic placeholder.
+- It uses the current `AnswerGenerator` abstraction to produce `answer`.
+- The default implementation is `MockAnswerGenerator`, which builds a deterministic answer from the top retrieved
+  citations and keeps token usage at zero.
+- No real LLM is called yet; a later Spring AI `ChatModel` adapter can replace the mock without changing the controller
+  response contract.
 
 ## PostgreSQL + pgvector Adapter
 

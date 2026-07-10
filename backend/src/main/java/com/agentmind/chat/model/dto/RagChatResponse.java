@@ -6,8 +6,9 @@ import java.util.List;
 /**
  * Response contract for RAG chat.
  *
- * <p>Stage 6 preparation returns retrieval context and citations without calling a model. The `answer` field is a
- * deterministic placeholder so frontend integration can start before Spring AI chat generation is wired in.</p>
+ * <p>The current answer is produced by a deterministic mock generator. The response shape already carries retrieval
+ * context, citations, tool calls and token usage so a later Spring AI generator can replace the mock without changing
+ * frontend contracts.</p>
  */
 public record RagChatResponse(
         Long conversationId,
