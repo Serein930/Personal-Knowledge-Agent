@@ -139,16 +139,26 @@ agentmind:
   rag:
     answer-generator: mock
     prompt-version: rag-chat-v1
+    model-name: mock-local
     minimum-citation-score: 0.05
     max-context-citations: 5
+    spring-ai-failure-fallback-enabled: true
 ```
 
 配置说明：
 
 - `answer-generator`：回答生成器类型，默认 `mock`；可切换为 `spring-ai` 以验证适配器骨架。
 - `prompt-version`：提示词版本号，后续用于提示词评估和回溯。
+- `model-name`：项目侧记录的模型名称，用于日志、响应元数据和后续观测表。
 - `minimum-citation-score`：最低引用相关性阈值，低于该值时触发拒答。
 - `max-context-citations`：最多放入提示词上下文的引用数量。
+- `spring-ai-failure-fallback-enabled`：真实模型调用失败时是否返回降级回答，默认开启。
+
+真实模型本地联调文档：
+
+```text
+docs/SPRING_AI_RAG_RUNBOOK.md
+```
 
 ## PostgreSQL 与 pgvector 适配
 

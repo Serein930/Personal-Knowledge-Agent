@@ -63,7 +63,22 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
         } catch (RuntimeException exception) {
             long elapsedMillis = elapsedMillis(startNanos);
             modelCallLogger.logFailure(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, exception);
-            throw exception;
+            if (!properties.isSpringAiFailureFallbackEnabled()) {
+                throw exception;
+            }
+            String fallbackAnswer = fallbackAnswer(exception);
+            modelCallLogger.logFallback(
+                    request,
+                    GENERATOR_TYPE,
+                    properties.getModelName(),
+                    elapsedMillis,
+                    exception.getMessage()
+            );
+            return new GeneratedAnswer(
+                    fallbackAnswer,
+                    new TokenUsageResponse(0, 0, 0),
+                    fallbackMetadata(request, elapsedMillis, exception)
+            );
         }
     }
 
@@ -76,6 +91,27 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
                 request.refusalDecision().reason(),
                 elapsedMillis
         );
+    }
+
+    private RagAnswerGenerationMetadataResponse fallbackMetadata(
+            AnswerGenerationRequest request,
+            long elapsedMillis,
+            RuntimeException exception
+    ) {
+        return new RagAnswerGenerationMetadataResponse(
+                request.promptVersion(),
+                GENERATOR_TYPE,
+                properties.getModelName(),
+                true,
+                "真实模型调用失败，已按本地降级策略返回可解释结果：" + exception.getMessage(),
+                elapsedMillis
+        );
+    }
+
+    private String fallbackAnswer(RuntimeException exception) {
+        return "当前已经完成知识库检索，但真实聊天模型调用失败，系统已进入降级模式。"
+                + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。失败原因："
+                + exception.getMessage();
     }
 
     private long elapsedMillis(long startNanos) {

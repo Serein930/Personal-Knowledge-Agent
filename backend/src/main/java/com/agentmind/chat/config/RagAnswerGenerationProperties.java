@@ -18,6 +18,7 @@ public class RagAnswerGenerationProperties {
     private String modelName = "mock-local";
     private double minimumCitationScore = 0.05;
     private int maxContextCitations = 5;
+    private boolean springAiFailureFallbackEnabled = true;
 
     public String getAnswerGenerator() {
         return answerGenerator;
@@ -57,5 +58,13 @@ public class RagAnswerGenerationProperties {
 
     public void setMaxContextCitations(int maxContextCitations) {
         this.maxContextCitations = maxContextCitations;
+    }
+
+    public boolean isSpringAiFailureFallbackEnabled() {
+        return springAiFailureFallbackEnabled;
+    }
+
+    public void setSpringAiFailureFallbackEnabled(boolean springAiFailureFallbackEnabled) {
+        this.springAiFailureFallbackEnabled = springAiFailureFallbackEnabled;
     }
 }

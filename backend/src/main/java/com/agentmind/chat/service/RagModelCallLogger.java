@@ -1,5 +1,7 @@
 package com.agentmind.chat.service;
 
+import com.agentmind.chat.model.RagModelCallObservation;
+import com.agentmind.chat.model.RagModelCallStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -16,13 +18,22 @@ public class RagModelCallLogger {
     private static final Logger LOGGER = LoggerFactory.getLogger(RagModelCallLogger.class);
 
     public void logStart(AnswerGenerationRequest request, String answerGenerator, String modelName) {
-        LOGGER.info(
-                "检索增强生成回答开始：提示词版本={}，回答生成器={}，模型名称={}，引用数量={}，是否拒答={}",
-                request.promptVersion(),
+        RagModelCallObservation observation = observation(
+                request,
                 answerGenerator,
                 modelName,
-                request.citations().size(),
-                request.refusalDecision().shouldRefuse()
+                RagModelCallStatus.STARTED,
+                0,
+                0,
+                ""
+        );
+        LOGGER.info(
+                "检索增强生成回答开始：提示词版本={}，回答生成器={}，模型名称={}，引用数量={}，是否拒答={}",
+                observation.promptVersion(),
+                observation.answerGenerator(),
+                observation.modelName(),
+                observation.citationCount(),
+                observation.refused()
         );
     }
 
@@ -33,13 +44,22 @@ public class RagModelCallLogger {
             long elapsedMillis,
             int answerLength
     ) {
-        LOGGER.info(
-                "检索增强生成回答完成：提示词版本={}，回答生成器={}，模型名称={}，耗时毫秒={}，回答长度={}",
-                request.promptVersion(),
+        RagModelCallObservation observation = observation(
+                request,
                 answerGenerator,
                 modelName,
+                RagModelCallStatus.SUCCEEDED,
                 elapsedMillis,
-                answerLength
+                answerLength,
+                ""
+        );
+        LOGGER.info(
+                "检索增强生成回答完成：提示词版本={}，回答生成器={}，模型名称={}，耗时毫秒={}，回答长度={}",
+                observation.promptVersion(),
+                observation.answerGenerator(),
+                observation.modelName(),
+                observation.elapsedMillis(),
+                observation.answerLength()
         );
     }
 
@@ -50,14 +70,71 @@ public class RagModelCallLogger {
             long elapsedMillis,
             RuntimeException exception
     ) {
+        RagModelCallObservation observation = observation(
+                request,
+                answerGenerator,
+                modelName,
+                RagModelCallStatus.FAILED,
+                elapsedMillis,
+                0,
+                exception.getMessage()
+        );
         LOGGER.warn(
                 "检索增强生成回答失败：提示词版本={}，回答生成器={}，模型名称={}，耗时毫秒={}，失败原因={}",
+                observation.promptVersion(),
+                observation.answerGenerator(),
+                observation.modelName(),
+                observation.elapsedMillis(),
+                observation.failureReason(),
+                exception
+        );
+    }
+
+    public void logFallback(
+            AnswerGenerationRequest request,
+            String answerGenerator,
+            String modelName,
+            long elapsedMillis,
+            String failureReason
+    ) {
+        RagModelCallObservation observation = observation(
+                request,
+                answerGenerator,
+                modelName,
+                RagModelCallStatus.FALLBACK,
+                elapsedMillis,
+                failureReason.length(),
+                failureReason
+        );
+        LOGGER.warn(
+                "检索增强生成回答已降级：提示词版本={}，回答生成器={}，模型名称={}，耗时毫秒={}，降级原因={}",
+                observation.promptVersion(),
+                observation.answerGenerator(),
+                observation.modelName(),
+                observation.elapsedMillis(),
+                observation.failureReason()
+        );
+    }
+
+    private RagModelCallObservation observation(
+            AnswerGenerationRequest request,
+            String answerGenerator,
+            String modelName,
+            RagModelCallStatus status,
+            long elapsedMillis,
+            int answerLength,
+            String failureReason
+    ) {
+        return new RagModelCallObservation(
                 request.promptVersion(),
                 answerGenerator,
                 modelName,
+                request.citations().size(),
+                request.refusalDecision().shouldRefuse(),
+                status,
                 elapsedMillis,
-                exception.getMessage(),
-                exception
+                answerLength,
+                failureReason
         );
     }
 }
