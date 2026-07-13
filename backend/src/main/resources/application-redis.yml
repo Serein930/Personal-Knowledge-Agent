@@ -1,0 +1,20 @@
+spring:
+  config:
+    activate:
+      on-profile: redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      password: ${REDIS_PASSWORD:}
+      connect-timeout: 2s
+      timeout: 2s
+
+agentmind:
+  chat:
+    memory:
+      store: redis
+      key-prefix: agentmind:chat-memory
+      serialization-version: 1
+      ttl: 7d

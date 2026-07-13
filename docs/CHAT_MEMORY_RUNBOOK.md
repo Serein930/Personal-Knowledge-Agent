@@ -13,7 +13,7 @@ agentmind:
       max-context-chars: 6000
 ```
 
-- `store`：当前固定使用 `memory`，服务重启后会话会清空。
+- `store`：默认使用 `memory`，服务重启后会话会清空；可通过 `redis` profile 切换到 Redis。
 - `max-messages`：放入提示词的最近已完成消息数量，不是问答轮次数量。
 - `max-context-chars`：历史消息正文的近似字符预算，不包含角色标签和固定提示词。
 
@@ -67,7 +67,7 @@ curl.exe -N `
   --data-raw $streamBody
 ```
 
-同步接口和 SSE 接口使用同一个记忆仓储和滑动窗口。流式回答会先在内存中组装完整正文，只有生成正常完成后才写入助手消息。
+同步接口和 SSE 接口使用同一个记忆仓储和滑动窗口。流式回答会先组装完整正文，只有生成正常完成后才写入助手消息。
 
 ## 查询会话
 
@@ -116,5 +116,5 @@ GET /api/v1/workspaces/2/chat/conversations/{workspace1ConversationId}/messages
 - 当前尚未接入认证，知识空间归属规则已经落到仓储和服务契约，后续还需要绑定当前登录用户。
 - 当前使用字符数近似控制上下文，真实模型阶段应增加基于 tokenizer 的令牌预算。
 - 当前没有会话重命名、归档和删除接口。
-- 当前内存适配器只保证单进程内编号和状态更新，服务重启后数据会清空。
-- 下一阶段可以新增 Redis 适配器，同时保持 `ChatMemoryRepository` 和上层服务不变。
+- 内存适配器只保证单进程内编号和状态更新，服务重启后数据会清空；需要跨进程保存时使用 Redis 模式。
+- Redis 模式的启动、键结构和手动测试见 `docs/REDIS_CHAT_MEMORY_RUNBOOK.md`。
