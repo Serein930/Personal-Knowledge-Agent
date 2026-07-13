@@ -25,7 +25,7 @@ class RagContextAssemblyServiceTests {
     private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
     private final RagContextAssemblyService service = new RagContextAssemblyService(
             new KnowledgeSearchService(embeddingClient, vectorStore),
-            new MockAnswerGenerator(properties, modelCallLogger),
+            new MockAnswerGenerator(properties, modelCallLogger, new MockAnswerComposer()),
             new RagPromptTemplate(properties),
             new RagRefusalPolicy(properties)
     );

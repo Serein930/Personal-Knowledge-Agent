@@ -39,6 +39,28 @@ public class RagContextAssemblyService {
     }
 
     public RagChatResponse prepareChatContext(Long workspaceId, RagChatRequest request) {
+        PreparedRagChat preparedChat = prepareChat(workspaceId, request);
+        GeneratedAnswer generatedAnswer = answerGenerator.generate(preparedChat.generationRequest());
+
+        return new RagChatResponse(
+                preparedChat.conversationId(),
+                preparedChat.messageId(),
+                generatedAnswer.content(),
+                preparedChat.retrievalContext(),
+                preparedChat.citations(),
+                List.of(),
+                generatedAnswer.metadata(),
+                generatedAnswer.usage()
+        );
+    }
+
+    /**
+     * 准备同步和流式问答共用的检索上下文与回答生成请求。
+     *
+     * <p>该方法只负责准备数据，不触发任何回答生成器，因此流式服务可以先发送元数据和引用事件，
+     * 再把相同的生成请求交给流式生成端口。</p>
+     */
+    public PreparedRagChat prepareChat(Long workspaceId, RagChatRequest request) {
         KnowledgeSearchResponse searchResponse = knowledgeSearchService.search(
                 workspaceId,
                 request.question(),
@@ -55,7 +77,7 @@ public class RagContextAssemblyService {
                 promptContext,
                 citations
         );
-        GeneratedAnswer generatedAnswer = answerGenerator.generate(new AnswerGenerationRequest(
+        AnswerGenerationRequest generationRequest = new AnswerGenerationRequest(
                 workspaceId,
                 request.question(),
                 promptTemplate.promptVersion(),
@@ -63,17 +85,14 @@ public class RagContextAssemblyService {
                 generationPrompt,
                 citations,
                 refusalDecision
-        ));
+        );
 
-        return new RagChatResponse(
+        return new PreparedRagChat(
                 request.conversationId(),
                 messageIdGenerator.incrementAndGet(),
-                generatedAnswer.content(),
                 retrievalContext,
                 citations,
-                List.of(),
-                generatedAnswer.metadata(),
-                generatedAnswer.usage()
+                generationRequest
         );
     }
 

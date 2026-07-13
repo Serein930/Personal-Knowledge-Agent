@@ -13,6 +13,7 @@ public record RagModelCallMetricAggregate(
         long successfulCallCount,
         long fallbackCallCount,
         long failedCallCount,
+        long cancelledCallCount,
         long totalElapsedMillis
 ) {
 }

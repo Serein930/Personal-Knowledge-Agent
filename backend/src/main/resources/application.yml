@@ -37,6 +37,8 @@ agentmind:
     minimum-citation-score: 0.05
     max-context-citations: 5
     spring-ai-failure-fallback-enabled: true
+    stream-timeout-millis: 60000
+    stream-chunk-size: 24
     observation-store: memory
   ingestion:
     max-upload-size-bytes: 20971520

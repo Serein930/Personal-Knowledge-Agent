@@ -19,6 +19,8 @@ public class RagAnswerGenerationProperties {
     private double minimumCitationScore = 0.05;
     private int maxContextCitations = 5;
     private boolean springAiFailureFallbackEnabled = true;
+    private long streamTimeoutMillis = 60_000;
+    private int streamChunkSize = 24;
 
     public String getAnswerGenerator() {
         return answerGenerator;
@@ -66,5 +68,21 @@ public class RagAnswerGenerationProperties {
 
     public void setSpringAiFailureFallbackEnabled(boolean springAiFailureFallbackEnabled) {
         this.springAiFailureFallbackEnabled = springAiFailureFallbackEnabled;
+    }
+
+    public long getStreamTimeoutMillis() {
+        return streamTimeoutMillis;
+    }
+
+    public void setStreamTimeoutMillis(long streamTimeoutMillis) {
+        this.streamTimeoutMillis = streamTimeoutMillis;
+    }
+
+    public int getStreamChunkSize() {
+        return streamChunkSize;
+    }
+
+    public void setStreamChunkSize(int streamChunkSize) {
+        this.streamChunkSize = streamChunkSize;
     }
 }

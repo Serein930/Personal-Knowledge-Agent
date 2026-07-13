@@ -45,6 +45,9 @@ public class RagModelCallMetricService {
         long failedCallCount = aggregates.stream()
                 .mapToLong(RagModelCallMetricAggregate::failedCallCount)
                 .sum();
+        long cancelledCallCount = aggregates.stream()
+                .mapToLong(RagModelCallMetricAggregate::cancelledCallCount)
+                .sum();
         long totalElapsedMillis = aggregates.stream()
                 .mapToLong(RagModelCallMetricAggregate::totalElapsedMillis)
                 .sum();
@@ -55,6 +58,7 @@ public class RagModelCallMetricService {
                 successfulCallCount,
                 fallbackCallCount,
                 failedCallCount,
+                cancelledCallCount,
                 calculateRate(successfulCallCount, totalCallCount),
                 calculateRate(fallbackCallCount, totalCallCount),
                 calculateAverage(totalElapsedMillis, totalCallCount),
@@ -70,6 +74,7 @@ public class RagModelCallMetricService {
                 aggregate.successfulCallCount(),
                 aggregate.fallbackCallCount(),
                 aggregate.failedCallCount(),
+                aggregate.cancelledCallCount(),
                 calculateRate(aggregate.successfulCallCount(), aggregate.totalCallCount()),
                 calculateRate(aggregate.fallbackCallCount(), aggregate.totalCallCount()),
                 calculateAverage(aggregate.totalElapsedMillis(), aggregate.totalCallCount())

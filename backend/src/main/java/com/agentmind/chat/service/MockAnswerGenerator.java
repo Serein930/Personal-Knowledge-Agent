@@ -1,10 +1,8 @@
 package com.agentmind.chat.service;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
-import com.agentmind.chat.model.dto.RagCitationResponse;
 import com.agentmind.chat.model.dto.RagAnswerGenerationMetadataResponse;
 import com.agentmind.chat.model.dto.TokenUsageResponse;
-import java.util.stream.Collectors;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -22,47 +20,26 @@ public class MockAnswerGenerator implements AnswerGenerator {
 
     private final RagAnswerGenerationProperties properties;
     private final RagModelCallLogger modelCallLogger;
+    private final MockAnswerComposer answerComposer;
 
-    public MockAnswerGenerator(RagAnswerGenerationProperties properties, RagModelCallLogger modelCallLogger) {
+    public MockAnswerGenerator(
+            RagAnswerGenerationProperties properties,
+            RagModelCallLogger modelCallLogger,
+            MockAnswerComposer answerComposer
+    ) {
         this.properties = properties;
         this.modelCallLogger = modelCallLogger;
+        this.answerComposer = answerComposer;
     }
 
     @Override
     public GeneratedAnswer generate(AnswerGenerationRequest request) {
         long startNanos = System.nanoTime();
         modelCallLogger.logStart(request, GENERATOR_TYPE, properties.getModelName());
-        if (request.refusalDecision().shouldRefuse()) {
-            long elapsedMillis = elapsedMillis(startNanos);
-            modelCallLogger.logSuccess(
-                    request,
-                    GENERATOR_TYPE,
-                    properties.getModelName(),
-                    elapsedMillis,
-                    request.refusalDecision().reason().length()
-            );
-            return new GeneratedAnswer(
-                    request.refusalDecision().reason(),
-                    new TokenUsageResponse(0, 0, 0),
-                    metadata(request, elapsedMillis)
-            );
-        }
-
-        String citedSummary = request.citations().stream()
-                .limit(3)
-                .map(this::toCitedSentence)
-                .collect(Collectors.joining(" "));
-        String answer = "根据当前知识库检索结果，可以得到以下回答：" + citedSummary
-                + "。以上内容来自模拟生成器，仅用于验证检索增强生成链路；后续可以由真实模型适配器替换。";
+        String answer = answerComposer.compose(request);
         long elapsedMillis = elapsedMillis(startNanos);
         modelCallLogger.logSuccess(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, answer.length());
         return new GeneratedAnswer(answer, new TokenUsageResponse(0, 0, 0), metadata(request, elapsedMillis));
-    }
-
-    private String toCitedSentence(RagCitationResponse citation) {
-        String excerpt = citation.excerpt();
-        String trimmed = excerpt.length() > 180 ? excerpt.substring(0, 180) + "..." : excerpt;
-        return trimmed + " [" + citation.index() + "]";
     }
 
     private RagAnswerGenerationMetadataResponse metadata(AnswerGenerationRequest request, long elapsedMillis) {

@@ -3,15 +3,21 @@ package com.agentmind.chat.controller;
 import com.agentmind.chat.model.dto.RagChatRequest;
 import com.agentmind.chat.model.dto.RagChatResponse;
 import com.agentmind.chat.service.RagContextAssemblyService;
+import com.agentmind.chat.service.RagStreamingChatService;
 import com.agentmind.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.nio.charset.StandardCharsets;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * 检索增强生成问答接口。
@@ -24,10 +30,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/workspaces/{workspaceId}/rag")
 public class RagChatController {
 
-    private final RagContextAssemblyService ragContextAssemblyService;
+    private static final MediaType TEXT_EVENT_STREAM_UTF8 =
+            new MediaType("text", "event-stream", StandardCharsets.UTF_8);
 
-    public RagChatController(RagContextAssemblyService ragContextAssemblyService) {
+    private final RagContextAssemblyService ragContextAssemblyService;
+    private final RagStreamingChatService ragStreamingChatService;
+
+    public RagChatController(
+            RagContextAssemblyService ragContextAssemblyService,
+            RagStreamingChatService ragStreamingChatService
+    ) {
         this.ragContextAssemblyService = ragContextAssemblyService;
+        this.ragStreamingChatService = ragStreamingChatService;
     }
 
     @PostMapping("/chat")
@@ -36,5 +50,22 @@ public class RagChatController {
             @Valid @RequestBody RagChatRequest request
     ) {
         return ApiResponse.success(ragContextAssemblyService.prepareChatContext(workspaceId, request));
+    }
+
+    /**
+     * 以服务器发送事件协议返回检索增强生成回答。
+     *
+     * <p>响应关闭代理缓冲和客户端缓存，避免文本增量被中间层攒成完整响应后才交给前端。</p>
+     */
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> streamChat(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @Valid @RequestBody RagChatRequest request
+    ) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header("X-Accel-Buffering", "no")
+                .contentType(TEXT_EVENT_STREAM_UTF8)
+                .body(ragStreamingChatService.stream(workspaceId, request));
     }
 }

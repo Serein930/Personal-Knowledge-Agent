@@ -93,6 +93,7 @@ public class InMemoryRagModelCallObservationRepository implements RagModelCallOb
         private long successfulCallCount;
         private long fallbackCallCount;
         private long failedCallCount;
+        private long cancelledCallCount;
         private long totalElapsedMillis;
 
         private void add(RagModelCallObservation observation) {
@@ -104,6 +105,8 @@ public class InMemoryRagModelCallObservationRepository implements RagModelCallOb
                 fallbackCallCount++;
             } else if (observation.status() == RagModelCallStatus.FAILED) {
                 failedCallCount++;
+            } else if (observation.status() == RagModelCallStatus.CANCELLED) {
+                cancelledCallCount++;
             }
         }
 
@@ -115,6 +118,7 @@ public class InMemoryRagModelCallObservationRepository implements RagModelCallOb
                     successfulCallCount,
                     fallbackCallCount,
                     failedCallCount,
+                    cancelledCallCount,
                     totalElapsedMillis
             );
         }

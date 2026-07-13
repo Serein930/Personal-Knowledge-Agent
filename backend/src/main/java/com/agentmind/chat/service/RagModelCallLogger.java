@@ -134,6 +134,39 @@ public class RagModelCallLogger {
         repository.save(observation);
     }
 
+    /**
+     * 记录客户端断开或流式会话超时产生的取消终态。
+     *
+     * <p>取消记录只由流式生成器在终止信号首次冒泡时写入，SSE 编排层不会重复保存审计记录。</p>
+     */
+    public void logCancelled(
+            AnswerGenerationRequest request,
+            String answerGenerator,
+            String modelName,
+            long elapsedMillis,
+            String reason
+    ) {
+        RagModelCallObservation observation = observation(
+                request,
+                answerGenerator,
+                modelName,
+                RagModelCallStatus.CANCELLED,
+                request.refusalDecision().shouldRefuse(),
+                elapsedMillis,
+                0,
+                reason
+        );
+        LOGGER.info(
+                "检索增强生成流式回答已取消：提示词版本={}，回答生成器={}，模型名称={}，耗时毫秒={}，取消原因={}",
+                observation.promptVersion(),
+                observation.answerGenerator(),
+                observation.modelName(),
+                observation.elapsedMillis(),
+                observation.failureReason()
+        );
+        repository.save(observation);
+    }
+
     private RagModelCallObservation observation(
             AnswerGenerationRequest request,
             String answerGenerator,

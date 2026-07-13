@@ -15,6 +15,7 @@ public record RagModelCallMetricGroupResponse(
         long successfulCallCount,
         long fallbackCallCount,
         long failedCallCount,
+        long cancelledCallCount,
         BigDecimal successRate,
         BigDecimal fallbackRate,
         BigDecimal averageElapsedMillis

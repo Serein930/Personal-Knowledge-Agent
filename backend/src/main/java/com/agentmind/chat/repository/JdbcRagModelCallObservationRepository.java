@@ -66,6 +66,7 @@ public class JdbcRagModelCallObservationRepository implements RagModelCallObserv
                    sum(case when status = 'SUCCEEDED' then 1 else 0 end) as successful_call_count,
                    sum(case when status = 'FALLBACK' then 1 else 0 end) as fallback_call_count,
                    sum(case when status = 'FAILED' then 1 else 0 end) as failed_call_count,
+                   sum(case when status = 'CANCELLED' then 1 else 0 end) as cancelled_call_count,
                    sum(elapsed_millis) as total_elapsed_millis
             from rag_model_call_observations
             where workspace_id = ?
@@ -163,6 +164,7 @@ public class JdbcRagModelCallObservationRepository implements RagModelCallObserv
                             resultSet.getLong("successful_call_count"),
                             resultSet.getLong("fallback_call_count"),
                             resultSet.getLong("failed_call_count"),
+                            resultSet.getLong("cancelled_call_count"),
                             resultSet.getLong("total_elapsed_millis")
                     ));
                 }
