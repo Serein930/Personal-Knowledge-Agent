@@ -2,6 +2,7 @@ package com.agentmind.chat.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -44,5 +45,19 @@ class RagChatControllerTests {
                 .andExpect(jsonPath("$.data.generationMetadata.answerGenerator", equalTo("mock")))
                 .andExpect(jsonPath("$.data.generationMetadata.refused", equalTo(true)))
                 .andExpect(jsonPath("$.data.usage.totalTokens", equalTo(0)));
+
+        mockMvc.perform(get("/api/v1/workspaces/1/rag/model-calls")
+                        .param("page", "1")
+                        .param("pageSize", "20")
+                        .param("status", "SUCCEEDED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code", equalTo("SUCCESS")))
+                .andExpect(jsonPath("$.data.total", equalTo(1)))
+                .andExpect(jsonPath("$.data.records[0].promptVersion", equalTo("rag-chat-v1")))
+                .andExpect(jsonPath("$.data.records[0].answerGenerator", equalTo("mock")))
+                .andExpect(jsonPath("$.data.records[0].modelName", equalTo("mock-local")))
+                .andExpect(jsonPath("$.data.records[0].citationCount", equalTo(0)))
+                .andExpect(jsonPath("$.data.records[0].refused", equalTo(true)))
+                .andExpect(jsonPath("$.data.records[0].status", equalTo("SUCCEEDED")));
     }
 }

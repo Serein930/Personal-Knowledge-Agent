@@ -17,6 +17,7 @@ agentmind:
     answer-generator: mock
     model-name: mock-local
     spring-ai-failure-fallback-enabled: true
+    observation-store: memory
 ```
 
 默认模式适合：

@@ -56,6 +56,7 @@ public class RagContextAssemblyService {
                 citations
         );
         GeneratedAnswer generatedAnswer = answerGenerator.generate(new AnswerGenerationRequest(
+                workspaceId,
                 request.question(),
                 promptTemplate.promptVersion(),
                 retrievalContext.promptContext(),

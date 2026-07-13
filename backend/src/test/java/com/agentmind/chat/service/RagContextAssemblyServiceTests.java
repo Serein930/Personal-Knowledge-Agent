@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
 import com.agentmind.chat.model.dto.RagChatRequest;
 import com.agentmind.chat.model.dto.RagChatResponse;
+import com.agentmind.chat.repository.InMemoryRagModelCallObservationRepository;
 import com.agentmind.document.chunk.DocumentChunk;
 import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import com.agentmind.knowledge.service.KnowledgeSearchService;
@@ -18,7 +19,9 @@ class RagContextAssemblyServiceTests {
     private final DeterministicEmbeddingClient embeddingClient = new DeterministicEmbeddingClient();
     private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
     private final RagAnswerGenerationProperties properties = new RagAnswerGenerationProperties();
-    private final RagModelCallLogger modelCallLogger = new RagModelCallLogger();
+    private final RagModelCallLogger modelCallLogger = new RagModelCallLogger(
+            new InMemoryRagModelCallObservationRepository()
+    );
     private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
     private final RagContextAssemblyService service = new RagContextAssemblyService(
             new KnowledgeSearchService(embeddingClient, vectorStore),

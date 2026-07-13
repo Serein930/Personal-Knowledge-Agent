@@ -1,0 +1,103 @@
+# 模型调用观测审计联调手册
+
+本文档用于验证 Stage 6 的模型调用观测记录写入、知识空间隔离、状态过滤和分页查询能力。
+
+## 默认内存模式
+
+默认配置使用内存仓库：
+
+```yaml
+agentmind:
+  rag:
+    observation-store: memory
+```
+
+内存模式适合日常开发和自动化测试，服务重启后观测记录会清空。
+
+## 产生观测记录
+
+调用一次检索增强生成问答接口：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/rag/chat" `
+  -ContentType "application/json" `
+  -Body '{"question":"线程池为什么可以复用工作线程？","topK":5}'
+```
+
+每次回答生成完成后会保存一条最终记录：
+
+- `SUCCEEDED`：模型或模拟生成器正常完成。
+- `FAILED`：真实模型调用失败，并且关闭了失败降级。
+- `FALLBACK`：真实模型调用失败，系统返回降级回答。
+
+调用开始状态只写应用日志，不单独落库，保证一次问答只产生一条最终审计记录。
+
+## 查询审计接口
+
+查询知识空间内的模型调用记录：
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/rag/model-calls?page=1&pageSize=20"
+```
+
+按状态过滤：
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/rag/model-calls?page=1&pageSize=20&status=FALLBACK"
+```
+
+响应记录包含：
+
+- 提示词版本。
+- 回答生成器类型。
+- 模型名称。
+- 引用数量。
+- 是否拒答。
+- 调用状态。
+- 调用耗时。
+- 回答长度。
+- 失败原因。
+- 创建时间。
+
+接口不会返回完整提示词、用户问题或检索正文，避免审计查询泄露个人知识内容。
+
+## 切换数据库模式
+
+数据库适配器复用项目本地 PostgreSQL 数据源。先启动数据库：
+
+```powershell
+cd D:\Program\AgentMind
+docker compose up -d agentmind-postgres
+```
+
+新建数据卷时，容器会自动执行：
+
+```text
+backend/src/main/resources/db/schema/rag_model_call_observations.sql
+```
+
+如果数据库容器已经存在旧数据卷，初始化脚本不会再次执行，需要手动运行该脚本。
+
+确认表结构存在后，使用本地配置并切换观测仓库：
+
+```powershell
+cd D:\Program\AgentMind\backend
+mvn spring-boot:run `
+  "-Dspring-boot.run.profiles=local" `
+  "-Dspring-boot.run.arguments=--agentmind.rag.observation-store=jdbc"
+```
+
+数据库模式和内存模式实现同一个仓储端口，控制层与应用服务不需要修改。
+
+## 当前边界
+
+- 当前没有用户认证，接口暂时只校验知识空间编号；后续必须增加知识空间归属校验。
+- 当前令牌用量仍未从真实模型响应中提取。
+- 数据库脚本暂时由容器初始化或开发者手动执行，后续应引入数据库迁移工具。
+- 当前接口服务于开发联调，后续评估面板可以直接消费该分页契约。

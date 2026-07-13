@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
+import com.agentmind.chat.repository.InMemoryRagModelCallObservationRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
@@ -13,7 +14,9 @@ import org.springframework.ai.chat.prompt.Prompt;
 class SpringAiChatModelAnswerGeneratorTests {
 
     private final RagAnswerGenerationProperties properties = new RagAnswerGenerationProperties();
-    private final RagModelCallLogger modelCallLogger = new RagModelCallLogger();
+    private final RagModelCallLogger modelCallLogger = new RagModelCallLogger(
+            new InMemoryRagModelCallObservationRepository()
+    );
 
     @Test
     void generateShouldReturnFallbackAnswerWhenRealModelFailsAndFallbackIsEnabled() {
@@ -50,6 +53,7 @@ class SpringAiChatModelAnswerGeneratorTests {
 
     private AnswerGenerationRequest request() {
         return new AnswerGenerationRequest(
+                1L,
                 "请解释线程池的作用",
                 "rag-chat-v1",
                 "检索上下文",

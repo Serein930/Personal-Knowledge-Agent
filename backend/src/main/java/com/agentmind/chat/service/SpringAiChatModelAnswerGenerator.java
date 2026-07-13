@@ -62,8 +62,8 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
             return new GeneratedAnswer(answer, new TokenUsageResponse(0, 0, 0), metadata(request, elapsedMillis));
         } catch (RuntimeException exception) {
             long elapsedMillis = elapsedMillis(startNanos);
-            modelCallLogger.logFailure(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, exception);
             if (!properties.isSpringAiFailureFallbackEnabled()) {
+                modelCallLogger.logFailure(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, exception);
                 throw exception;
             }
             String fallbackAnswer = fallbackAnswer(exception);
@@ -72,6 +72,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
                     GENERATOR_TYPE,
                     properties.getModelName(),
                     elapsedMillis,
+                    fallbackAnswer.length(),
                     exception.getMessage()
             );
             return new GeneratedAnswer(

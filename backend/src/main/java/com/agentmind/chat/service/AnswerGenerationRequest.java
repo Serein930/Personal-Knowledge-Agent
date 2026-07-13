@@ -10,6 +10,7 @@ import java.util.List;
  * 可以直接把它转换为模型请求，测试环境则继续使用可重复的模拟实现。</p>
  */
 public record AnswerGenerationRequest(
+        Long workspaceId,
         String question,
         String promptVersion,
         String promptContext,
