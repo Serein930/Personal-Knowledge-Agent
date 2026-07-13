@@ -1,6 +1,7 @@
 package com.agentmind.chat.repository;
 
 import com.agentmind.chat.model.RagModelCallObservation;
+import com.agentmind.chat.model.RagModelCallMetricAggregate;
 import com.agentmind.chat.model.RagModelCallStatus;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -56,6 +57,20 @@ public class JdbcRagModelCallObservationRepository implements RagModelCallObserv
 
     private static final String COUNT_BY_STATUS_SQL = """
             select count(*) from rag_model_call_observations where workspace_id = ? and status = ?
+            """;
+
+    private static final String AGGREGATE_METRICS_SQL = """
+            select model_name,
+                   prompt_version,
+                   count(*) as total_call_count,
+                   sum(case when status = 'SUCCEEDED' then 1 else 0 end) as successful_call_count,
+                   sum(case when status = 'FALLBACK' then 1 else 0 end) as fallback_call_count,
+                   sum(case when status = 'FAILED' then 1 else 0 end) as failed_call_count,
+                   sum(elapsed_millis) as total_elapsed_millis
+            from rag_model_call_observations
+            where workspace_id = ?
+            group by model_name, prompt_version
+            order by total_call_count desc, model_name, prompt_version
             """;
 
     private final DataSource dataSource;
@@ -130,6 +145,31 @@ public class JdbcRagModelCallObservationRepository implements RagModelCallObserv
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("统计模型调用观测记录失败", exception);
+        }
+    }
+
+    @Override
+    public List<RagModelCallMetricAggregate> aggregateMetricsByWorkspaceId(Long workspaceId) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = connection.prepareStatement(AGGREGATE_METRICS_SQL)) {
+            statement.setLong(1, workspaceId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<RagModelCallMetricAggregate> aggregates = new ArrayList<>();
+                while (resultSet.next()) {
+                    aggregates.add(new RagModelCallMetricAggregate(
+                            resultSet.getString("model_name"),
+                            resultSet.getString("prompt_version"),
+                            resultSet.getLong("total_call_count"),
+                            resultSet.getLong("successful_call_count"),
+                            resultSet.getLong("fallback_call_count"),
+                            resultSet.getLong("failed_call_count"),
+                            resultSet.getLong("total_elapsed_millis")
+                    ));
+                }
+                return aggregates;
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("聚合模型调用指标失败", exception);
         }
     }
 

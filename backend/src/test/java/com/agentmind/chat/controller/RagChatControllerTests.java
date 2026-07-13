@@ -59,5 +59,18 @@ class RagChatControllerTests {
                 .andExpect(jsonPath("$.data.records[0].citationCount", equalTo(0)))
                 .andExpect(jsonPath("$.data.records[0].refused", equalTo(true)))
                 .andExpect(jsonPath("$.data.records[0].status", equalTo("SUCCEEDED")));
+
+        mockMvc.perform(get("/api/v1/workspaces/1/rag/model-calls/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code", equalTo("SUCCESS")))
+                .andExpect(jsonPath("$.data.workspaceId", equalTo(1)))
+                .andExpect(jsonPath("$.data.totalCallCount", equalTo(1)))
+                .andExpect(jsonPath("$.data.successfulCallCount", equalTo(1)))
+                .andExpect(jsonPath("$.data.fallbackCallCount", equalTo(0)))
+                .andExpect(jsonPath("$.data.successRate", equalTo(1.0)))
+                .andExpect(jsonPath("$.data.fallbackRate", equalTo(0.0)))
+                .andExpect(jsonPath("$.data.groups[0].modelName", equalTo("mock-local")))
+                .andExpect(jsonPath("$.data.groups[0].promptVersion", equalTo("rag-chat-v1")))
+                .andExpect(jsonPath("$.data.groups[0].totalCallCount", equalTo(1)));
     }
 }

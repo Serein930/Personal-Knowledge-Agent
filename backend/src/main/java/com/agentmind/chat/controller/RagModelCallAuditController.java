@@ -2,7 +2,9 @@ package com.agentmind.chat.controller;
 
 import com.agentmind.chat.model.RagModelCallStatus;
 import com.agentmind.chat.model.dto.RagModelCallObservationResponse;
+import com.agentmind.chat.model.dto.RagModelCallMetricsResponse;
 import com.agentmind.chat.service.RagModelCallAuditService;
+import com.agentmind.chat.service.RagModelCallMetricService;
 import com.agentmind.common.response.ApiResponse;
 import com.agentmind.common.response.PageResponse;
 import jakarta.validation.constraints.Max;
@@ -27,9 +29,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class RagModelCallAuditController {
 
     private final RagModelCallAuditService auditService;
+    private final RagModelCallMetricService metricService;
 
-    public RagModelCallAuditController(RagModelCallAuditService auditService) {
+    public RagModelCallAuditController(
+            RagModelCallAuditService auditService,
+            RagModelCallMetricService metricService
+    ) {
         this.auditService = auditService;
+        this.metricService = metricService;
     }
 
     @GetMapping
@@ -42,5 +49,15 @@ public class RagModelCallAuditController {
             @RequestParam(required = false) RagModelCallStatus status
     ) {
         return ApiResponse.success(auditService.listObservations(workspaceId, page, pageSize, status));
+    }
+
+    /**
+     * 查询知识空间总体指标，以及按模型和提示词版本组合生成的分组指标。
+     */
+    @GetMapping("/metrics")
+    public ApiResponse<RagModelCallMetricsResponse> getModelCallMetrics(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId
+    ) {
+        return ApiResponse.success(metricService.getMetrics(workspaceId));
     }
 }

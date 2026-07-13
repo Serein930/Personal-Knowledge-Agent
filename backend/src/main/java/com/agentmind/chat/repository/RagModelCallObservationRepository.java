@@ -1,6 +1,7 @@
 package com.agentmind.chat.repository;
 
 import com.agentmind.chat.model.RagModelCallObservation;
+import com.agentmind.chat.model.RagModelCallMetricAggregate;
 import com.agentmind.chat.model.RagModelCallStatus;
 import java.util.List;
 
@@ -22,4 +23,11 @@ public interface RagModelCallObservationRepository {
     );
 
     long countByWorkspaceId(Long workspaceId, RagModelCallStatus status);
+
+    /**
+     * 按模型名称和提示词版本聚合指定知识空间内的最终调用记录。
+     *
+     * <p>聚合必须在存储适配器内部完成，避免数据库模式下把全部审计明细加载到应用内存。</p>
+     */
+    List<RagModelCallMetricAggregate> aggregateMetricsByWorkspaceId(Long workspaceId);
 }

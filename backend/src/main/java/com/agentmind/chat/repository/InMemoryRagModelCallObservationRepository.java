@@ -1,9 +1,12 @@
 package com.agentmind.chat.repository;
 
 import com.agentmind.chat.model.RagModelCallObservation;
+import com.agentmind.chat.model.RagModelCallMetricAggregate;
 import com.agentmind.chat.model.RagModelCallStatus;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -52,5 +55,68 @@ public class InMemoryRagModelCallObservationRepository implements RagModelCallOb
                 .filter(observation -> observation.workspaceId().equals(workspaceId))
                 .filter(observation -> status == null || observation.status() == status)
                 .count();
+    }
+
+    @Override
+    public List<RagModelCallMetricAggregate> aggregateMetricsByWorkspaceId(Long workspaceId) {
+        Map<MetricGroupKey, MetricAccumulator> accumulators = new HashMap<>();
+        observations.stream()
+                .filter(observation -> observation.workspaceId().equals(workspaceId))
+                .forEach(observation -> accumulators
+                        .computeIfAbsent(
+                                new MetricGroupKey(observation.modelName(), observation.promptVersion()),
+                                ignored -> new MetricAccumulator()
+                        )
+                        .add(observation));
+
+        return accumulators.entrySet().stream()
+                .map(entry -> entry.getValue().toAggregate(entry.getKey()))
+                .sorted(Comparator.comparingLong(RagModelCallMetricAggregate::totalCallCount)
+                        .reversed()
+                        .thenComparing(RagModelCallMetricAggregate::modelName)
+                        .thenComparing(RagModelCallMetricAggregate::promptVersion))
+                .toList();
+    }
+
+    /**
+     * 内存聚合使用的复合分组键，确保相同模型的不同提示词版本分别统计。
+     */
+    private record MetricGroupKey(String modelName, String promptVersion) {
+    }
+
+    /**
+     * 单次遍历累加指标，避免为每个分组重复扫描全部观测记录。
+     */
+    private static final class MetricAccumulator {
+
+        private long totalCallCount;
+        private long successfulCallCount;
+        private long fallbackCallCount;
+        private long failedCallCount;
+        private long totalElapsedMillis;
+
+        private void add(RagModelCallObservation observation) {
+            totalCallCount++;
+            totalElapsedMillis += observation.elapsedMillis();
+            if (observation.status() == RagModelCallStatus.SUCCEEDED) {
+                successfulCallCount++;
+            } else if (observation.status() == RagModelCallStatus.FALLBACK) {
+                fallbackCallCount++;
+            } else if (observation.status() == RagModelCallStatus.FAILED) {
+                failedCallCount++;
+            }
+        }
+
+        private RagModelCallMetricAggregate toAggregate(MetricGroupKey key) {
+            return new RagModelCallMetricAggregate(
+                    key.modelName(),
+                    key.promptVersion(),
+                    totalCallCount,
+                    successfulCallCount,
+                    fallbackCallCount,
+                    failedCallCount,
+                    totalElapsedMillis
+            );
+        }
     }
 }
