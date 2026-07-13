@@ -1,6 +1,7 @@
 package com.agentmind.chat.service;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
+import com.agentmind.chat.memory.service.ChatMemoryService;
 import com.agentmind.chat.model.RagStreamEventType;
 import com.agentmind.chat.model.dto.RagChatRequest;
 import com.agentmind.chat.model.dto.RagCitationResponse;
@@ -37,17 +38,20 @@ public class RagStreamingChatService {
     private final StreamingAnswerGenerator streamingAnswerGenerator;
     private final AsyncTaskExecutor taskExecutor;
     private final RagAnswerGenerationProperties properties;
+    private final ChatMemoryService chatMemoryService;
 
     public RagStreamingChatService(
             RagContextAssemblyService contextAssemblyService,
             StreamingAnswerGenerator streamingAnswerGenerator,
             @Qualifier("ragStreamingTaskExecutor") AsyncTaskExecutor taskExecutor,
-            RagAnswerGenerationProperties properties
+            RagAnswerGenerationProperties properties,
+            ChatMemoryService chatMemoryService
     ) {
         this.contextAssemblyService = contextAssemblyService;
         this.streamingAnswerGenerator = streamingAnswerGenerator;
         this.taskExecutor = taskExecutor;
         this.properties = properties;
+        this.chatMemoryService = chatMemoryService;
     }
 
     public SseEmitter stream(Long workspaceId, RagChatRequest request) {
@@ -75,16 +79,28 @@ public class RagStreamingChatService {
             SseEmitter emitter,
             StreamSessionState sessionState
     ) {
+        AtomicReference<PreparedRagChat> preparedChatReference = new AtomicReference<>();
         try {
             PreparedRagChat preparedChat = contextAssemblyService.prepareChat(workspaceId, request);
+            preparedChatReference.set(preparedChat);
             sendMetadata(emitter, sessionState, preparedChat);
             sendCitations(emitter, sessionState, preparedChat);
 
             AtomicInteger deltaSequence = new AtomicInteger();
+            StringBuilder completeAnswer = new StringBuilder();
             StreamingGeneratedAnswer generatedAnswer = streamingAnswerGenerator.generate(
                     preparedChat.generationRequest(),
-                    delta -> sendDelta(emitter, sessionState, preparedChat.messageId(), deltaSequence, delta),
+                    delta -> {
+                        sendDelta(emitter, sessionState, preparedChat.messageId(), deltaSequence, delta);
+                        completeAnswer.append(delta);
+                    },
                     sessionState::checkActive
+            );
+            chatMemoryService.completeAssistant(
+                    workspaceId,
+                    preparedChat.conversationId(),
+                    preparedChat.messageId(),
+                    completeAnswer.toString()
             );
             sendEvent(
                     emitter,
@@ -102,6 +118,7 @@ public class RagStreamingChatService {
             );
             completeNormally(emitter, sessionState);
         } catch (RagStreamTerminatedException exception) {
+            cancelPreparedAssistant(workspaceId, preparedChatReference.get(), exception.getMessage());
             LOGGER.info(
                     "检索增强生成流式会话提前结束：知识空间编号={}，原因={}",
                     workspaceId,
@@ -109,6 +126,7 @@ public class RagStreamingChatService {
             );
             completeAfterTermination(emitter, sessionState);
         } catch (RuntimeException exception) {
+            failPreparedAssistant(workspaceId, preparedChatReference.get(), exception.getMessage());
             LOGGER.error("检索增强生成流式会话异常结束：知识空间编号={}", workspaceId, exception);
             sendErrorAndComplete(
                     emitter,
@@ -116,6 +134,30 @@ public class RagStreamingChatService {
                     new RagStreamErrorEvent("STREAM_GENERATION_FAILED", "流式回答生成失败，请稍后重试", true)
             );
         }
+    }
+
+    private void cancelPreparedAssistant(Long workspaceId, PreparedRagChat preparedChat, String reason) {
+        if (preparedChat == null) {
+            return;
+        }
+        chatMemoryService.cancelAssistant(
+                workspaceId,
+                preparedChat.conversationId(),
+                preparedChat.messageId(),
+                reason
+        );
+    }
+
+    private void failPreparedAssistant(Long workspaceId, PreparedRagChat preparedChat, String reason) {
+        if (preparedChat == null) {
+            return;
+        }
+        chatMemoryService.failAssistant(
+                workspaceId,
+                preparedChat.conversationId(),
+                preparedChat.messageId(),
+                reason
+        );
     }
 
     private void sendMetadata(SseEmitter emitter, StreamSessionState sessionState, PreparedRagChat preparedChat) {

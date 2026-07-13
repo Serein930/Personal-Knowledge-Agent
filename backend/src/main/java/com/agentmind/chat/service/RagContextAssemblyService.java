@@ -7,8 +7,9 @@ import com.agentmind.chat.model.dto.RagRetrievalContextResponse;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResponse;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse;
 import com.agentmind.knowledge.service.KnowledgeSearchService;
+import com.agentmind.chat.memory.service.ChatMemoryService;
+import com.agentmind.chat.memory.service.ChatTurnContext;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,23 +25,42 @@ public class RagContextAssemblyService {
     private final AnswerGenerator answerGenerator;
     private final RagPromptTemplate promptTemplate;
     private final RagRefusalPolicy refusalPolicy;
-    private final AtomicLong messageIdGenerator = new AtomicLong(10_000);
+    private final ChatMemoryService chatMemoryService;
 
     public RagContextAssemblyService(
             KnowledgeSearchService knowledgeSearchService,
             AnswerGenerator answerGenerator,
             RagPromptTemplate promptTemplate,
-            RagRefusalPolicy refusalPolicy
+            RagRefusalPolicy refusalPolicy,
+            ChatMemoryService chatMemoryService
     ) {
         this.knowledgeSearchService = knowledgeSearchService;
         this.answerGenerator = answerGenerator;
         this.promptTemplate = promptTemplate;
         this.refusalPolicy = refusalPolicy;
+        this.chatMemoryService = chatMemoryService;
     }
 
     public RagChatResponse prepareChatContext(Long workspaceId, RagChatRequest request) {
         PreparedRagChat preparedChat = prepareChat(workspaceId, request);
-        GeneratedAnswer generatedAnswer = answerGenerator.generate(preparedChat.generationRequest());
+        GeneratedAnswer generatedAnswer;
+        try {
+            generatedAnswer = answerGenerator.generate(preparedChat.generationRequest());
+            chatMemoryService.completeAssistant(
+                    workspaceId,
+                    preparedChat.conversationId(),
+                    preparedChat.messageId(),
+                    generatedAnswer.content()
+            );
+        } catch (RuntimeException exception) {
+            chatMemoryService.failAssistant(
+                    workspaceId,
+                    preparedChat.conversationId(),
+                    preparedChat.messageId(),
+                    exception.getMessage()
+            );
+            throw exception;
+        }
 
         return new RagChatResponse(
                 preparedChat.conversationId(),
@@ -61,6 +81,29 @@ public class RagContextAssemblyService {
      * 再把相同的生成请求交给流式生成端口。</p>
      */
     public PreparedRagChat prepareChat(Long workspaceId, RagChatRequest request) {
+        ChatTurnContext turnContext = chatMemoryService.beginTurn(
+                workspaceId,
+                request.conversationId(),
+                request.question()
+        );
+        try {
+            return prepareChat(workspaceId, request, turnContext);
+        } catch (RuntimeException exception) {
+            chatMemoryService.failAssistant(
+                    workspaceId,
+                    turnContext.conversation().id(),
+                    turnContext.assistantMessage().id(),
+                    exception.getMessage()
+            );
+            throw exception;
+        }
+    }
+
+    private PreparedRagChat prepareChat(
+            Long workspaceId,
+            RagChatRequest request,
+            ChatTurnContext turnContext
+    ) {
         KnowledgeSearchResponse searchResponse = knowledgeSearchService.search(
                 workspaceId,
                 request.question(),
@@ -68,7 +111,11 @@ public class RagContextAssemblyService {
         );
         List<RagCitationResponse> citations = toCitations(searchResponse.results());
         RagRefusalDecision refusalDecision = refusalPolicy.decide(citations);
-        String promptContext = promptTemplate.buildPromptContext(request.question(), citations);
+        String promptContext = promptTemplate.buildPromptContext(
+                request.question(),
+                citations,
+                turnContext.history()
+        );
         String generationPrompt = promptTemplate.buildGenerationPrompt(request.question(), promptContext, refusalDecision);
         RagRetrievalContextResponse retrievalContext = new RagRetrievalContextResponse(
                 request.question(),
@@ -88,8 +135,8 @@ public class RagContextAssemblyService {
         );
 
         return new PreparedRagChat(
-                request.conversationId(),
-                messageIdGenerator.incrementAndGet(),
+                turnContext.conversation().id(),
+                turnContext.assistantMessage().id(),
                 retrievalContext,
                 citations,
                 generationRequest

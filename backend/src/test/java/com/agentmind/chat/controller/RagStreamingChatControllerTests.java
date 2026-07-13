@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.agentmind.document.chunk.DocumentChunk;
+import com.agentmind.chat.memory.model.ChatMessageStatus;
+import com.agentmind.chat.memory.repository.ChatMemoryRepository;
 import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,9 @@ class RagStreamingChatControllerTests {
 
     @Autowired
     private KnowledgeIndexingService knowledgeIndexingService;
+
+    @Autowired
+    private ChatMemoryRepository chatMemoryRepository;
 
     @Test
     void streamChatShouldReturnOrderedSseEventsAndOneFinalObservation() throws Exception {
@@ -93,6 +98,41 @@ class RagStreamingChatControllerTests {
                 .andExpect(jsonPath("$.data.records[0].answerGenerator", equalTo("mock-stream")))
                 .andExpect(jsonPath("$.data.records[0].citationCount", equalTo(1)))
                 .andExpect(jsonPath("$.data.records[0].status", equalTo("SUCCEEDED")));
+
+        Long conversationId = chatMemoryRepository
+                .findConversationsByWorkspaceId(WORKSPACE_ID, 0, 10)
+                .getFirst()
+                .id();
+        assertThatStoredStreamMessagesAreComplete(conversationId);
+
+        mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/rag/chat", WORKSPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "conversationId": %d,
+                                  "question": "Please continue with the previous topic.",
+                                  "topK": 3
+                                }
+                                """.formatted(conversationId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                        "$.data.retrievalContext.promptContext",
+                        containsString("用户：How do thread pools help backend tasks?")
+                ));
+    }
+
+    private void assertThatStoredStreamMessagesAreComplete(Long conversationId) {
+        var messages = chatMemoryRepository.findMessagesByWorkspaceIdAndConversationId(
+                WORKSPACE_ID,
+                conversationId,
+                0,
+                10
+        );
+        org.assertj.core.api.Assertions.assertThat(messages).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(messages.get(1).status())
+                .isEqualTo(ChatMessageStatus.COMPLETED);
+        org.assertj.core.api.Assertions.assertThat(messages.get(1).content())
+                .contains("根据当前知识库检索结果");
     }
 
     private void assertEventOrder(

@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.agentmind.chat.service.StreamingAnswerGenerator;
+import com.agentmind.chat.memory.model.ChatMessageStatus;
+import com.agentmind.chat.memory.repository.ChatMemoryRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,6 +33,9 @@ class RagStreamingChatErrorControllerTests {
 
     @MockitoBean
     private StreamingAnswerGenerator streamingAnswerGenerator;
+
+    @Autowired
+    private ChatMemoryRepository chatMemoryRepository;
 
     @Test
     void streamChatShouldConvertGenerationFailureToErrorEvent() throws Exception {
@@ -56,5 +61,20 @@ class RagStreamingChatErrorControllerTests {
                 .andExpect(content().string(containsString("event:error")))
                 .andExpect(content().string(containsString("STREAM_GENERATION_FAILED")))
                 .andExpect(content().string(containsString("流式回答生成失败，请稍后重试")));
+
+        Long conversationId = chatMemoryRepository
+                .findConversationsByWorkspaceId(778L, 0, 10)
+                .getFirst()
+                .id();
+        var messages = chatMemoryRepository.findMessagesByWorkspaceIdAndConversationId(
+                778L,
+                conversationId,
+                0,
+                10
+        );
+        org.assertj.core.api.Assertions.assertThat(messages).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(messages.get(1).status())
+                .isEqualTo(ChatMessageStatus.FAILED);
+        org.assertj.core.api.Assertions.assertThat(messages.get(1).content()).isEmpty();
     }
 }

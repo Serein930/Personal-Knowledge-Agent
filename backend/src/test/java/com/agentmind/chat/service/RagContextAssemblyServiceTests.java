@@ -3,6 +3,9 @@ package com.agentmind.chat.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
+import com.agentmind.chat.memory.config.ChatMemoryProperties;
+import com.agentmind.chat.memory.repository.InMemoryChatMemoryRepository;
+import com.agentmind.chat.memory.service.ChatMemoryService;
 import com.agentmind.chat.model.dto.RagChatRequest;
 import com.agentmind.chat.model.dto.RagChatResponse;
 import com.agentmind.chat.repository.InMemoryRagModelCallObservationRepository;
@@ -23,11 +26,16 @@ class RagContextAssemblyServiceTests {
             new InMemoryRagModelCallObservationRepository()
     );
     private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
+    private final ChatMemoryService chatMemoryService = new ChatMemoryService(
+            new InMemoryChatMemoryRepository(),
+            new ChatMemoryProperties()
+    );
     private final RagContextAssemblyService service = new RagContextAssemblyService(
             new KnowledgeSearchService(embeddingClient, vectorStore),
             new MockAnswerGenerator(properties, modelCallLogger, new MockAnswerComposer()),
             new RagPromptTemplate(properties),
-            new RagRefusalPolicy(properties)
+            new RagRefusalPolicy(properties),
+            chatMemoryService
     );
 
     @Test
@@ -62,6 +70,7 @@ class RagContextAssemblyServiceTests {
         assertThat(response.generationMetadata().promptVersion()).isEqualTo("rag-chat-v1");
         assertThat(response.generationMetadata().refused()).isFalse();
         assertThat(response.usage().totalTokens()).isZero();
+        assertThat(response.conversationId()).isNotNull();
     }
 
     @Test
@@ -77,5 +86,23 @@ class RagContextAssemblyServiceTests {
         assertThat(response.generationMetadata().refused()).isTrue();
         assertThat(response.generationMetadata().refusalReason()).contains("当前知识库没有检索到");
         assertThat(response.usage().totalTokens()).isZero();
+    }
+
+    @Test
+    void prepareChatContextShouldReuseCompletedHistoryFromSameConversation() {
+        RagChatResponse firstResponse = service.prepareChatContext(
+                1L,
+                new RagChatRequest(null, "第一轮问题", 3, null)
+        );
+
+        RagChatResponse secondResponse = service.prepareChatContext(
+                1L,
+                new RagChatRequest(firstResponse.conversationId(), "第二轮问题", 3, null)
+        );
+
+        assertThat(secondResponse.conversationId()).isEqualTo(firstResponse.conversationId());
+        assertThat(secondResponse.retrievalContext().promptContext()).contains("短期会话上下文");
+        assertThat(secondResponse.retrievalContext().promptContext()).contains("用户：第一轮问题");
+        assertThat(secondResponse.retrievalContext().promptContext()).contains("助手：当前知识库没有检索到");
     }
 }

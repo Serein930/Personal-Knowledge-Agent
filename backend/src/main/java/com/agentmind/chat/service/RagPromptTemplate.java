@@ -1,6 +1,8 @@
 package com.agentmind.chat.service;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
+import com.agentmind.chat.memory.model.ChatMessageRole;
+import com.agentmind.chat.memory.service.ChatMemoryEntry;
 import com.agentmind.chat.model.dto.RagCitationResponse;
 import java.util.List;
 import java.util.Locale;
@@ -25,16 +27,33 @@ public class RagPromptTemplate {
         return properties.getPromptVersion();
     }
 
-    public String buildPromptContext(String question, List<RagCitationResponse> citations) {
+    public String buildPromptContext(
+            String question,
+            List<RagCitationResponse> citations,
+            List<ChatMemoryEntry> conversationHistory
+    ) {
         StringBuilder builder = new StringBuilder();
         builder.append("请只根据下面检索到的个人知识片段回答问题。\n");
         builder.append("如果资料不足或相关性不够，请明确说明当前知识库没有足够依据。\n\n");
+        appendConversationHistory(builder, conversationHistory);
         builder.append("用户问题：\n").append(question).append("\n\n");
         builder.append("检索上下文：\n");
         citations.stream()
                 .limit(properties.getMaxContextCitations())
                 .forEach(citation -> appendCitation(builder, citation));
         return builder.toString().trim();
+    }
+
+    private void appendConversationHistory(StringBuilder builder, List<ChatMemoryEntry> conversationHistory) {
+        if (conversationHistory.isEmpty()) {
+            return;
+        }
+        builder.append("短期会话上下文（仅用于理解当前问题，不作为知识事实来源）：\n");
+        conversationHistory.forEach(entry -> builder
+                .append(entry.role() == ChatMessageRole.USER ? "用户：" : "助手：")
+                .append(entry.content())
+                .append("\n"));
+        builder.append("\n");
     }
 
     public String buildGenerationPrompt(String question, String promptContext, RagRefusalDecision refusalDecision) {

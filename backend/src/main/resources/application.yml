@@ -40,6 +40,11 @@ agentmind:
     stream-timeout-millis: 60000
     stream-chunk-size: 24
     observation-store: memory
+  chat:
+    memory:
+      store: memory
+      max-messages: 12
+      max-context-chars: 6000
   ingestion:
     max-upload-size-bytes: 20971520
     web-fetch-timeout-seconds: 8
