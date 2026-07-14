@@ -376,7 +376,10 @@ GET /api/v1/workspaces/{workspaceId}/agent/tool-calls?page=1&pageSize=20
 
 ## 写工具确认接口
 
-写工具不能通过普通工具调用接口直接执行。当前首个写工具为 `note.create`，参数为 `title` 和 `content`。
+写工具不能通过普通工具调用接口直接执行。当前写工具包括：
+
+- `note.create`：参数为 `title` 和 `content`。
+- `flashcard.create`：参数为 `question`、`answer` 和可选 `explanation`。
 
 创建确认单：
 
@@ -406,6 +409,7 @@ POST /api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{confirmati
 ```text
 GET /api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{confirmationId}
 GET /api/v1/workspaces/{workspaceId}/notes?page=1&pageSize=20
+GET /api/v1/workspaces/{workspaceId}/flashcards?page=1&pageSize=20
 ```
 
 安全规则：
@@ -416,6 +420,21 @@ GET /api/v1/workspaces/{workspaceId}/notes?page=1&pageSize=20
 - 相同工具、用户、知识空间和 `requestId` 的相同参数复用既有成功写入。
 - 相同 `requestId` 对应不同参数时返回 `RESOURCE_CONFLICT`，不得错误复用旧结果。
 - 写工具成功执行后仍生成标准工具审计记录；确认单响应不暴露完整参数和令牌摘要。
+
+流式回答可以在正文结束后发送写工具建议：
+
+```text
+event: tool_confirmation_required
+data: {"sequence":1,"proposal":{"confirmation":{"status":"PENDING_CONFIRMATION"},"confirmationToken":"..."}}
+```
+
+该事件只代表模型建议写入并创建了确认单。前端必须展示确认信息，只有用户调用确认接口后才会执行写工具。
+
+持久化配置：
+
+- `agentmind.agent.persistence.store=memory`：默认本地和自动测试模式。
+- `agentmind.agent.persistence.store=jdbc`：启用 PostgreSQL 确认单、工具审计、笔记和复习卡片仓储。
+- JDBC 模式使用数据库事务、条件状态更新和业务表唯一幂等索引。
 
 ## 后续实现顺序
 

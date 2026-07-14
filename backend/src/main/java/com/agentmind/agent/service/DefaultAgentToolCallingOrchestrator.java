@@ -107,7 +107,7 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
             audit.setToolType(tool.definition().type());
             verifyExecutionChannel(tool, confirmedWrite);
             tool.validateArguments(request.arguments());
-            AgentToolExecutionResult result = tool.execute(context, request.arguments());
+            AgentToolExecutionResult result = tool.execute(context.withRequestId(requestId), request.arguments());
             audit.setStatus(AgentToolCallStatus.SUCCEEDED);
             audit.setResponseSummary(result.resultSummary());
             audit.setLatencyMs(elapsedMillis(startedAtNanos));

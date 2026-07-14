@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -13,17 +14,33 @@ import org.springframework.stereotype.Repository;
  * <p>该适配器只用于 Stage 7 本地联调。正式数据库表落地后，需要保留用户和知识空间联合过滤条件。</p>
  */
 @Repository
+@ConditionalOnProperty(
+        prefix = "agentmind.agent.persistence",
+        name = "store",
+        havingValue = "memory",
+        matchIfMissing = true
+)
 public class InMemoryKnowledgeNoteRepository implements KnowledgeNoteRepository {
 
     private final AtomicLong idGenerator = new AtomicLong(1);
     private final ConcurrentHashMap<Long, KnowledgeNote> notes = new ConcurrentHashMap<>();
 
     @Override
-    public KnowledgeNote save(KnowledgeNote note) {
+    public synchronized KnowledgeNote save(KnowledgeNote note) {
+        KnowledgeNote existing = notes.values().stream()
+                .filter(candidate -> candidate.ownerUserId().equals(note.ownerUserId()))
+                .filter(candidate -> candidate.workspaceId().equals(note.workspaceId()))
+                .filter(candidate -> candidate.requestId().equals(note.requestId()))
+                .findFirst()
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
         KnowledgeNote stored = note.id() == null
                 ? new KnowledgeNote(
                         idGenerator.getAndIncrement(), note.ownerUserId(), note.workspaceId(),
-                        note.sourceConversationId(), note.title(), note.content(), note.createdAt(), note.updatedAt()
+                        note.sourceConversationId(), note.requestId(), note.title(), note.content(),
+                        note.createdAt(), note.updatedAt()
                 )
                 : note;
         notes.put(stored.id(), stored);

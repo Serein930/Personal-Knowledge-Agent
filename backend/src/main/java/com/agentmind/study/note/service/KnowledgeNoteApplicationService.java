@@ -39,6 +39,7 @@ public class KnowledgeNoteApplicationService {
                 context.ownerUserId(),
                 context.workspaceId(),
                 context.conversationId(),
+                context.requestId(),
                 title,
                 content,
                 now,
@@ -68,7 +69,8 @@ public class KnowledgeNoteApplicationService {
 
     private KnowledgeNoteResponse toResponse(KnowledgeNote note) {
         return new KnowledgeNoteResponse(
-                note.id(), note.workspaceId(), note.sourceConversationId(), note.title(), note.content(),
+                note.id(), note.workspaceId(), note.sourceConversationId(), note.requestId(),
+                note.title(), note.content(),
                 note.createdAt(), note.updatedAt()
         );
     }

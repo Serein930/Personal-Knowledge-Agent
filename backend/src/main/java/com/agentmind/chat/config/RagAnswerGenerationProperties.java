@@ -23,6 +23,7 @@ public class RagAnswerGenerationProperties {
     private int streamChunkSize = 24;
     private boolean toolCallingEnabled = true;
     private int maxToolRoundTrips = 4;
+    private boolean writeToolProposalsEnabled = true;
 
     public String getAnswerGenerator() {
         return answerGenerator;
@@ -102,5 +103,13 @@ public class RagAnswerGenerationProperties {
 
     public void setMaxToolRoundTrips(int maxToolRoundTrips) {
         this.maxToolRoundTrips = maxToolRoundTrips;
+    }
+
+    public boolean isWriteToolProposalsEnabled() {
+        return writeToolProposalsEnabled;
+    }
+
+    public void setWriteToolProposalsEnabled(boolean writeToolProposalsEnabled) {
+        this.writeToolProposalsEnabled = writeToolProposalsEnabled;
     }
 }

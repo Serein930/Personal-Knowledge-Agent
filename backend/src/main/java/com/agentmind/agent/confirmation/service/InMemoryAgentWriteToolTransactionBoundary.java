@@ -2,6 +2,7 @@ package com.agentmind.agent.confirmation.service;
 
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,6 +12,12 @@ import org.springframework.stereotype.Component;
  * 接入持久化后应替换为真正的数据库事务，实现异常时整体回滚。</p>
  */
 @Component
+@ConditionalOnProperty(
+        prefix = "agentmind.agent.persistence",
+        name = "store",
+        havingValue = "memory",
+        matchIfMissing = true
+)
 public class InMemoryAgentWriteToolTransactionBoundary implements AgentWriteToolTransactionBoundary {
 
     private final ReentrantLock lock = new ReentrantLock(true);

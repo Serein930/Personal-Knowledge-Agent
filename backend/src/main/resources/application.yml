@@ -29,7 +29,11 @@ logging:
     com.agentmind: INFO
 
 agentmind:
+  web:
+    allowed-origin: ${AGENTMIND_ALLOWED_ORIGIN:http://localhost:5173}
   agent:
+    persistence:
+      store: memory
     write-confirmation:
       ttl: 5m
   storage:
@@ -48,6 +52,7 @@ agentmind:
     stream-chunk-size: 24
     tool-calling-enabled: true
     max-tool-round-trips: 4
+    write-tool-proposals-enabled: true
     observation-store: memory
   chat:
     memory:

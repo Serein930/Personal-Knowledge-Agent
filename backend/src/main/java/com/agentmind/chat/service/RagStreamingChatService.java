@@ -1,6 +1,9 @@
 package com.agentmind.chat.service;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
+import com.agentmind.agent.confirmation.model.dto.CreatedAgentToolConfirmationResponse;
+import com.agentmind.agent.proposal.WriteToolProposalService;
+import com.agentmind.agent.tool.model.AgentToolExecutionContext;
 import com.agentmind.chat.memory.service.ChatMemoryService;
 import com.agentmind.chat.model.RagStreamEventType;
 import com.agentmind.chat.model.dto.RagChatRequest;
@@ -11,6 +14,7 @@ import com.agentmind.chat.model.dto.RagStreamDeltaEvent;
 import com.agentmind.chat.model.dto.RagStreamErrorEvent;
 import com.agentmind.chat.model.dto.RagStreamMetadataEvent;
 import com.agentmind.chat.model.dto.RagStreamToolCallEvent;
+import com.agentmind.chat.model.dto.RagStreamToolConfirmationRequiredEvent;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,29 +44,32 @@ public class RagStreamingChatService {
     private final AsyncTaskExecutor taskExecutor;
     private final RagAnswerGenerationProperties properties;
     private final ChatMemoryService chatMemoryService;
+    private final WriteToolProposalService writeToolProposalService;
 
     public RagStreamingChatService(
             RagContextAssemblyService contextAssemblyService,
             StreamingAnswerGenerator streamingAnswerGenerator,
             @Qualifier("ragStreamingTaskExecutor") AsyncTaskExecutor taskExecutor,
             RagAnswerGenerationProperties properties,
-            ChatMemoryService chatMemoryService
+            ChatMemoryService chatMemoryService,
+            WriteToolProposalService writeToolProposalService
     ) {
         this.contextAssemblyService = contextAssemblyService;
         this.streamingAnswerGenerator = streamingAnswerGenerator;
         this.taskExecutor = taskExecutor;
         this.properties = properties;
         this.chatMemoryService = chatMemoryService;
+        this.writeToolProposalService = writeToolProposalService;
     }
 
-    public SseEmitter stream(Long workspaceId, RagChatRequest request) {
+    public SseEmitter stream(Long ownerUserId, Long workspaceId, RagChatRequest request) {
         long timeoutMillis = Math.max(1, properties.getStreamTimeoutMillis());
         SseEmitter emitter = new SseEmitter(timeoutMillis);
         StreamSessionState sessionState = new StreamSessionState();
         registerLifecycleCallbacks(emitter, sessionState);
 
         try {
-            taskExecutor.execute(() -> executeStream(workspaceId, request, emitter, sessionState));
+            taskExecutor.execute(() -> executeStream(ownerUserId, workspaceId, request, emitter, sessionState));
         } catch (TaskRejectedException exception) {
             LOGGER.warn("检索增强生成流式任务被执行器拒绝：知识空间编号={}", workspaceId, exception);
             sendErrorAndComplete(
@@ -75,6 +82,7 @@ public class RagStreamingChatService {
     }
 
     private void executeStream(
+            Long ownerUserId,
             Long workspaceId,
             RagChatRequest request,
             SseEmitter emitter,
@@ -104,6 +112,15 @@ public class RagStreamingChatService {
                     completeAnswer.toString()
             );
             sendToolCalls(emitter, sessionState, preparedChat.messageId(), generatedAnswer);
+            sendWriteToolProposals(
+                    emitter,
+                    sessionState,
+                    new AgentToolExecutionContext(
+                            ownerUserId, workspaceId, preparedChat.conversationId(), preparedChat.messageId()
+                    ),
+                    request.question(),
+                    completeAnswer.toString()
+            );
             sendEvent(
                     emitter,
                     sessionState,
@@ -209,6 +226,38 @@ public class RagStreamingChatService {
                     eventId(messageId, "tool-call-" + sequence),
                     RagStreamEventType.TOOL_CALL,
                     new RagStreamToolCallEvent(sequence, generatedAnswer.toolCalls().get(index))
+            );
+        }
+    }
+
+    private void sendWriteToolProposals(
+            SseEmitter emitter,
+            StreamSessionState sessionState,
+            AgentToolExecutionContext context,
+            String userQuestion,
+            String generatedAnswer
+    ) {
+        try {
+            java.util.List<CreatedAgentToolConfirmationResponse> proposals = writeToolProposalService.propose(
+                    context, userQuestion, generatedAnswer
+            );
+            for (int index = 0; index < proposals.size(); index++) {
+                int sequence = index + 1;
+                sendEvent(
+                        emitter,
+                        sessionState,
+                        eventId(context.messageId(), "tool-confirmation-" + sequence),
+                        RagStreamEventType.TOOL_CONFIRMATION_REQUIRED,
+                        new RagStreamToolConfirmationRequiredEvent(sequence, proposals.get(index))
+                );
+            }
+        } catch (RuntimeException exception) {
+            // 写工具建议是回答后的附加能力，失败时记录原因但不把已经完成的回答标记为失败。
+            LOGGER.warn(
+                    "生成写工具确认建议失败：知识空间编号={}，消息编号={}",
+                    context.workspaceId(),
+                    context.messageId(),
+                    exception
             );
         }
     }

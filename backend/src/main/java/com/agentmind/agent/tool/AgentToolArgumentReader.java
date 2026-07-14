@@ -44,6 +44,22 @@ public final class AgentToolArgumentReader {
         return field.asLong();
     }
 
+    public static String optionalText(JsonNode arguments, String fieldName, int maxLength) {
+        requireObject(arguments);
+        JsonNode field = arguments.get(fieldName);
+        if (field == null || field.isNull()) {
+            return "";
+        }
+        if (!field.isTextual()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + "必须为字符串");
+        }
+        String value = field.asText().trim();
+        if (value.length() > maxLength) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + "长度不能超过" + maxLength);
+        }
+        return value;
+    }
+
     public static int optionalInteger(JsonNode arguments, String fieldName, int defaultValue, int min, int max) {
         requireObject(arguments);
         JsonNode field = arguments.get(fieldName);

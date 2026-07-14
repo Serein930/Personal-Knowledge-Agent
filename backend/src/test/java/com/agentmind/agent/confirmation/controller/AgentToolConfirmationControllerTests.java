@@ -212,6 +212,48 @@ class AgentToolConfirmationControllerTests {
                 .andExpect(jsonPath("$.code", equalTo("RESOURCE_NOT_FOUND")));
     }
 
+    @Test
+    void flashcardToolShouldReuseConfirmationSecurityAndPersistCard() throws Exception {
+        long workspaceId = 9_106L;
+        String requestId = "flashcard-" + UUID.randomUUID();
+        MvcResult created = mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations",
+                            workspaceId
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolName":"flashcard.create",
+                                  "requestId":"%s",
+                                  "arguments":{
+                                    "question":"线程池为什么需要阻塞队列？",
+                                    "answer":"用于缓冲暂时无法执行的任务并平滑流量峰值。",
+                                    "explanation":"队列容量还会影响扩容与拒绝策略触发时机。"
+                                  }
+                                }
+                                """.formatted(requestId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.confirmation.status", equalTo("PENDING_CONFIRMATION")))
+                .andReturn();
+        JsonNode data = objectMapper.readTree(created.getResponse().getContentAsString()).path("data");
+        ConfirmationFixture fixture = new ConfirmationFixture(
+                data.path("confirmation").path("id").asLong(),
+                data.path("confirmationToken").asText()
+        );
+
+        confirm(workspaceId, fixture)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.confirmation.status", equalTo("SUCCEEDED")))
+                .andExpect(jsonPath("$.data.confirmation.execution.result.question",
+                        equalTo("线程池为什么需要阻塞队列？")));
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/flashcards", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total", equalTo(1)))
+                .andExpect(jsonPath("$.data.records[0].answer",
+                        equalTo("用于缓冲暂时无法执行的任务并平滑流量峰值。")));
+    }
+
     private ConfirmationFixture createConfirmation(
             long workspaceId,
             String requestId,

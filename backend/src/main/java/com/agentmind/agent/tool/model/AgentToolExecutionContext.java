@@ -10,13 +10,32 @@ public record AgentToolExecutionContext(
         Long ownerUserId,
         Long workspaceId,
         Long conversationId,
-        Long messageId
+        Long messageId,
+        String requestId
 ) {
 
     /**
      * 兼容显式工具调用接口原有的三字段上下文。
      */
     public AgentToolExecutionContext(Long ownerUserId, Long workspaceId, Long conversationId) {
-        this(ownerUserId, workspaceId, conversationId, null);
+        this(ownerUserId, workspaceId, conversationId, null, null);
+    }
+
+    public AgentToolExecutionContext(
+            Long ownerUserId,
+            Long workspaceId,
+            Long conversationId,
+            Long messageId
+    ) {
+        this(ownerUserId, workspaceId, conversationId, messageId, null);
+    }
+
+    /**
+     * 在进入具体业务工具前附加由编排器规范化的幂等请求编号。
+     */
+    public AgentToolExecutionContext withRequestId(String normalizedRequestId) {
+        return new AgentToolExecutionContext(
+                ownerUserId, workspaceId, conversationId, messageId, normalizedRequestId
+        );
     }
 }

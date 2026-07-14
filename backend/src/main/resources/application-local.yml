@@ -8,6 +8,9 @@ spring:
     password: agentmind_dev_password
 
 agentmind:
+  agent:
+    persistence:
+      store: jdbc
   vector-store:
     type: pgvector
     embedding-dimensions: 128

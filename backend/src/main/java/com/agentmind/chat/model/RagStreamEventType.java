@@ -11,6 +11,7 @@ public enum RagStreamEventType {
     DELTA("delta"),
     CITATION("citation"),
     TOOL_CALL("tool_call"),
+    TOOL_CONFIRMATION_REQUIRED("tool_confirmation_required"),
     COMPLETE("complete"),
     ERROR("error");
 

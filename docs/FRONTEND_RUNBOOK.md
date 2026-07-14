@@ -55,23 +55,18 @@ http://localhost:5173
 
 ## 本阶段说明
 
-当前阶段仍不接入真实后端 API，不调用真实模型，不进行真实文件上传。前端只完成联调前的页面结构、配置展示和运行验证准备。
+采集中心、知识库和 Agent 问答已经接入真实后端。默认知识空间编号为 `1`，可通过 `VITE_WORKSPACE_ID` 修改；后端地址默认是 `http://localhost:8080/api`。
+
+```powershell
+$env:VITE_API_BASE_URL = "http://localhost:8080/api"
+$env:VITE_WORKSPACE_ID = "1"
+npm run dev
+```
+
+问答页面通过 `fetch` 解析 POST SSE，支持 `delta`、`citation`、`tool_call`、`tool_confirmation_required` 和 `complete` 事件。确认令牌只保存在当前页面内存中，不写入浏览器持久化存储。
 
 ## 当前环境验证记录
 
-本阶段已确认：
-
-- GitHub 远程 `main` 已包含上一阶段提交 `e332c75`。
-- 当前环境 Node.js 版本为 `v24.14.1`。
-- 当前环境 npm 版本为 `11.11.0`。
-- `npm install` 在受限环境中超时，且联网安装授权未返回结果。
-- 因依赖未安装，`npm run build` 停在 `tsc` 命令不存在，尚未进入真实 TypeScript 编译。
-
-因此，下一次具备联网安装权限时，应先执行：
-
-```powershell
-cd D:\Program\AgentMind\ui
-npm install
-npm run build
-npm run dev
-```
+- 前端依赖已经安装。
+- TypeScript 编译与 Vite 生产构建已通过。
+- 后端默认只允许 `http://localhost:5173` 跨域访问，可通过 `AGENTMIND_ALLOWED_ORIGIN` 调整。

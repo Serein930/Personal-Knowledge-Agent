@@ -9,7 +9,7 @@ import java.util.logging.Logger;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
@@ -21,7 +21,8 @@ import org.springframework.util.StringUtils;
  * 这样既能保持内存模式启动轻量，也给后续关系数据库接入留下明确切换点。</p>
  */
 @Configuration
-@ConditionalOnProperty(prefix = "agentmind.vector-store", name = "type", havingValue = "pgvector")
+@ConditionalOnExpression("'${agentmind.vector-store.type:memory}' == 'pgvector' "
+        + "or '${agentmind.agent.persistence.store:memory}' == 'jdbc'")
 public class PgVectorDataSourceConfig {
 
     @Bean
@@ -32,7 +33,7 @@ public class PgVectorDataSourceConfig {
             @Value("${spring.datasource.password:}") String password
     ) {
         if (!StringUtils.hasText(url)) {
-            throw new IllegalStateException("启用 pgvector 向量库时必须配置 spring.datasource.url");
+            throw new IllegalStateException("启用数据库向量库或智能体 JDBC 持久化时必须配置 spring.datasource.url");
         }
         return new DriverManagerBackedDataSource(url, username, password);
     }

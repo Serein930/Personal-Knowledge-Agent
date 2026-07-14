@@ -12,6 +12,7 @@ public record KnowledgeNote(
         Long ownerUserId,
         Long workspaceId,
         Long sourceConversationId,
+        String requestId,
         String title,
         String content,
         OffsetDateTime createdAt,

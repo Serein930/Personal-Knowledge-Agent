@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -34,7 +35,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 流式问答工具调用事件协议测试。
  */
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @Import(RagStreamingToolCallControllerTests.ToolCallStreamingConfiguration.class)
 class RagStreamingToolCallControllerTests {
 

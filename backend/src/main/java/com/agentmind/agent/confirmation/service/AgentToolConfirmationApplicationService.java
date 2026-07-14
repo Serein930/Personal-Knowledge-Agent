@@ -120,9 +120,15 @@ public class AgentToolConfirmationApplicationService {
         }
         requirePending(confirmation);
 
-        return transactionBoundary.execute(() -> executeConfirmedWrite(
-                ownerUserId, workspaceId, confirmationId
-        ));
+        try {
+            return transactionBoundary.execute(() -> executeConfirmedWrite(
+                    ownerUserId, workspaceId, confirmationId
+            ));
+        } catch (RuntimeException exception) {
+            // JDBC 事务异常时，业务写入与 EXECUTING 状态已经回滚；在新事务外单独记录最终失败状态。
+            markConfirmationFailed(ownerUserId, workspaceId, confirmationId, exception);
+            throw exception;
+        }
     }
 
     public DecidedAgentToolConfirmationResponse reject(
@@ -174,24 +180,19 @@ public class AgentToolConfirmationApplicationService {
                         ErrorCode.RESOURCE_CONFLICT,
                         "确认单正在执行或已经处理"
                 ));
-        try {
-            AgentToolExecutionResponse execution = toolCallingOrchestrator.executeConfirmedWrite(
-                    toContext(executing),
-                    new AgentToolExecutionRequest(
-                            executing.conversationId(),
-                            executing.toolName(),
-                            executing.requestId(),
-                            executing.arguments()
-                    )
-            );
-            AgentToolConfirmation succeeded = confirmationRepository.save(
-                    executing.succeed(execution, OffsetDateTime.now())
-            );
-            return new DecidedAgentToolConfirmationResponse(toResponse(succeeded), execution.reused());
-        } catch (RuntimeException exception) {
-            confirmationRepository.save(executing.fail(safeFailureReason(exception), OffsetDateTime.now()));
-            throw exception;
-        }
+        AgentToolExecutionResponse execution = toolCallingOrchestrator.executeConfirmedWrite(
+                toContext(executing),
+                new AgentToolExecutionRequest(
+                        executing.conversationId(),
+                        executing.toolName(),
+                        executing.requestId(),
+                        executing.arguments()
+                )
+        );
+        AgentToolConfirmation succeeded = confirmationRepository.save(
+                executing.succeed(execution, OffsetDateTime.now())
+        );
+        return new DecidedAgentToolConfirmationResponse(toResponse(succeeded), execution.reused());
     }
 
     private AgentToolConfirmation requireConfirmation(Long ownerUserId, Long workspaceId, Long confirmationId) {
@@ -271,5 +272,19 @@ public class AgentToolConfirmationApplicationService {
 
     private String safeFailureReason(RuntimeException exception) {
         return exception instanceof BusinessException ? exception.getMessage() : "写工具执行发生未预期异常";
+    }
+
+    private void markConfirmationFailed(
+            Long ownerUserId,
+            Long workspaceId,
+            Long confirmationId,
+            RuntimeException exception
+    ) {
+        confirmationRepository.findByOwnerUserIdAndWorkspaceIdAndId(ownerUserId, workspaceId, confirmationId)
+                .filter(current -> current.status() == AgentToolConfirmationStatus.PENDING_CONFIRMATION
+                        || current.status() == AgentToolConfirmationStatus.EXECUTING)
+                .ifPresent(current -> confirmationRepository.save(
+                        current.fail(safeFailureReason(exception), OffsetDateTime.now())
+                ));
     }
 }

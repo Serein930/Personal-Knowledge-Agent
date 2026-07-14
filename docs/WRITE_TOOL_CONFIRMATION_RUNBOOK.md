@@ -2,7 +2,7 @@
 
 ## 本阶段目标
 
-Stage 7 当前小阶段建立了写工具安全闭环，并实现首个写工具 `note.create`。核心原则是模型或前端可以提出写入建议，但只有用户明确确认后才允许修改知识空间数据。
+Stage 7 当前已经建立写工具安全闭环，并实现 `note.create` 与 `flashcard.create`。核心原则是模型或前端可以提出写入建议，但只有用户明确确认后才允许修改知识空间数据。
 
 ## 调用流程
 
@@ -18,7 +18,9 @@ Stage 7 当前小阶段建立了写工具安全闭环，并实现首个写工具
   -> 状态变为 SUCCEEDED 或 FAILED
 ```
 
-普通 `/agent/tool-calls` 接口和 Spring AI 自动工具白名单都不能直接执行 `note.create`。
+普通 `/agent/tool-calls` 接口和 Spring AI 自动工具白名单都不能直接执行写工具。
+
+流式问答识别到“保存笔记”或“生成复习卡片”意图时，会发送 `tool_confirmation_required` 事件。事件只创建确认单，不会自动写入。
 
 ## 状态说明
 
@@ -89,6 +91,14 @@ Invoke-RestMethod `
   -Uri "http://localhost:8080/api/v1/workspaces/1/notes?page=1&pageSize=20"
 ```
 
+复习卡片查询接口：
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/flashcards?page=1&pageSize=20"
+```
+
 4. 查询确认状态：
 
 ```powershell
@@ -109,4 +119,4 @@ Invoke-RestMethod `
 
 ## 当前存储边界
 
-确认单、笔记、工具审计和结果缓存当前均使用内存实现，服务重启后数据会清空。内存事务边界保证单进程内确认状态和写入动作串行进入临界区；后续接入 PostgreSQL 时，需要用真实数据库事务、唯一幂等索引和带原状态条件的更新替换。
+默认模式仍使用内存实现，服务重启后数据会清空。使用 `local` 配置启动时会切换为 PostgreSQL 仓储，确认单、工具审计、笔记和复习卡片进入真实数据库事务。具体步骤参见 `AGENT_JDBC_RUNBOOK.md`。

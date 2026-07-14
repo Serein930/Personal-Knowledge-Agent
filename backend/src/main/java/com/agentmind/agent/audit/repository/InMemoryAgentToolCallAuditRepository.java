@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
@@ -18,8 +18,13 @@ import org.springframework.util.StringUtils;
  * <p>审计编号由本地递增序列生成，查询结果按创建时间倒序返回。生产阶段替换为数据库实现时，
  * 必须保留“用户、知识空间、请求编号”联合查重语义。</p>
  */
-@Primary
 @Repository
+@ConditionalOnProperty(
+        prefix = "agentmind.agent.persistence",
+        name = "store",
+        havingValue = "memory",
+        matchIfMissing = true
+)
 public class InMemoryAgentToolCallAuditRepository implements AgentToolCallAuditRepository {
 
     private final AtomicLong idGenerator = new AtomicLong(1);

@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -16,6 +17,12 @@ import org.springframework.stereotype.Repository;
  * 保证两个确认请求不能同时把同一张确认单推进到执行中。</p>
  */
 @Repository
+@ConditionalOnProperty(
+        prefix = "agentmind.agent.persistence",
+        name = "store",
+        havingValue = "memory",
+        matchIfMissing = true
+)
 public class InMemoryAgentToolConfirmationRepository implements AgentToolConfirmationRepository {
 
     private final AtomicLong idGenerator = new AtomicLong(1);

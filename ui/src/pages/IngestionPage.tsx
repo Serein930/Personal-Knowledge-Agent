@@ -1,84 +1,154 @@
-﻿import { Button, Input, Progress, Select, Tag, Upload } from 'antd';
-import { Link, UploadCloud } from 'lucide-react';
-import type { IngestionTaskDto } from '../api/contracts';
+import { Button, Input, Progress, Select, Tag, Upload, message } from 'antd';
+import { Link, RefreshCw, UploadCloud } from 'lucide-react';
+import { useState } from 'react';
+import { apiClient } from '../api/client';
+import type { BackendIngestionTaskDto, BackendIngestionStatus, DocumentCreatedDto } from '../api/contracts';
 import { SectionHeader } from '../components/SectionHeader';
+import { env } from '../config/env';
 
-const recentTasks: IngestionTaskDto[] = [
-  {
-    id: 'task-001',
-    title: 'Spring AI 官方文档摘录',
-    source: 'https://docs.spring.io/spring-ai/reference/',
-    status: '处理中',
-    progress: 62,
-    createdAt: '2026-07-04 20:40',
-  },
-  {
-    id: 'task-002',
-    title: 'Java 并发编程笔记',
-    source: '本地 Markdown 文件',
-    status: '已完成',
-    progress: 100,
-    createdAt: '2026-07-04 20:28',
-  },
-];
+const statusLabel: Record<BackendIngestionStatus, string> = {
+  PENDING: '等待中',
+  RUNNING: '处理中',
+  SUCCEEDED: '已完成',
+  FAILED: '失败',
+  CANCELED: '已取消',
+};
 
 export function IngestionPage() {
+  const [selectedFile, setSelectedFile] = useState<File>();
+  const [webUrl, setWebUrl] = useState('');
+  const [tasks, setTasks] = useState<BackendIngestionTaskDto[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const workspaceId = env.workspaceId;
+
+  const loadTask = async (taskId: number) => {
+    const task = await apiClient.get<BackendIngestionTaskDto>(
+      `/v1/workspaces/${workspaceId}/ingestion-tasks/${taskId}`,
+    );
+    setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)]);
+  };
+
+  const uploadFile = async () => {
+    if (!selectedFile) {
+      message.warning('请先选择文件');
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const created = await apiClient.upload<DocumentCreatedDto>(
+        `/v1/workspaces/${workspaceId}/documents/files`,
+        formData,
+      );
+      await loadTask(created.taskId);
+      setSelectedFile(undefined);
+      message.success('文件摄取任务已创建');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '文件上传失败');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const captureWebPage = async () => {
+    if (!webUrl.trim()) {
+      message.warning('请输入网页链接');
+      return;
+    }
+    setCapturing(true);
+    try {
+      const created = await apiClient.post<DocumentCreatedDto>(
+        `/v1/workspaces/${workspaceId}/documents/web-pages`,
+        { url: webUrl.trim(), tags: [] },
+      );
+      await loadTask(created.taskId);
+      setWebUrl('');
+      message.success('网页采集任务已创建');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '网页采集失败');
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  const refreshTasks = async () => {
+    await Promise.all(tasks.map((task) => loadTask(task.id)));
+  };
+
   return (
     <div className="page-stack">
-      <SectionHeader
-        title="采集中心"
-        description="第二阶段补充任务状态雏形，后续接入文件上传、网页采集和异步摄取 API。"
-      />
+      <SectionHeader title="采集中心" description={`当前知识空间：${workspaceId}`} />
 
       <div className="two-column">
         <section className="panel">
           <h3>上传学习资料</h3>
-          <p className="muted">支持 PDF、Markdown、Word、TXT 和代码文件。真实上传将在后端对象存储接入后启用。</p>
-          <Upload.Dragger multiple beforeUpload={() => false} className="upload-zone">
+          <Upload.Dragger
+            maxCount={1}
+            fileList={selectedFile ? [{ uid: selectedFile.name, name: selectedFile.name, status: 'done' }] : []}
+            beforeUpload={(file) => {
+              setSelectedFile(file);
+              return false;
+            }}
+            onRemove={() => {
+              setSelectedFile(undefined);
+              return true;
+            }}
+            className="upload-zone"
+          >
             <UploadCloud size={32} />
             <p>拖拽文件到此处，或点击选择文件</p>
-            <span>第二阶段仍不会真正上传文件</span>
+            <span>支持 PDF、Markdown、Word、TXT、HTML 和代码文件</span>
           </Upload.Dragger>
+          <Button type="primary" loading={uploading} disabled={!selectedFile} onClick={uploadFile}>
+            提交文件
+          </Button>
         </section>
 
         <section className="panel">
           <h3>采集网页文章</h3>
-          <p className="muted">用于提交 CSDN、掘金、博客园、官方文档等技术文章链接。</p>
           <div className="form-stack">
             <label>
               <span>目标知识空间</span>
-              <Select
-                defaultValue="java"
-                options={[
-                  { value: 'java', label: 'Java 后端学习' },
-                  { value: 'agent', label: 'Agent 工程化' },
-                  { value: 'interview', label: '面试准备' },
-                ]}
-              />
+              <Select value={workspaceId} options={[{ value: workspaceId, label: `知识空间 ${workspaceId}` }]} />
             </label>
             <label>
               <span>文章链接</span>
-              <Input prefix={<Link size={16} />} placeholder="https://blog.csdn.net/..." />
+              <Input
+                prefix={<Link size={16} />}
+                value={webUrl}
+                onChange={(event) => setWebUrl(event.target.value)}
+                placeholder="https://blog.csdn.net/..."
+                onPressEnter={captureWebPage}
+              />
             </label>
-            <Button type="primary">创建采集任务</Button>
+            <Button type="primary" loading={capturing} onClick={captureWebPage}>创建采集任务</Button>
           </div>
         </section>
       </div>
 
       <section className="panel">
-        <h3>最近采集任务</h3>
-        <div className="compact-list">
-          {recentTasks.map((task) => (
-            <article key={task.id}>
-              <div className="item-line">
-                <strong>{task.title}</strong>
-                <Tag>{task.status}</Tag>
-              </div>
-              <span>{task.source} · {task.createdAt}</span>
-              <Progress percent={task.progress} size="small" />
-            </article>
-          ))}
+        <div className="item-line">
+          <h3>本次联调任务</h3>
+          <Button icon={<RefreshCw size={16} />} disabled={tasks.length === 0} onClick={refreshTasks}>
+            刷新
+          </Button>
         </div>
+        {tasks.length === 0 ? <p className="muted">尚未提交任务</p> : (
+          <div className="compact-list">
+            {tasks.map((task) => (
+              <article key={task.id}>
+                <div className="item-line">
+                  <strong>{task.source}</strong>
+                  <Tag>{statusLabel[task.status]}</Tag>
+                </div>
+                <span>任务 {task.id} · 文档 {task.documentId}</span>
+                <Progress percent={task.progress} size="small" status={task.status === 'FAILED' ? 'exception' : undefined} />
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

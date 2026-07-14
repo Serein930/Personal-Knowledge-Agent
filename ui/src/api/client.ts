@@ -20,14 +20,14 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
 }
 
-function buildUrl(path: string) {
+export function buildApiUrl(path: string) {
   const normalizedBase = env.apiBaseUrl.replace(/\/$/, '');
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${normalizedBase}${normalizedPath}`;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(buildUrl(path), {
+  const response = await fetch(buildApiUrl(path), {
     ...options,
     headers: {
       Accept: 'application/json',
@@ -38,15 +38,30 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   });
 
   if (!response.ok) {
-    throw new ApiClientError(`请求失败：${response.status}`, response.status);
+    const payload = await response.json().catch(() => null) as ApiResponse<unknown> | null;
+    throw new ApiClientError(payload?.message ?? `请求失败：${response.status}`, response.status);
   }
 
   const payload = (await response.json()) as ApiResponse<T>;
   return payload.data;
 }
 
-// 第二阶段先定义请求边界，真实接口会在后端完成后逐步接入。
+export async function upload<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(buildApiUrl(path), {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: formData,
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as ApiResponse<unknown> | null;
+    throw new ApiClientError(payload?.message ?? `请求失败：${response.status}`, response.status);
+  }
+  const payload = (await response.json()) as ApiResponse<T>;
+  return payload.data;
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body }),
+  upload: <T>(path: string, formData: FormData) => upload<T>(path, formData),
 };
