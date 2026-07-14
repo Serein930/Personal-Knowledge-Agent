@@ -7,6 +7,7 @@ package com.agentmind.common.exception;
  */
 public enum ErrorCode {
     BAD_REQUEST("BAD_REQUEST", "请求参数不合法"),
+    FORBIDDEN("FORBIDDEN", "无权访问该资源"),
     RESOURCE_NOT_FOUND("RESOURCE_NOT_FOUND", "资源不存在"),
     RESOURCE_CONFLICT("RESOURCE_CONFLICT", "资源状态冲突"),
     INTERNAL_ERROR("INTERNAL_ERROR", "服务内部错误");

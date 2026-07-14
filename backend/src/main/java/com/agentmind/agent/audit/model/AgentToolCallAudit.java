@@ -15,6 +15,7 @@ public class AgentToolCallAudit {
     private Long workspaceId;
     private Long conversationId;
     private Long messageId;
+    private String requestId;
     private String toolName;
     private AgentToolType toolType;
     private String requestPayload;
@@ -58,6 +59,14 @@ public class AgentToolCallAudit {
 
     public Long getMessageId() {
         return messageId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public void setMessageId(Long messageId) {

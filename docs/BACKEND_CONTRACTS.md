@@ -315,6 +315,54 @@ GET /api/v1/workspaces/{workspaceId}/rag/chat/stream
 
 流式响应建议使用 SSE，具体契约在 RAG 阶段再细化。
 
+## 智能体工具调用接口
+
+当前 Stage 7 首批只读工具提供显式调用接口，用于前端联调、工具审计验证和后续模型编排适配：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/agent/tool-calls
+```
+
+当前演示环境可选请求头：
+
+```text
+X-Demo-User-Id: 1
+```
+
+请求示例：
+
+```json
+{
+  "conversationId": 101,
+  "toolName": "knowledge.search",
+  "requestId": "search-java-thread-pool-001",
+  "arguments": {
+    "query": "线程池核心参数",
+    "topK": 5
+  }
+}
+```
+
+当前白名单工具：
+
+- `knowledge.search`：参数为 `query` 和可选 `topK`，在当前知识空间执行语义检索。
+- `document.read_chunk`：参数为 `documentId` 与 `chunkId`，读取当前知识空间中的指定文档片段。
+
+成功响应中的 `audit` 包含审计编号、调用状态、参数摘要、结果摘要与耗时；`result` 是当前调用方可见的业务结果。相同用户、知识空间和 `requestId` 的成功调用会复用已有审计记录。
+
+审计查询接口：
+
+```text
+GET /api/v1/workspaces/{workspaceId}/agent/tool-calls?page=1&pageSize=20
+```
+
+规则：
+
+- 工具名称必须存在于服务端白名单中。
+- 工具参数必须经过服务端校验，不能信任模型或客户端传入的数据类型。
+- 调用上下文必须通过用户、知识空间和可选会话归属校验。
+- 审计记录只保存参数摘要和结果摘要，不重复保存完整私有知识内容。
+
 ## 后续实现顺序
 
 1. Stage 1 先实现统一响应、异常处理和健康检查。
