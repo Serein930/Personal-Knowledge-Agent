@@ -3,8 +3,11 @@ package com.agentmind.study.flashcard.repository;
 import com.agentmind.study.flashcard.model.StudyFlashcard;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.time.OffsetDateTime;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -35,11 +38,7 @@ public class InMemoryStudyFlashcardRepository implements StudyFlashcardRepositor
             return existing;
         }
         StudyFlashcard stored = flashcard.id() == null
-                ? new StudyFlashcard(
-                        idGenerator.getAndIncrement(), flashcard.ownerUserId(), flashcard.workspaceId(),
-                        flashcard.sourceConversationId(), flashcard.requestId(), flashcard.question(),
-                        flashcard.answer(), flashcard.explanation(), flashcard.createdAt(), flashcard.updatedAt()
-                )
+                ? flashcard.withId(idGenerator.getAndIncrement())
                 : flashcard;
         flashcards.put(stored.id(), stored);
         return stored;
@@ -69,5 +68,64 @@ public class InMemoryStudyFlashcardRepository implements StudyFlashcardRepositor
                 .filter(flashcard -> ownerUserId.equals(flashcard.ownerUserId()))
                 .filter(flashcard -> workspaceId.equals(flashcard.workspaceId()))
                 .count();
+    }
+
+    @Override
+    public Optional<StudyFlashcard> findByOwnerUserIdAndWorkspaceIdAndId(
+            Long ownerUserId,
+            Long workspaceId,
+            Long flashcardId
+    ) {
+        return Optional.ofNullable(flashcards.get(flashcardId))
+                .filter(item -> ownerUserId.equals(item.ownerUserId()))
+                .filter(item -> workspaceId.equals(item.workspaceId()));
+    }
+
+    @Override
+    public List<StudyFlashcard> findDueByOwnerUserIdAndWorkspaceId(
+            Long ownerUserId,
+            Long workspaceId,
+            OffsetDateTime dueBefore,
+            int offset,
+            int limit
+    ) {
+        return flashcards.values().stream()
+                .filter(item -> ownerUserId.equals(item.ownerUserId()))
+                .filter(item -> workspaceId.equals(item.workspaceId()))
+                .filter(item -> item.status() != com.agentmind.study.flashcard.model.StudyFlashcardStatus.SUSPENDED)
+                .filter(item -> !item.dueAt().isAfter(dueBefore))
+                .sorted(Comparator.comparing(StudyFlashcard::dueAt).thenComparing(StudyFlashcard::id))
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
+    public long countDueByOwnerUserIdAndWorkspaceId(
+            Long ownerUserId,
+            Long workspaceId,
+            OffsetDateTime dueBefore
+    ) {
+        return flashcards.values().stream()
+                .filter(item -> ownerUserId.equals(item.ownerUserId()))
+                .filter(item -> workspaceId.equals(item.workspaceId()))
+                .filter(item -> item.status() != com.agentmind.study.flashcard.model.StudyFlashcardStatus.SUSPENDED)
+                .filter(item -> !item.dueAt().isAfter(dueBefore))
+                .count();
+    }
+
+    @Override
+    public Optional<StudyFlashcard> updateSchedule(StudyFlashcard flashcard, long expectedVersion) {
+        AtomicReference<StudyFlashcard> updated = new AtomicReference<>();
+        flashcards.computeIfPresent(flashcard.id(), (ignored, current) -> {
+            if (!current.ownerUserId().equals(flashcard.ownerUserId())
+                    || !current.workspaceId().equals(flashcard.workspaceId())
+                    || current.version() != expectedVersion) {
+                return current;
+            }
+            updated.set(flashcard);
+            return flashcard;
+        });
+        return Optional.ofNullable(updated.get());
     }
 }

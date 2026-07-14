@@ -1,4 +1,4 @@
--- Stage 7 写工具持久化表。
+-- Stage 7 写工具与 Stage 8 复习调度持久化表。
 -- 所有用户资产都同时保留用户与知识空间归属，避免仅凭业务编号跨空间读取。
 
 create table if not exists agent_tool_confirmations (
@@ -92,12 +92,91 @@ create table if not exists study_flashcards (
     question varchar(500) not null,
     answer text not null,
     explanation text,
+    status varchar(20) not null default 'NEW',
+    repetition_count integer not null default 0,
+    interval_days integer not null default 0,
+    ease_factor numeric(5, 2) not null default 2.50,
+    lapse_count integer not null default 0,
+    due_at timestamptz not null default now(),
+    last_reviewed_at timestamptz,
+    version bigint not null default 0,
     created_at timestamptz not null,
     updated_at timestamptz not null,
     constraint ck_study_flashcard_question check (char_length(question) between 1 and 500),
     constraint ck_study_flashcard_answer check (char_length(answer) between 1 and 10000),
-    constraint uk_study_flashcards_request unique (owner_user_id, workspace_id, request_id)
+    constraint ck_study_flashcard_status check (status in ('NEW', 'LEARNING', 'REVIEW', 'SUSPENDED')),
+    constraint ck_study_flashcard_schedule_numbers check (
+        repetition_count >= 0 and interval_days >= 0 and ease_factor >= 1.30 and lapse_count >= 0 and version >= 0
+    ),
+    constraint uk_study_flashcards_request unique (owner_user_id, workspace_id, request_id),
+    constraint uk_study_flashcards_scope_id unique (id, owner_user_id, workspace_id)
 );
+
+-- 允许已有本地数据库重复执行本脚本，平滑补齐 Stage 8 调度字段。
+alter table study_flashcards add column if not exists status varchar(20) not null default 'NEW';
+alter table study_flashcards add column if not exists repetition_count integer not null default 0;
+alter table study_flashcards add column if not exists interval_days integer not null default 0;
+alter table study_flashcards add column if not exists ease_factor numeric(5, 2) not null default 2.50;
+alter table study_flashcards add column if not exists lapse_count integer not null default 0;
+alter table study_flashcards add column if not exists due_at timestamptz not null default now();
+alter table study_flashcards add column if not exists last_reviewed_at timestamptz;
+alter table study_flashcards add column if not exists version bigint not null default 0;
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'ck_study_flashcard_status') then
+        alter table study_flashcards add constraint ck_study_flashcard_status
+            check (status in ('NEW', 'LEARNING', 'REVIEW', 'SUSPENDED'));
+    end if;
+    if not exists (select 1 from pg_constraint where conname = 'ck_study_flashcard_schedule_numbers') then
+        alter table study_flashcards add constraint ck_study_flashcard_schedule_numbers
+            check (repetition_count >= 0 and interval_days >= 0 and ease_factor >= 1.30
+                and lapse_count >= 0 and version >= 0);
+    end if;
+    if not exists (select 1 from pg_constraint where conname = 'uk_study_flashcards_scope_id') then
+        alter table study_flashcards add constraint uk_study_flashcards_scope_id
+            unique (id, owner_user_id, workspace_id);
+    end if;
+end $$;
 
 create index if not exists idx_study_flashcards_scope_created
     on study_flashcards (owner_user_id, workspace_id, created_at desc, id desc);
+
+create index if not exists idx_study_flashcards_due
+    on study_flashcards (owner_user_id, workspace_id, due_at, id)
+    where status <> 'SUSPENDED';
+
+create table if not exists study_flashcard_reviews (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    flashcard_id bigint not null,
+    request_id varchar(100) not null,
+    score integer not null,
+    previous_status varchar(20) not null,
+    next_status varchar(20) not null,
+    previous_interval_days integer not null,
+    next_interval_days integer not null,
+    previous_ease_factor numeric(5, 2) not null,
+    next_ease_factor numeric(5, 2) not null,
+    previous_due_at timestamptz not null,
+    next_due_at timestamptz not null,
+    algorithm varchar(40) not null,
+    reviewed_at timestamptz not null,
+    created_at timestamptz not null,
+    constraint ck_study_flashcard_review_score check (score between 0 and 5),
+    constraint ck_study_flashcard_review_status check (
+        previous_status in ('NEW', 'LEARNING', 'REVIEW', 'SUSPENDED')
+        and next_status in ('NEW', 'LEARNING', 'REVIEW', 'SUSPENDED')
+    ),
+    constraint ck_study_flashcard_review_intervals check (
+        previous_interval_days >= 0 and next_interval_days >= 0
+        and previous_ease_factor >= 1.30 and next_ease_factor >= 1.30
+    ),
+    constraint uk_study_flashcard_reviews_request unique (owner_user_id, workspace_id, request_id),
+    constraint fk_study_flashcard_reviews_scope foreign key (flashcard_id, owner_user_id, workspace_id)
+        references study_flashcards (id, owner_user_id, workspace_id) on delete cascade
+);
+
+create index if not exists idx_study_flashcard_reviews_card
+    on study_flashcard_reviews (owner_user_id, workspace_id, flashcard_id, reviewed_at desc, id desc);

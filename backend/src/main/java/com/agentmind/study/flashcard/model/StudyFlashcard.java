@@ -17,7 +17,79 @@ public record StudyFlashcard(
         String question,
         String answer,
         String explanation,
+        StudyFlashcardStatus status,
+        int repetitionCount,
+        int intervalDays,
+        double easeFactor,
+        int lapseCount,
+        OffsetDateTime dueAt,
+        OffsetDateTime lastReviewedAt,
+        long version,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {
+
+    public StudyFlashcard withId(Long generatedId) {
+        return new StudyFlashcard(
+                generatedId,
+                ownerUserId,
+                workspaceId,
+                sourceConversationId,
+                requestId,
+                question,
+                answer,
+                explanation,
+                status,
+                repetitionCount,
+                intervalDays,
+                easeFactor,
+                lapseCount,
+                dueAt,
+                lastReviewedAt,
+                version,
+                createdAt,
+                updatedAt
+        );
+    }
+
+    /**
+     * 读取当前卡片的算法调度状态。
+     */
+    public StudyFlashcardSchedule schedule() {
+        return new StudyFlashcardSchedule(
+                status,
+                repetitionCount,
+                intervalDays,
+                easeFactor,
+                lapseCount,
+                dueAt,
+                lastReviewedAt
+        );
+    }
+
+    /**
+     * 应用一次算法计算结果。版本号在仓储成功执行条件更新后增加，调用方不能跳过版本校验直接覆盖。
+     */
+    public StudyFlashcard applySchedule(StudyFlashcardSchedule nextSchedule, OffsetDateTime now) {
+        return new StudyFlashcard(
+                id,
+                ownerUserId,
+                workspaceId,
+                sourceConversationId,
+                requestId,
+                question,
+                answer,
+                explanation,
+                nextSchedule.status(),
+                nextSchedule.repetitionCount(),
+                nextSchedule.intervalDays(),
+                nextSchedule.easeFactor(),
+                nextSchedule.lapseCount(),
+                nextSchedule.dueAt(),
+                nextSchedule.lastReviewedAt(),
+                version + 1,
+                createdAt,
+                now
+        );
+    }
 }

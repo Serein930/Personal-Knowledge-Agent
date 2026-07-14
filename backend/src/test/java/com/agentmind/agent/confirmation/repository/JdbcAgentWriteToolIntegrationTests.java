@@ -106,6 +106,8 @@ class JdbcAgentWriteToolIntegrationTests {
         jdbcTemplate.update("delete from agent_tool_confirmations");
         jdbcTemplate.update("delete from agent_tool_call_audits");
         jdbcTemplate.update("delete from knowledge_notes");
+        // 复习记录通过外键关联卡片，必须先清理明细记录再清理卡片主表。
+        jdbcTemplate.update("delete from study_flashcard_reviews");
         jdbcTemplate.update("delete from study_flashcards");
     }
 

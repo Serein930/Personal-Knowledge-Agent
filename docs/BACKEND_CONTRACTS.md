@@ -451,6 +451,59 @@ data: {"sequence":1,"proposal":{"confirmation":{"status":"PENDING_CONFIRMATION"}
 - `agentmind.agent.confirmation-maintenance.fixed-delay-millis=60000`：后台维护任务间隔。
 - `agentmind.agent.confirmation-maintenance.batch-size=100`：单次处理上限，避免大批量状态更新阻塞业务请求。
 
+## 复习卡片与评分接口
+
+卡片列表与到期卡片列表：
+
+```text
+GET /api/v1/workspaces/{workspaceId}/flashcards?page=1&pageSize=20
+GET /api/v1/workspaces/{workspaceId}/flashcards/due?page=1&pageSize=20
+```
+
+到期查询只返回当前时间已经达到 `dueAt` 且状态不是 `SUSPENDED` 的卡片。响应除题目、答案和解释外，还包含：
+
+- `status`：`NEW`、`LEARNING`、`REVIEW` 或 `SUSPENDED`。
+- `repetitionCount`：当前连续成功复习次数。
+- `intervalDays`：下一次复习间隔天数。
+- `easeFactor`：SM-2 难度系数，最低为 `1.3`。
+- `lapseCount`：失败复习累计次数。
+- `dueAt`：下一次到期时间。
+- `lastReviewedAt`：最近复习时间。
+- `version`：并发条件更新版本号。
+
+提交评分：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/flashcards/{flashcardId}/reviews
+Content-Type: application/json
+```
+
+请求示例：
+
+```json
+{
+  "requestId": "review-20260714-001",
+  "score": 5
+}
+```
+
+评分范围为 0 至 5。0 至 2 表示未记住，卡片回到学习状态并在 1 天后到期；3 至 5 表示记住，系统按照 SM-2 更新难度系数和间隔。响应同时返回更新后的卡片、不可变复习记录和 `reused` 标记。
+
+复习历史：
+
+```text
+GET /api/v1/workspaces/{workspaceId}/flashcards/{flashcardId}/reviews?page=1&pageSize=20
+```
+
+规则：
+
+- 客户端的一次复习操作必须生成稳定且唯一的 `requestId`，网络重试必须重用相同编号和评分。
+- 相同知识空间、相同请求编号和相同评分会返回已有结果，`reused=true`，不会重复推进调度。
+- 相同请求编号对应不同卡片或不同评分时返回 `RESOURCE_CONFLICT`。
+- 查询与评分始终校验用户、知识空间和卡片归属，越权访问统一表现为资源不存在。
+- 卡片调度使用版本条件更新；并发冲突时重新读取最新状态并再次计算，超过重试上限返回冲突。
+- 当前算法由 `agentmind.study.flashcard.algorithm=sm2` 配置，算法端口允许后续增加 FSRS 实现而不修改接口契约。
+
 ## 后续实现顺序
 
 1. Stage 1 先实现统一响应、异常处理和健康检查。

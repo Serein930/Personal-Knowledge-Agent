@@ -74,6 +74,9 @@ agentmind:
       key-prefix: agentmind:chat-memory
       serialization-version: 1
       ttl: 7d
+  study:
+    flashcard:
+      algorithm: sm2
   ingestion:
     max-upload-size-bytes: 20971520
     web-fetch-timeout-seconds: 8
