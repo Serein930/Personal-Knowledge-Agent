@@ -17,6 +17,25 @@ import org.springframework.stereotype.Component;
 public class KnowledgeSearchAgentTool implements AgentTool {
 
     public static final String TOOL_NAME = "knowledge.search";
+    private static final String INPUT_SCHEMA = """
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "需要在当前知识空间中检索的问题或关键词"
+                },
+                "topK": {
+                  "type": "integer",
+                  "description": "最多返回的相关片段数量",
+                  "minimum": 1,
+                  "maximum": 20
+                }
+              },
+              "required": ["query"],
+              "additionalProperties": false
+            }
+            """;
 
     private final KnowledgeSearchService knowledgeSearchService;
     private final ObjectMapper objectMapper;
@@ -28,7 +47,12 @@ public class KnowledgeSearchAgentTool implements AgentTool {
 
     @Override
     public AgentToolDefinition definition() {
-        return new AgentToolDefinition(TOOL_NAME, "在当前知识空间中检索相关知识片段", AgentToolType.READ);
+        return new AgentToolDefinition(
+                TOOL_NAME,
+                "在当前知识空间中检索与问题相关的知识片段",
+                AgentToolType.READ,
+                INPUT_SCHEMA
+        );
     }
 
     @Override

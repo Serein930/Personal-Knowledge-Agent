@@ -21,6 +21,8 @@ public class RagAnswerGenerationProperties {
     private boolean springAiFailureFallbackEnabled = true;
     private long streamTimeoutMillis = 60_000;
     private int streamChunkSize = 24;
+    private boolean toolCallingEnabled = true;
+    private int maxToolRoundTrips = 4;
 
     public String getAnswerGenerator() {
         return answerGenerator;
@@ -84,5 +86,21 @@ public class RagAnswerGenerationProperties {
 
     public void setStreamChunkSize(int streamChunkSize) {
         this.streamChunkSize = streamChunkSize;
+    }
+
+    public boolean isToolCallingEnabled() {
+        return toolCallingEnabled;
+    }
+
+    public void setToolCallingEnabled(boolean toolCallingEnabled) {
+        this.toolCallingEnabled = toolCallingEnabled;
+    }
+
+    public int getMaxToolRoundTrips() {
+        return maxToolRoundTrips;
+    }
+
+    public void setMaxToolRoundTrips(int maxToolRoundTrips) {
+        this.maxToolRoundTrips = maxToolRoundTrips;
     }
 }

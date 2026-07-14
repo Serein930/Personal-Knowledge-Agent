@@ -21,6 +21,24 @@ import org.springframework.stereotype.Component;
 public class DocumentChunkReadAgentTool implements AgentTool {
 
     public static final String TOOL_NAME = "document.read_chunk";
+    private static final String INPUT_SCHEMA = """
+            {
+              "type": "object",
+              "properties": {
+                "documentId": {
+                  "type": "integer",
+                  "description": "目标文档编号",
+                  "minimum": 1
+                },
+                "chunkId": {
+                  "type": "string",
+                  "description": "需要读取的文档片段编号"
+                }
+              },
+              "required": ["documentId", "chunkId"],
+              "additionalProperties": false
+            }
+            """;
 
     private final DocumentApplicationService documentApplicationService;
     private final ObjectMapper objectMapper;
@@ -35,7 +53,12 @@ public class DocumentChunkReadAgentTool implements AgentTool {
 
     @Override
     public AgentToolDefinition definition() {
-        return new AgentToolDefinition(TOOL_NAME, "读取当前知识空间内指定文档的一个片段", AgentToolType.READ);
+        return new AgentToolDefinition(
+                TOOL_NAME,
+                "读取当前知识空间内指定文档的一个片段",
+                AgentToolType.READ,
+                INPUT_SCHEMA
+        );
     }
 
     @Override

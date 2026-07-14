@@ -10,6 +10,7 @@ public enum RagStreamEventType {
     METADATA("metadata"),
     DELTA("delta"),
     CITATION("citation"),
+    TOOL_CALL("tool_call"),
     COMPLETE("complete"),
     ERROR("error");
 

@@ -5,6 +5,7 @@ import com.agentmind.agent.audit.model.AgentToolCallStatus;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.context.annotation.Primary;
@@ -56,6 +57,23 @@ public class InMemoryAgentToolCallAuditRepository implements AgentToolCallAuditR
                 .filter(audit -> ownerUserId.equals(audit.getOwnerUserId()))
                 .filter(audit -> workspaceId.equals(audit.getWorkspaceId()))
                 .sorted(Comparator.comparing(AgentToolCallAudit::getCreatedAt).reversed())
+                .toList();
+    }
+
+    @Override
+    public List<AgentToolCallAudit> findByExecutionContext(
+            Long ownerUserId,
+            Long workspaceId,
+            Long conversationId,
+            Long messageId
+    ) {
+        return audits.values().stream()
+                .filter(audit -> ownerUserId.equals(audit.getOwnerUserId()))
+                .filter(audit -> workspaceId.equals(audit.getWorkspaceId()))
+                .filter(audit -> Objects.equals(conversationId, audit.getConversationId()))
+                .filter(audit -> Objects.equals(messageId, audit.getMessageId()))
+                .sorted(Comparator.comparing(AgentToolCallAudit::getCreatedAt)
+                        .thenComparing(AgentToolCallAudit::getId))
                 .toList();
     }
 }

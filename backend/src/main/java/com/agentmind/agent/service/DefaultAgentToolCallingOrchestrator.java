@@ -23,22 +23,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * 开发阶段的模拟工具调用编排器。
+ * 智能体工具调用默认编排器。
  *
- * <p>该类模拟模型已经选定工具后的执行流程：权限校验、白名单匹配、参数校验、调用审计、幂等复用和异常收口。
- * 因此后续接入 Spring AI 时，模型层只需要负责选择工具和构造参数，安全与审计链路不必重写。</p>
+ * <p>该类处理模型或显式接口已经选定工具后的统一执行流程：权限校验、白名单匹配、参数校验、
+ * 调用审计、幂等复用和异常收口。Spring AI 与 REST 接口均复用本编排器。</p>
  */
 @Service
-public class MockAgentToolCallingOrchestrator implements AgentToolCallingOrchestrator {
+public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrchestrator {
 
-    private static final Logger log = LoggerFactory.getLogger(MockAgentToolCallingOrchestrator.class);
+    private static final Logger log = LoggerFactory.getLogger(DefaultAgentToolCallingOrchestrator.class);
 
     private final AgentToolExecutionAuthorizer authorizer;
     private final AgentToolRegistry toolRegistry;
     private final AgentToolCallAuditRepository auditRepository;
     private final InMemoryAgentToolResultCache resultCache;
 
-    public MockAgentToolCallingOrchestrator(
+    public DefaultAgentToolCallingOrchestrator(
             AgentToolExecutionAuthorizer authorizer,
             AgentToolRegistry toolRegistry,
             AgentToolCallAuditRepository auditRepository,
@@ -112,6 +112,22 @@ public class MockAgentToolCallingOrchestrator implements AgentToolCallingOrchest
         );
     }
 
+    @Override
+    public List<AgentToolCallSummaryResponse> findAuditsForExecution(AgentToolExecutionContext context) {
+        authorizer.authorize(context);
+        if (context.conversationId() == null || context.messageId() == null) {
+            return List.of();
+        }
+        return auditRepository.findByExecutionContext(
+                        context.ownerUserId(),
+                        context.workspaceId(),
+                        context.conversationId(),
+                        context.messageId()
+                ).stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
     private AgentToolCallAudit createPendingAudit(
             AgentToolExecutionContext context,
             AgentToolExecutionRequest request,
@@ -121,6 +137,7 @@ public class MockAgentToolCallingOrchestrator implements AgentToolCallingOrchest
         audit.setOwnerUserId(context.ownerUserId());
         audit.setWorkspaceId(context.workspaceId());
         audit.setConversationId(context.conversationId());
+        audit.setMessageId(context.messageId());
         audit.setRequestId(requestId);
         audit.setToolName(request.toolName().trim());
         audit.setRequestPayload(summarizeArguments(request.arguments()));

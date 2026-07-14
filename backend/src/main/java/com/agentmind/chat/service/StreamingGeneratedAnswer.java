@@ -2,6 +2,8 @@ package com.agentmind.chat.service;
 
 import com.agentmind.chat.model.dto.RagAnswerGenerationMetadataResponse;
 import com.agentmind.chat.model.dto.TokenUsageResponse;
+import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
+import java.util.List;
 
 /**
  * 流式回答生成完成后的摘要。
@@ -12,6 +14,15 @@ import com.agentmind.chat.model.dto.TokenUsageResponse;
 public record StreamingGeneratedAnswer(
         int answerLength,
         TokenUsageResponse usage,
-        RagAnswerGenerationMetadataResponse metadata
+        RagAnswerGenerationMetadataResponse metadata,
+        List<AgentToolCallSummaryResponse> toolCalls
 ) {
+
+    public StreamingGeneratedAnswer(
+            int answerLength,
+            TokenUsageResponse usage,
+            RagAnswerGenerationMetadataResponse metadata
+    ) {
+        this(answerLength, usage, metadata, List.of());
+    }
 }

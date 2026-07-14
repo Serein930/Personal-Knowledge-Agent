@@ -68,7 +68,7 @@ public class RagContextAssemblyService {
                 generatedAnswer.content(),
                 preparedChat.retrievalContext(),
                 preparedChat.citations(),
-                List.of(),
+                generatedAnswer.toolCalls(),
                 generatedAnswer.metadata(),
                 generatedAnswer.usage()
         );
@@ -126,6 +126,9 @@ public class RagContextAssemblyService {
         );
         AnswerGenerationRequest generationRequest = new AnswerGenerationRequest(
                 workspaceId,
+                1L,
+                turnContext.conversation().id(),
+                turnContext.assistantMessage().id(),
                 request.question(),
                 promptTemplate.promptVersion(),
                 retrievalContext.promptContext(),

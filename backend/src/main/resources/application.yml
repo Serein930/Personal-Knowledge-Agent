@@ -43,6 +43,8 @@ agentmind:
     spring-ai-failure-fallback-enabled: true
     stream-timeout-millis: 60000
     stream-chunk-size: 24
+    tool-calling-enabled: true
+    max-tool-round-trips: 4
     observation-store: memory
   chat:
     memory:

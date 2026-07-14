@@ -307,13 +307,24 @@ Content-Type: application/json
 }
 ```
 
+当真实 Spring AI 模型选择了只读工具时，`toolCalls` 返回本次回答消息对应的脱敏调用摘要；默认模拟回答或模型未选择工具时返回空数组。
+
 后续流式接口：
 
 ```text
-GET /api/v1/workspaces/{workspaceId}/rag/chat/stream
+POST /api/v1/workspaces/{workspaceId}/rag/chat/stream
 ```
 
 流式响应建议使用 SSE，具体契约在 RAG 阶段再细化。
+
+当前流式协议已经增加可选工具事件：
+
+```text
+event: tool_call
+data: {"sequence":1,"toolCall":{"toolName":"knowledge.search","status":"SUCCEEDED"}}
+```
+
+正常完成事件的 `toolCalls` 字段会再次返回本次回答的全部工具摘要，便于前端在丢失单个中间事件时用最终事件校准状态。
 
 ## 智能体工具调用接口
 

@@ -20,4 +20,11 @@ public interface AgentToolCallAuditRepository {
     );
 
     List<AgentToolCallAudit> findByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId);
+
+    List<AgentToolCallAudit> findByExecutionContext(
+            Long ownerUserId,
+            Long workspaceId,
+            Long conversationId,
+            Long messageId
+    );
 }

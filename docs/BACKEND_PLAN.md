@@ -193,7 +193,11 @@ com.agentmind
 - 已提供 `knowledge.search` 与 `document.read_chunk` 两个只读工具，所有调用均按知识空间执行。
 - 已实现演示用户、知识空间、可选会话的执行上下文校验，以及工具白名单和参数校验。
 - 已实现请求编号幂等复用、成功/失败状态、参数摘要、结果摘要、耗时和失败原因审计。
-- 当前默认由模拟编排器处理显式工具调用；后续可由 Spring AI Tool Calling 适配器复用统一编排端口。
+- 显式接口与 Spring AI Tool Calling 适配器已经复用统一工具编排端口。
+- 已将只读工具注册表转换为 Spring AI Tool Callback，工具名称、说明和 JSON Schema 可供模型自动选择。
+- 已通过 Spring AI ToolCallingManager 实现有最大轮次限制的同步工具调用循环。
+- 已在真实模型流式回答前执行一次只读工具决策，并通过 `tool_call` 事件与 `complete.toolCalls` 返回审计摘要。
+- 写工具尚未向模型暴露，必须等用户确认机制和真实权限模型完成后再开放。
 
 验收标准：
 

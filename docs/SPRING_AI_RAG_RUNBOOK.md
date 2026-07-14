@@ -16,6 +16,8 @@ agentmind:
   rag:
     answer-generator: mock
     model-name: mock-local
+    tool-calling-enabled: true
+    max-tool-round-trips: 4
     spring-ai-failure-fallback-enabled: true
     observation-store: memory
 ```
@@ -63,6 +65,15 @@ mvn spring-boot:run `
 - `spring.ai.model.chat=openai`：允许 Spring AI 创建真实聊天模型客户端。
 - `agentmind.rag.answer-generator=spring-ai`：让项目使用真实模型回答生成适配器。
 - `agentmind.rag.model-name=gpt-4o-mini`：写入项目侧观测元数据，方便日志和后续审计表识别模型。
+- `agentmind.rag.tool-calling-enabled=true`：向真实模型提供当前只读工具白名单。
+- `agentmind.rag.max-tool-round-trips=4`：限制同步问答中模型与工具的最大往返次数，防止异常循环。
+
+当前模型可见工具：
+
+- `knowledge_search`：对应内部工具 `knowledge.search`，按当前知识空间执行语义检索。
+- `document_read_chunk`：对应内部工具 `document.read_chunk`，读取当前知识空间中的指定文档片段。
+
+模型看到的是符合供应商命名限制的下划线名称，后端执行时仍会映射回内部白名单名称。写工具不会自动暴露给模型。
 
 ## 手动联调流程
 
@@ -101,6 +112,21 @@ Invoke-RestMethod `
 - `generationMetadata.answerGenerator` 应为 `spring-ai`。
 - `generationMetadata.modelName` 应为启动参数中配置的模型名称。
 - `generationMetadata.refused` 为 `false` 时表示真实模型成功返回回答。
+- `toolCalls` 在模型使用工具时返回调用状态、结果摘要与耗时；未调用工具时为空数组。
+
+7. 查询工具审计，确认记录绑定到本次会话和消息：
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/agent/tool-calls?page=1&pageSize=20"
+```
+
+如需临时关闭模型自动工具选择，可在启动参数中增加：
+
+```text
+--agentmind.rag.tool-calling-enabled=false
+```
 
 ## 失败降级策略
 

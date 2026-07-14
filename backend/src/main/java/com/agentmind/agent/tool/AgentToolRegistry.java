@@ -39,6 +39,15 @@ public class AgentToolRegistry {
         return tool;
     }
 
+    /**
+     * 返回注册表快照，供 Spring AI 适配器生成模型工具定义。
+     *
+     * <p>调用方只能读取快照，不能在运行期间修改白名单。</p>
+     */
+    public Collection<AgentTool> registeredTools() {
+        return toolsByName.values();
+    }
+
     private String normalize(String toolName) {
         return toolName == null ? "" : toolName.trim().toLowerCase(Locale.ROOT);
     }

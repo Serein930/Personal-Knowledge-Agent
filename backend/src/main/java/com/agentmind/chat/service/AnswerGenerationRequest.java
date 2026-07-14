@@ -11,6 +11,9 @@ import java.util.List;
  */
 public record AnswerGenerationRequest(
         Long workspaceId,
+        Long ownerUserId,
+        Long conversationId,
+        Long messageId,
         String question,
         String promptVersion,
         String promptContext,
@@ -18,4 +21,20 @@ public record AnswerGenerationRequest(
         List<RagCitationResponse> citations,
         RagRefusalDecision refusalDecision
 ) {
+
+    /**
+     * 兼容 Stage 6 中不包含工具执行上下文的构造方式。
+     */
+    public AnswerGenerationRequest(
+            Long workspaceId,
+            String question,
+            String promptVersion,
+            String promptContext,
+            String generationPrompt,
+            List<RagCitationResponse> citations,
+            RagRefusalDecision refusalDecision
+    ) {
+        this(workspaceId, 1L, null, null, question, promptVersion, promptContext,
+                generationPrompt, citations, refusalDecision);
+    }
 }

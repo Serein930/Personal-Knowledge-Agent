@@ -11,6 +11,14 @@ import com.agentmind.agent.audit.model.AgentToolType;
 public record AgentToolDefinition(
         String name,
         String description,
-        AgentToolType type
+        AgentToolType type,
+        String inputSchema
 ) {
+
+    /**
+     * 兼容不需要向模型公开精细参数结构的旧构造方式。
+     */
+    public AgentToolDefinition(String name, String description, AgentToolType type) {
+        this(name, description, type, "{\"type\":\"object\"}");
+    }
 }

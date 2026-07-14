@@ -9,6 +9,14 @@ package com.agentmind.agent.tool.model;
 public record AgentToolExecutionContext(
         Long ownerUserId,
         Long workspaceId,
-        Long conversationId
+        Long conversationId,
+        Long messageId
 ) {
+
+    /**
+     * 兼容显式工具调用接口原有的三字段上下文。
+     */
+    public AgentToolExecutionContext(Long ownerUserId, Long workspaceId, Long conversationId) {
+        this(ownerUserId, workspaceId, conversationId, null);
+    }
 }

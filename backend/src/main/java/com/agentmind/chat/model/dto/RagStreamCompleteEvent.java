@@ -1,5 +1,8 @@
 package com.agentmind.chat.model.dto;
 
+import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
+import java.util.List;
+
 /**
  * 流式问答正常完成事件。
  *
@@ -12,6 +15,7 @@ public record RagStreamCompleteEvent(
         int deltaCount,
         int answerLength,
         RagAnswerGenerationMetadataResponse generationMetadata,
-        TokenUsageResponse usage
+        TokenUsageResponse usage,
+        List<AgentToolCallSummaryResponse> toolCalls
 ) {
 }

@@ -10,6 +10,7 @@ import com.agentmind.chat.model.dto.RagStreamCompleteEvent;
 import com.agentmind.chat.model.dto.RagStreamDeltaEvent;
 import com.agentmind.chat.model.dto.RagStreamErrorEvent;
 import com.agentmind.chat.model.dto.RagStreamMetadataEvent;
+import com.agentmind.chat.model.dto.RagStreamToolCallEvent;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -102,6 +103,7 @@ public class RagStreamingChatService {
                     preparedChat.messageId(),
                     completeAnswer.toString()
             );
+            sendToolCalls(emitter, sessionState, preparedChat.messageId(), generatedAnswer);
             sendEvent(
                     emitter,
                     sessionState,
@@ -113,7 +115,8 @@ public class RagStreamingChatService {
                             deltaSequence.get(),
                             generatedAnswer.answerLength(),
                             generatedAnswer.metadata(),
-                            generatedAnswer.usage()
+                            generatedAnswer.usage(),
+                            generatedAnswer.toolCalls()
                     )
             );
             completeNormally(emitter, sessionState);
@@ -188,6 +191,24 @@ public class RagStreamingChatService {
                     eventId(preparedChat.messageId(), "citation-" + citation.index()),
                     RagStreamEventType.CITATION,
                     citationEvent
+            );
+        }
+    }
+
+    private void sendToolCalls(
+            SseEmitter emitter,
+            StreamSessionState sessionState,
+            Long messageId,
+            StreamingGeneratedAnswer generatedAnswer
+    ) {
+        for (int index = 0; index < generatedAnswer.toolCalls().size(); index++) {
+            int sequence = index + 1;
+            sendEvent(
+                    emitter,
+                    sessionState,
+                    eventId(messageId, "tool-call-" + sequence),
+                    RagStreamEventType.TOOL_CALL,
+                    new RagStreamToolCallEvent(sequence, generatedAnswer.toolCalls().get(index))
             );
         }
     }

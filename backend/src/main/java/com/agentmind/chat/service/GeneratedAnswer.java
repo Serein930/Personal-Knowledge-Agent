@@ -2,6 +2,8 @@ package com.agentmind.chat.service;
 
 import com.agentmind.chat.model.dto.TokenUsageResponse;
 import com.agentmind.chat.model.dto.RagAnswerGenerationMetadataResponse;
+import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
+import java.util.List;
 
 /**
  * 回答生成结果。
@@ -12,6 +14,15 @@ import com.agentmind.chat.model.dto.RagAnswerGenerationMetadataResponse;
 public record GeneratedAnswer(
         String content,
         TokenUsageResponse usage,
-        RagAnswerGenerationMetadataResponse metadata
+        RagAnswerGenerationMetadataResponse metadata,
+        List<AgentToolCallSummaryResponse> toolCalls
 ) {
+
+    public GeneratedAnswer(
+            String content,
+            TokenUsageResponse usage,
+            RagAnswerGenerationMetadataResponse metadata
+    ) {
+        this(content, usage, metadata, List.of());
+    }
 }
