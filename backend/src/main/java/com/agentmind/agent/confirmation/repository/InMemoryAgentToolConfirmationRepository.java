@@ -3,6 +3,8 @@ package com.agentmind.agent.confirmation.repository;
 import com.agentmind.agent.confirmation.model.AgentToolConfirmation;
 import com.agentmind.agent.confirmation.model.AgentToolConfirmationStatus;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -55,7 +57,8 @@ public class InMemoryAgentToolConfirmationRepository implements AgentToolConfirm
             Long confirmationId,
             AgentToolConfirmationStatus expectedStatus,
             AgentToolConfirmationStatus targetStatus,
-            OffsetDateTime updatedAt
+            OffsetDateTime updatedAt,
+            String failureReason
     ) {
         AtomicReference<AgentToolConfirmation> transitioned = new AtomicReference<>();
         confirmations.computeIfPresent(confirmationId, (ignored, current) -> {
@@ -64,10 +67,33 @@ public class InMemoryAgentToolConfirmationRepository implements AgentToolConfirm
                     || current.status() != expectedStatus) {
                 return current;
             }
-            AgentToolConfirmation next = current.transitionTo(targetStatus, updatedAt);
+            AgentToolConfirmation next = current.transitionTo(targetStatus, failureReason, updatedAt);
             transitioned.set(next);
             return next;
         });
         return Optional.ofNullable(transitioned.get());
+    }
+
+    @Override
+    public List<AgentToolConfirmation> findExpiredPendingConfirmations(OffsetDateTime now, int limit) {
+        return confirmations.values().stream()
+                .filter(item -> item.status() == AgentToolConfirmationStatus.PENDING_CONFIRMATION)
+                .filter(item -> !item.expiresAt().isAfter(now))
+                .sorted(Comparator.comparing(AgentToolConfirmation::expiresAt))
+                .limit(Math.max(0, limit))
+                .toList();
+    }
+
+    @Override
+    public List<AgentToolConfirmation> findStaleExecutingConfirmations(
+            OffsetDateTime updatedBefore,
+            int limit
+    ) {
+        return confirmations.values().stream()
+                .filter(item -> item.status() == AgentToolConfirmationStatus.EXECUTING)
+                .filter(item -> !item.updatedAt().isAfter(updatedBefore))
+                .sorted(Comparator.comparing(AgentToolConfirmation::updatedAt))
+                .limit(Math.max(0, limit))
+                .toList();
     }
 }

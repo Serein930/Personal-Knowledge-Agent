@@ -39,9 +39,22 @@ public record AgentToolConfirmation(
     }
 
     public AgentToolConfirmation transitionTo(AgentToolConfirmationStatus targetStatus, OffsetDateTime now) {
+        return transitionTo(targetStatus, null, now);
+    }
+
+    /**
+     * 迁移确认单状态并按需记录维护失败原因。
+     *
+     * <p>普通状态迁移传入空原因；后台恢复无法确认最终结果的执行中任务时，必须留下可审计原因。</p>
+     */
+    public AgentToolConfirmation transitionTo(
+            AgentToolConfirmationStatus targetStatus,
+            String transitionFailureReason,
+            OffsetDateTime now
+    ) {
         return new AgentToolConfirmation(
                 id, ownerUserId, workspaceId, conversationId, messageId, requestId, toolName,
-                arguments, argumentSummary, tokenDigest, targetStatus, executionResponse, failureReason,
+                arguments, argumentSummary, tokenDigest, targetStatus, executionResponse, transitionFailureReason,
                 createdAt, expiresAt, now, executedAt
         );
     }

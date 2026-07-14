@@ -90,18 +90,46 @@ public class JdbcAgentToolConfirmationRepository implements AgentToolConfirmatio
             Long confirmationId,
             AgentToolConfirmationStatus expectedStatus,
             AgentToolConfirmationStatus targetStatus,
-            OffsetDateTime updatedAt
+            OffsetDateTime updatedAt,
+            String failureReason
     ) {
         return jdbcTemplate.query("""
                         update agent_tool_confirmations
-                        set status = ?, updated_at = ?
+                        set status = ?, updated_at = ?, failure_reason = ?
                         where owner_user_id = ? and workspace_id = ? and id = ? and status = ?
                         returning %s
                         """.formatted(COLUMNS), rowMapper,
-                        targetStatus.name(), updatedAt, ownerUserId, workspaceId, confirmationId,
+                        targetStatus.name(), updatedAt, failureReason, ownerUserId, workspaceId, confirmationId,
                         expectedStatus.name())
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public List<AgentToolConfirmation> findExpiredPendingConfirmations(OffsetDateTime now, int limit) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from agent_tool_confirmations "
+                        + "where status = 'PENDING_CONFIRMATION' and expires_at <= ? "
+                        + "order by expires_at, id limit ?",
+                rowMapper,
+                now,
+                Math.max(0, limit)
+        );
+    }
+
+    @Override
+    public List<AgentToolConfirmation> findStaleExecutingConfirmations(
+            OffsetDateTime updatedBefore,
+            int limit
+    ) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from agent_tool_confirmations "
+                        + "where status = 'EXECUTING' and updated_at <= ? "
+                        + "order by updated_at, id limit ?",
+                rowMapper,
+                updatedBefore,
+                Math.max(0, limit)
+        );
     }
 
     private Object[] valuesWithoutId(AgentToolConfirmation confirmation) {

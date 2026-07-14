@@ -45,7 +45,12 @@ $env:AGENTMIND_AGENT_JDBC_INTEGRATION_TEST = "true"
 mvn -Dtest=JdbcAgentWriteToolIntegrationTests test
 ```
 
-测试会清空四张 Stage 7 表，只能连接本地开发数据库。
+测试会清空四张 Stage 7 表，只能连接本地开发数据库。当前测试同时覆盖：
+
+- 确认单、审计和复习卡片正常提交。
+- 两个独立 JDBC 仓储实例并发争抢同一确认单，只有一次条件更新成功。
+- 故障写工具的业务数据随主事务回滚。
+- 失败审计通过独立事务保留，确认单最终收口为 `FAILED`。
 
 ## 验证事务与幂等
 
@@ -54,3 +59,5 @@ mvn -Dtest=JdbcAgentWriteToolIntegrationTests test
 3. 使用相同 `requestId` 和相同参数再次确认，应复用结果。
 4. 使用相同 `requestId` 和不同参数，应返回 `RESOURCE_CONFLICT`。
 5. 两个请求并发确认同一确认单时，只有一个请求能把状态从 `PENDING_CONFIRMATION` 更新为 `EXECUTING`。
+6. 写工具抛出异常时，业务表不应出现部分数据，审计表应保留一条 `FAILED` 记录。
+7. 人工构造超过执行时限的 `EXECUTING` 确认单后，维护任务应将其标记为 `FAILED`，且不会再次执行工具。

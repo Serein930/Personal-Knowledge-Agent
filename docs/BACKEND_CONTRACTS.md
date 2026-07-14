@@ -420,6 +420,8 @@ GET /api/v1/workspaces/{workspaceId}/flashcards?page=1&pageSize=20
 - 相同工具、用户、知识空间和 `requestId` 的相同参数复用既有成功写入。
 - 相同 `requestId` 对应不同参数时返回 `RESOURCE_CONFLICT`，不得错误复用旧结果。
 - 写工具成功执行后仍生成标准工具审计记录；确认单响应不暴露完整参数和令牌摘要。
+- 写工具执行失败时，业务数据和执行状态事务回滚，失败审计使用独立事务提交，确认单最终标记为 `FAILED`。
+- 长时间停留在 `EXECUTING` 的确认单不会被自动重放，而是由维护任务标记失败并提示重新发起确认。
 
 流式回答可以在正文结束后发送写工具建议：
 
@@ -435,6 +437,19 @@ data: {"sequence":1,"proposal":{"confirmation":{"status":"PENDING_CONFIRMATION"}
 - `agentmind.agent.persistence.store=memory`：默认本地和自动测试模式。
 - `agentmind.agent.persistence.store=jdbc`：启用 PostgreSQL 确认单、工具审计、笔记和复习卡片仓储。
 - JDBC 模式使用数据库事务、条件状态更新和业务表唯一幂等索引。
+
+写工具建议生成配置：
+
+- `agentmind.agent.write-proposal.generator=rule`：默认规则模式，适合自动测试和无密钥开发环境。
+- `agentmind.agent.write-proposal.generator=spring-ai`：使用 Spring AI 将模型响应转换为结构化建议。
+- `agentmind.agent.write-proposal.fallback-to-rule-enabled=true`：真实模型失败或返回越权工具时降级到规则模式。
+- 无论采用哪种建议生成器，都只能创建待确认单，不能直接执行写工具。
+
+确认单维护配置：
+
+- `agentmind.agent.confirmation-maintenance.executing-timeout=10m`：执行中确认单异常判定时间。
+- `agentmind.agent.confirmation-maintenance.fixed-delay-millis=60000`：后台维护任务间隔。
+- `agentmind.agent.confirmation-maintenance.batch-size=100`：单次处理上限，避免大批量状态更新阻塞业务请求。
 
 ## 后续实现顺序
 

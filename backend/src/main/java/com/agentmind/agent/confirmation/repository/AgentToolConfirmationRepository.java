@@ -3,6 +3,7 @@ package com.agentmind.agent.confirmation.repository;
 import com.agentmind.agent.confirmation.model.AgentToolConfirmation;
 import com.agentmind.agent.confirmation.model.AgentToolConfirmationStatus;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,12 +22,42 @@ public interface AgentToolConfirmationRepository {
             Long confirmationId
     );
 
-    Optional<AgentToolConfirmation> compareAndSetStatus(
+    default Optional<AgentToolConfirmation> compareAndSetStatus(
             Long ownerUserId,
             Long workspaceId,
             Long confirmationId,
             AgentToolConfirmationStatus expectedStatus,
             AgentToolConfirmationStatus targetStatus,
             OffsetDateTime updatedAt
+    ) {
+        return compareAndSetStatus(
+                ownerUserId,
+                workspaceId,
+                confirmationId,
+                expectedStatus,
+                targetStatus,
+                updatedAt,
+                null
+        );
+    }
+
+    Optional<AgentToolConfirmation> compareAndSetStatus(
+            Long ownerUserId,
+            Long workspaceId,
+            Long confirmationId,
+            AgentToolConfirmationStatus expectedStatus,
+            AgentToolConfirmationStatus targetStatus,
+            OffsetDateTime updatedAt,
+            String failureReason
     );
+
+    /**
+     * 查找已经超过确认时限、仍处于待确认状态的确认单。
+     */
+    List<AgentToolConfirmation> findExpiredPendingConfirmations(OffsetDateTime now, int limit);
+
+    /**
+     * 查找长时间没有更新、可能因进程中断而遗留的执行中确认单。
+     */
+    List<AgentToolConfirmation> findStaleExecutingConfirmations(OffsetDateTime updatedBefore, int limit);
 }

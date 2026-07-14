@@ -29,6 +29,17 @@ agentmind:
 - 自动化测试。
 - 没有真实模型密钥的开发环境。
 
+默认写工具建议也使用规则模式：
+
+```yaml
+agentmind:
+  agent:
+    write-proposal:
+      generator: rule
+      prompt-version: write-tool-proposal-v1
+      fallback-to-rule-enabled: true
+```
+
 ## 环境变量
 
 真实模型联调前，只在本机终端设置环境变量，不要写入仓库文件：
@@ -57,7 +68,7 @@ $env:SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL="gpt-4o-mini"
 cd D:\Program\AgentMind\backend
 
 mvn spring-boot:run `
-  "-Dspring-boot.run.arguments=--spring.ai.model.chat=openai --agentmind.rag.answer-generator=spring-ai --agentmind.rag.model-name=gpt-4o-mini"
+  "-Dspring-boot.run.arguments=--spring.ai.model.chat=openai --agentmind.rag.answer-generator=spring-ai --agentmind.rag.model-name=gpt-4o-mini --agentmind.agent.write-proposal.generator=spring-ai"
 ```
 
 关键开关说明：
@@ -67,6 +78,8 @@ mvn spring-boot:run `
 - `agentmind.rag.model-name=gpt-4o-mini`：写入项目侧观测元数据，方便日志和后续审计表识别模型。
 - `agentmind.rag.tool-calling-enabled=true`：向真实模型提供当前只读工具白名单。
 - `agentmind.rag.max-tool-round-trips=4`：限制同步问答中模型与工具的最大往返次数，防止异常循环。
+- `agentmind.agent.write-proposal.generator=spring-ai`：让写工具建议使用 Spring AI 结构化输出。
+- `agentmind.agent.write-proposal.fallback-to-rule-enabled=true`：模型建议失败、字段缺失或工具越过白名单时回退到规则模式。
 
 当前模型可见工具：
 
@@ -74,6 +87,8 @@ mvn spring-boot:run `
 - `document_read_chunk`：对应内部工具 `document.read_chunk`，读取当前知识空间中的指定文档片段。
 
 模型看到的是符合供应商命名限制的下划线名称，后端执行时仍会映射回内部白名单名称。写工具不会自动暴露给模型。
+
+写工具建议采用另一条受控链路：模型返回强类型 JSON，服务端只接受 `note.create` 和 `flashcard.create`，并重新组装参数后创建待确认单。模型不能读取确认令牌，也不能直接调用确认接口。
 
 ## 手动联调流程
 

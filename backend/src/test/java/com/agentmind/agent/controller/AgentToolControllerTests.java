@@ -161,4 +161,21 @@ class AgentToolControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total", equalTo(0)));
     }
+
+    @Test
+    void failedToolCallShouldPersistFinalFailureAuditWithoutPendingRecord() throws Exception {
+        long workspaceId = 823L;
+        mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/agent/tool-calls", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"toolName":"system.unknown","requestId":"failed-audit-823","arguments":{}}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/agent/tool-calls", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total", equalTo(1)))
+                .andExpect(jsonPath("$.data.records[0].status", equalTo("FAILED")))
+                .andExpect(jsonPath("$.data.records[0].toolName", equalTo("system.unknown")));
+    }
 }

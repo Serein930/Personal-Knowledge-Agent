@@ -5,6 +5,7 @@ import com.agentmind.agent.audit.model.AgentToolCallStatus;
 import com.agentmind.agent.audit.model.AgentToolType;
 import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
 import com.agentmind.agent.audit.repository.AgentToolCallAuditRepository;
+import com.agentmind.agent.audit.service.AgentToolFailureAuditRecorder;
 import com.agentmind.agent.model.dto.AgentToolExecutionRequest;
 import com.agentmind.agent.model.dto.AgentToolExecutionResponse;
 import com.agentmind.agent.tool.AgentTool;
@@ -43,17 +44,20 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
     private final AgentToolExecutionAuthorizer authorizer;
     private final AgentToolRegistry toolRegistry;
     private final AgentToolCallAuditRepository auditRepository;
+    private final AgentToolFailureAuditRecorder failureAuditRecorder;
     private final InMemoryAgentToolResultCache resultCache;
 
     public DefaultAgentToolCallingOrchestrator(
             AgentToolExecutionAuthorizer authorizer,
             AgentToolRegistry toolRegistry,
             AgentToolCallAuditRepository auditRepository,
+            AgentToolFailureAuditRecorder failureAuditRecorder,
             InMemoryAgentToolResultCache resultCache
     ) {
         this.authorizer = authorizer;
         this.toolRegistry = toolRegistry;
         this.auditRepository = auditRepository;
+        this.failureAuditRecorder = failureAuditRecorder;
         this.resultCache = resultCache;
     }
 
@@ -186,14 +190,11 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
         audit.setRequestFingerprint(requestFingerprint);
         audit.setStatus(AgentToolCallStatus.PENDING);
         audit.setCreatedAt(OffsetDateTime.now());
-        return auditRepository.save(audit);
+        return audit;
     }
 
     private void markFailed(AgentToolCallAudit audit, long startedAtNanos, String errorMessage) {
-        audit.setStatus(AgentToolCallStatus.FAILED);
-        audit.setErrorMessage(errorMessage);
-        audit.setLatencyMs(elapsedMillis(startedAtNanos));
-        auditRepository.save(audit);
+        failureAuditRecorder.recordFailure(audit, elapsedMillis(startedAtNanos), errorMessage);
     }
 
     private AgentToolCallSummaryResponse toSummary(AgentToolCallAudit audit) {

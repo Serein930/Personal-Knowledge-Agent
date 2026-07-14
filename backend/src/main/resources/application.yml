@@ -34,8 +34,18 @@ agentmind:
   agent:
     persistence:
       store: memory
+    write-proposal:
+      generator: rule
+      prompt-version: write-tool-proposal-v1
+      fallback-to-rule-enabled: true
     write-confirmation:
       ttl: 5m
+    confirmation-maintenance:
+      enabled: true
+      fixed-delay-millis: 60000
+      initial-delay-millis: 60000
+      executing-timeout: 10m
+      batch-size: 100
   storage:
     local-root: .agentmind-storage
   vector-store:

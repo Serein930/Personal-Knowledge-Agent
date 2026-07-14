@@ -31,6 +31,10 @@ create index if not exists idx_agent_tool_confirmations_expiration
     on agent_tool_confirmations (status, expires_at)
     where status = 'PENDING_CONFIRMATION';
 
+create index if not exists idx_agent_tool_confirmations_executing_recovery
+    on agent_tool_confirmations (status, updated_at)
+    where status = 'EXECUTING';
+
 create table if not exists agent_tool_call_audits (
     id bigserial primary key,
     owner_user_id bigint not null,
