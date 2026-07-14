@@ -98,6 +98,14 @@ class SpringAiAgentToolCallbackAdapterTests {
         }
 
         @Override
+        public AgentToolExecutionResponse executeConfirmedWrite(
+                AgentToolExecutionContext context,
+                AgentToolExecutionRequest request
+        ) {
+            throw new UnsupportedOperationException("适配器测试不执行已确认写工具");
+        }
+
+        @Override
         public PageResponse<AgentToolCallSummaryResponse> listAudits(
                 AgentToolExecutionContext context,
                 int page,

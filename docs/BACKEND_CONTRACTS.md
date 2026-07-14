@@ -374,6 +374,49 @@ GET /api/v1/workspaces/{workspaceId}/agent/tool-calls?page=1&pageSize=20
 - 调用上下文必须通过用户、知识空间和可选会话归属校验。
 - 审计记录只保存参数摘要和结果摘要，不重复保存完整私有知识内容。
 
+## 写工具确认接口
+
+写工具不能通过普通工具调用接口直接执行。当前首个写工具为 `note.create`，参数为 `title` 和 `content`。
+
+创建确认单：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations
+```
+
+请求必须携带稳定的 `requestId`。成功响应返回 `PENDING_CONFIRMATION` 确认单和只出现一次的 `confirmationToken`。
+
+确认与拒绝：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{confirmationId}/confirm
+POST /api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{confirmationId}/reject
+```
+
+请求体：
+
+```json
+{
+  "confirmationToken": "创建确认单时返回的一次性令牌"
+}
+```
+
+查询确认单与查询笔记：
+
+```text
+GET /api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{confirmationId}
+GET /api/v1/workspaces/{workspaceId}/notes?page=1&pageSize=20
+```
+
+安全规则：
+
+- 服务端只保存确认令牌摘要，不保存或记录令牌明文。
+- 确认时重新校验用户、知识空间、会话和可选消息归属。
+- 确认单状态从 `PENDING_CONFIRMATION` 原子迁移，避免并发重复执行。
+- 相同工具、用户、知识空间和 `requestId` 的相同参数复用既有成功写入。
+- 相同 `requestId` 对应不同参数时返回 `RESOURCE_CONFLICT`，不得错误复用旧结果。
+- 写工具成功执行后仍生成标准工具审计记录；确认单响应不暴露完整参数和令牌摘要。
+
 ## 后续实现顺序
 
 1. Stage 1 先实现统一响应、异常处理和健康检查。

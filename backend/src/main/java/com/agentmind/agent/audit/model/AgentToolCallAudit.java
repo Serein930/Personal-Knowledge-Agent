@@ -19,6 +19,7 @@ public class AgentToolCallAudit {
     private String toolName;
     private AgentToolType toolType;
     private String requestPayload;
+    private String requestFingerprint;
     private String responseSummary;
     private AgentToolCallStatus status;
     private String errorMessage;
@@ -95,6 +96,14 @@ public class AgentToolCallAudit {
 
     public void setRequestPayload(String requestPayload) {
         this.requestPayload = requestPayload;
+    }
+
+    public String getRequestFingerprint() {
+        return requestFingerprint;
+    }
+
+    public void setRequestFingerprint(String requestFingerprint) {
+        this.requestFingerprint = requestFingerprint;
     }
 
     public String getResponseSummary() {

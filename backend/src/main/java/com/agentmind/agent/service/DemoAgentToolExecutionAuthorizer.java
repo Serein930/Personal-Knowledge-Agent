@@ -42,5 +42,17 @@ public class DemoAgentToolExecutionAuthorizer implements AgentToolExecutionAutho
                             "会话不存在或无权访问"
                     ));
         }
+        if (context.messageId() != null) {
+            if (context.conversationId() == null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "校验消息归属时必须同时提供会话编号");
+            }
+            chatMemoryRepository.findMessageByWorkspaceIdAndConversationIdAndId(
+                            context.workspaceId(), context.conversationId(), context.messageId()
+                    )
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.RESOURCE_NOT_FOUND,
+                            "消息不存在或无权访问"
+                    ));
+        }
     }
 }

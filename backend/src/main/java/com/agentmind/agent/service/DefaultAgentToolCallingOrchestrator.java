@@ -2,6 +2,7 @@ package com.agentmind.agent.service;
 
 import com.agentmind.agent.audit.model.AgentToolCallAudit;
 import com.agentmind.agent.audit.model.AgentToolCallStatus;
+import com.agentmind.agent.audit.model.AgentToolType;
 import com.agentmind.agent.audit.model.dto.AgentToolCallSummaryResponse;
 import com.agentmind.agent.audit.repository.AgentToolCallAuditRepository;
 import com.agentmind.agent.model.dto.AgentToolExecutionRequest;
@@ -14,9 +15,15 @@ import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.exception.ErrorCode;
 import com.agentmind.common.response.PageResponse;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.StringJoiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -55,13 +62,36 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
             AgentToolExecutionContext context,
             AgentToolExecutionRequest request
     ) {
+        return executeInternal(context, request, false);
+    }
+
+    @Override
+    public synchronized AgentToolExecutionResponse executeConfirmedWrite(
+            AgentToolExecutionContext context,
+            AgentToolExecutionRequest request
+    ) {
+        return executeInternal(context, request, true);
+    }
+
+    private AgentToolExecutionResponse executeInternal(
+            AgentToolExecutionContext context,
+            AgentToolExecutionRequest request,
+            boolean confirmedWrite
+    ) {
         authorizer.authorize(context);
         String requestId = normalizeRequestId(request.requestId());
+        String requestFingerprint = fingerprintArguments(request.arguments());
         if (requestId != null) {
             AgentToolCallAudit existing = auditRepository.findSucceededByExecutionKey(
-                    context.ownerUserId(), context.workspaceId(), requestId
+                    context.ownerUserId(), context.workspaceId(), request.toolName().trim(), requestId
             ).orElse(null);
             if (existing != null) {
+                if (!requestFingerprint.equals(existing.getRequestFingerprint())) {
+                    throw new BusinessException(
+                            ErrorCode.RESOURCE_CONFLICT,
+                            "相同请求编号不能用于不同的工具参数"
+                    );
+                }
                 return new AgentToolExecutionResponse(
                         toSummary(existing),
                         resultCache.get(existing.getId()).orElse(null),
@@ -70,11 +100,13 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
             }
         }
 
-        AgentToolCallAudit audit = createPendingAudit(context, request, requestId);
+        AgentToolCallAudit audit = createPendingAudit(context, request, requestId, requestFingerprint);
         long startedAtNanos = System.nanoTime();
         try {
             AgentTool tool = toolRegistry.requireTool(request.toolName());
             audit.setToolType(tool.definition().type());
+            verifyExecutionChannel(tool, confirmedWrite);
+            tool.validateArguments(request.arguments());
             AgentToolExecutionResult result = tool.execute(context, request.arguments());
             audit.setStatus(AgentToolCallStatus.SUCCEEDED);
             audit.setResponseSummary(result.resultSummary());
@@ -89,6 +121,15 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
             log.error("智能体工具调用失败，工具名称={}", request.toolName(), exception);
             markFailed(audit, startedAtNanos, "工具执行发生未预期异常");
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "智能体工具执行失败");
+        }
+    }
+
+    private void verifyExecutionChannel(AgentTool tool, boolean confirmedWrite) {
+        if (confirmedWrite && tool.definition().type() != AgentToolType.WRITE) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "确认执行入口只允许调用写工具");
+        }
+        if (!confirmedWrite && tool.definition().type() == AgentToolType.WRITE) {
+            throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "写工具必须先创建确认单并完成用户确认");
         }
     }
 
@@ -131,7 +172,8 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
     private AgentToolCallAudit createPendingAudit(
             AgentToolExecutionContext context,
             AgentToolExecutionRequest request,
-            String requestId
+            String requestId,
+            String requestFingerprint
     ) {
         AgentToolCallAudit audit = new AgentToolCallAudit();
         audit.setOwnerUserId(context.ownerUserId());
@@ -141,6 +183,7 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
         audit.setRequestId(requestId);
         audit.setToolName(request.toolName().trim());
         audit.setRequestPayload(summarizeArguments(request.arguments()));
+        audit.setRequestFingerprint(requestFingerprint);
         audit.setStatus(AgentToolCallStatus.PENDING);
         audit.setCreatedAt(OffsetDateTime.now());
         return auditRepository.save(audit);
@@ -184,5 +227,41 @@ public class DefaultAgentToolCallingOrchestrator implements AgentToolCallingOrch
 
     private long elapsedMillis(long startedAtNanos) {
         return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
+    }
+
+    private String fingerprintArguments(JsonNode arguments) {
+        String canonicalValue = canonicalize(arguments);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(canonicalValue.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("当前 Java 运行环境不支持 SHA-256", exception);
+        }
+    }
+
+    /**
+     * 按字段名排序生成稳定 JSON，避免相同对象仅因字段提交顺序不同而得到不同请求指纹。
+     */
+    private String canonicalize(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "null";
+        }
+        if (node.isObject()) {
+            List<String> fieldNames = new ArrayList<>();
+            node.fieldNames().forEachRemaining(fieldNames::add);
+            Collections.sort(fieldNames);
+            StringJoiner fields = new StringJoiner(",", "{", "}");
+            for (String fieldName : fieldNames) {
+                fields.add(new TextNode(fieldName) + ":" + canonicalize(node.get(fieldName)));
+            }
+            return fields.toString();
+        }
+        if (node.isArray()) {
+            StringJoiner values = new StringJoiner(",", "[", "]");
+            node.forEach(value -> values.add(canonicalize(value)));
+            return values.toString();
+        }
+        return node.toString();
     }
 }

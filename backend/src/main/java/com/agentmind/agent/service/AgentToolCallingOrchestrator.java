@@ -19,6 +19,16 @@ public interface AgentToolCallingOrchestrator {
             AgentToolExecutionRequest request
     );
 
+    /**
+     * 执行已经通过用户确认流程的写工具。
+     *
+     * <p>该入口不得直接暴露给控制层或模型适配器，只允许写工具确认应用服务调用。</p>
+     */
+    AgentToolExecutionResponse executeConfirmedWrite(
+            AgentToolExecutionContext context,
+            AgentToolExecutionRequest request
+    );
+
     PageResponse<AgentToolCallSummaryResponse> listAudits(
             AgentToolExecutionContext context,
             int page,

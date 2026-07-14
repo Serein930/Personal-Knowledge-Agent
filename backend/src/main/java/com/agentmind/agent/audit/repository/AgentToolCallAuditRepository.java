@@ -16,6 +16,7 @@ public interface AgentToolCallAuditRepository {
     Optional<AgentToolCallAudit> findSucceededByExecutionKey(
             Long ownerUserId,
             Long workspaceId,
+            String toolName,
             String requestId
     );
 

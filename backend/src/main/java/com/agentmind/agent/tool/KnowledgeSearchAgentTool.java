@@ -56,6 +56,12 @@ public class KnowledgeSearchAgentTool implements AgentTool {
     }
 
     @Override
+    public void validateArguments(JsonNode arguments) {
+        AgentToolArgumentReader.requireText(arguments, "query", 1000);
+        AgentToolArgumentReader.optionalInteger(arguments, "topK", 5, 1, 20);
+    }
+
+    @Override
     public AgentToolExecutionResult execute(AgentToolExecutionContext context, JsonNode arguments) {
         String query = AgentToolArgumentReader.requireText(arguments, "query", 1000);
         int topK = AgentToolArgumentReader.optionalInteger(arguments, "topK", 5, 1, 20);

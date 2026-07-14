@@ -38,6 +38,7 @@ public class InMemoryAgentToolCallAuditRepository implements AgentToolCallAuditR
     public Optional<AgentToolCallAudit> findSucceededByExecutionKey(
             Long ownerUserId,
             Long workspaceId,
+            String toolName,
             String requestId
     ) {
         if (!StringUtils.hasText(requestId)) {
@@ -46,6 +47,7 @@ public class InMemoryAgentToolCallAuditRepository implements AgentToolCallAuditR
         return audits.values().stream()
                 .filter(audit -> ownerUserId.equals(audit.getOwnerUserId()))
                 .filter(audit -> workspaceId.equals(audit.getWorkspaceId()))
+                .filter(audit -> toolName.equals(audit.getToolName()))
                 .filter(audit -> requestId.equals(audit.getRequestId()))
                 .filter(audit -> audit.getStatus() == AgentToolCallStatus.SUCCEEDED)
                 .findFirst();

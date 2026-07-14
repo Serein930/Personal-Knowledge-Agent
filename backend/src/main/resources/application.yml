@@ -29,6 +29,9 @@ logging:
     com.agentmind: INFO
 
 agentmind:
+  agent:
+    write-confirmation:
+      ttl: 5m
   storage:
     local-root: .agentmind-storage
   vector-store:

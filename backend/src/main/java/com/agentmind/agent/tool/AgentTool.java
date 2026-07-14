@@ -14,5 +14,15 @@ public interface AgentTool {
 
     AgentToolDefinition definition();
 
+    /**
+     * 在执行工具前校验模型或前端提交的参数。
+     *
+     * <p>写工具确认单必须在生成确认令牌前完成参数校验，因此校验能力需要与真正执行动作分离。
+     * 默认实现保留对既有工具的兼容性，新工具应覆盖该方法并给出明确的字段约束。</p>
+     */
+    default void validateArguments(JsonNode arguments) {
+        AgentToolArgumentReader.requireObject(arguments);
+    }
+
     AgentToolExecutionResult execute(AgentToolExecutionContext context, JsonNode arguments);
 }

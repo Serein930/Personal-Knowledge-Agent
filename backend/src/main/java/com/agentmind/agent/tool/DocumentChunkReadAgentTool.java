@@ -62,6 +62,12 @@ public class DocumentChunkReadAgentTool implements AgentTool {
     }
 
     @Override
+    public void validateArguments(JsonNode arguments) {
+        AgentToolArgumentReader.requirePositiveLong(arguments, "documentId");
+        AgentToolArgumentReader.requireText(arguments, "chunkId", 120);
+    }
+
+    @Override
     public AgentToolExecutionResult execute(AgentToolExecutionContext context, JsonNode arguments) {
         long documentId = AgentToolArgumentReader.requirePositiveLong(arguments, "documentId");
         String chunkId = AgentToolArgumentReader.requireText(arguments, "chunkId", 120);
