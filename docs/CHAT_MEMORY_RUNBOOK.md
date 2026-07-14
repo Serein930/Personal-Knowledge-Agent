@@ -9,15 +9,19 @@ agentmind:
   chat:
     memory:
       store: memory
-      max-messages: 12
-      max-context-chars: 6000
+      max-history-turns: 12
+      history-scan-message-limit: 200
+      model-context-window-tokens: 8192
+      reserved-context-tokens: 4096
 ```
 
 - `store`：默认使用 `memory`，服务重启后会话会清空；可通过 `redis` profile 切换到 Redis。
-- `max-messages`：放入提示词的最近已完成消息数量，不是问答轮次数量。
-- `max-context-chars`：历史消息正文的近似字符预算，不包含角色标签和固定提示词。
+- `max-history-turns`：最多放入提示词的完整成功问答轮次。
+- `history-scan-message-limit`：从仓储读取的最近完成消息数量，用于跳过失败和取消轮次。
+- `model-context-window-tokens`：当前模型的上下文 Token 上限。
+- `reserved-context-tokens`：为系统提示词、当前问题、检索片段和模型输出预留的 Token。
 
-两个限制会同时生效。系统先取最近完成的消息，再从新到旧按字符预算裁剪，最终恢复为时间正序放入提示词。
+短期历史预算等于模型上下文上限减去预留 Token。系统先将成功的用户消息和助手回答配成完整轮次，再从最新轮次向前装入预算；任何一轮无法完整放入时立即停止，不会截断消息或产生孤立问题。
 
 ## 创建会话并继续追问
 
@@ -92,6 +96,38 @@ GET /api/v1/workspaces/1/chat/conversations/{conversationId}/messages?page=1&pag
 
 用户消息创建后直接为 `COMPLETED`。
 
+## 管理会话
+
+重命名会话：
+
+```powershell
+Invoke-RestMethod `
+  -Method Patch `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/chat/conversations/$conversationId" `
+  -ContentType "application/json" `
+  -Body '{"title":"Java Agent 学习会话"}'
+```
+
+归档会话：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/chat/conversations/$conversationId/archive"
+```
+
+归档操作是幂等的。归档后仍可查询历史消息，但继续同步或流式问答会返回 `409 RESOURCE_CONFLICT`。已经开始生成的助手消息仍可进入最终状态。
+
+删除会话：
+
+```powershell
+Invoke-RestMethod `
+  -Method Delete `
+  -Uri "http://localhost:8080/api/v1/workspaces/1/chat/conversations/$conversationId"
+```
+
+删除会物理清理当前短期记忆中的会话、消息和索引，当前阶段不提供恢复功能。
+
 ## 知识空间隔离
 
 即使会话编号真实存在，也不能从其他知识空间读取：
@@ -114,7 +150,7 @@ GET /api/v1/workspaces/2/chat/conversations/{workspace1ConversationId}/messages
 ## 当前边界
 
 - 当前尚未接入认证，知识空间归属规则已经落到仓储和服务契约，后续还需要绑定当前登录用户。
-- 当前使用字符数近似控制上下文，真实模型阶段应增加基于 tokenizer 的令牌预算。
-- 当前没有会话重命名、归档和删除接口。
+- 当前默认使用 Spring AI JTokkit 估算 Token；接入非兼容编码模型时应提供对应的 `ChatTokenCounter` 实现。
+- 当前删除是短期记忆物理删除，后续若会话进入正式知识资产，应增加软删除和恢复策略。
 - 内存适配器只保证单进程内编号和状态更新，服务重启后数据会清空；需要跨进程保存时使用 Redis 模式。
 - Redis 模式的启动、键结构和手动测试见 `docs/REDIS_CHAT_MEMORY_RUNBOOK.md`。

@@ -64,6 +64,7 @@ public class GlobalExceptionHandler {
     private HttpStatus resolveHttpStatus(ErrorCode errorCode) {
         return switch (errorCode) {
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case RESOURCE_CONFLICT -> HttpStatus.CONFLICT;
             case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
         };

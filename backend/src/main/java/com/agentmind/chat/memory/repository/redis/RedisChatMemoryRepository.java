@@ -42,6 +42,9 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
             end
 
             local conversation = cjson.decode(conversationJson)
+            if conversation.status ~= ARGV[8] then
+                return -1
+            end
             conversation.updatedAt = ARGV[4]
 
             redis.call('SET', KEYS[1], cjson.encode(conversation))
@@ -85,6 +88,49 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
             redis.call('EXPIRE', KEYS[4], ARGV[7])
             return existingJson
             """, String.class);
+
+    /**
+     * 会话标题和状态更新通过同一脚本完成，并同步维护会话排序分数与相关键的空闲过期时间。
+     */
+    private static final DefaultRedisScript<String> UPDATE_CONVERSATION_SCRIPT = new DefaultRedisScript<>("""
+            local conversationJson = redis.call('GET', KEYS[1])
+            if not conversationJson then
+                return nil
+            end
+
+            local conversation = cjson.decode(conversationJson)
+            if conversation[ARGV[1]] ~= ARGV[2] then
+                conversation[ARGV[1]] = ARGV[2]
+                conversation.updatedAt = ARGV[3]
+                conversationJson = cjson.encode(conversation)
+                redis.call('SET', KEYS[1], conversationJson)
+                redis.call('ZADD', KEYS[4], ARGV[4], ARGV[5])
+            end
+
+            redis.call('EXPIRE', KEYS[1], ARGV[6])
+            redis.call('EXPIRE', KEYS[2], ARGV[6])
+            redis.call('EXPIRE', KEYS[3], ARGV[6])
+            redis.call('EXPIRE', KEYS[4], ARGV[6])
+            return conversationJson
+            """, String.class);
+
+    /**
+     * 删除脚本在一个原子操作中移除会话正文、消息哈希、消息顺序和知识空间索引成员，防止留下孤立消息。
+     */
+    private static final DefaultRedisScript<Long> DELETE_CONVERSATION_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 0
+            end
+
+            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+            redis.call('ZREM', KEYS[4], ARGV[1])
+            if redis.call('ZCARD', KEYS[4]) == 0 then
+                redis.call('DEL', KEYS[4])
+            else
+                redis.call('EXPIRE', KEYS[4], ARGV[2])
+            end
+            return 1
+            """, Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final RedisChatMemoryKeyFactory keyFactory;
@@ -149,6 +195,32 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
     }
 
     @Override
+    public Optional<ChatConversation> renameConversation(Long workspaceId, Long conversationId, String title) {
+        return updateConversation(workspaceId, conversationId, "title", title);
+    }
+
+    @Override
+    public Optional<ChatConversation> archiveConversation(Long workspaceId, Long conversationId) {
+        return updateConversation(
+                workspaceId,
+                conversationId,
+                "status",
+                ChatConversationStatus.ARCHIVED.name()
+        );
+    }
+
+    @Override
+    public boolean deleteConversation(Long workspaceId, Long conversationId) {
+        Long deleted = redisTemplate.execute(
+                DELETE_CONVERSATION_SCRIPT,
+                conversationKeys(workspaceId, conversationId),
+                conversationId.toString(),
+                Long.toString(ttlSeconds)
+        );
+        return deleted != null && deleted == 1L;
+    }
+
+    @Override
     public List<ChatConversation> findConversationsByWorkspaceId(Long workspaceId, int offset, int limit) {
         List<ChatConversation> page = loadExistingConversations(workspaceId).stream()
                 .skip(offset)
@@ -171,7 +243,7 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
             ChatMessageStatus status,
             String content
     ) {
-        requireConversation(workspaceId, conversationId);
+        requireActiveConversation(workspaceId, conversationId);
         Long messageId = redisTemplate.opsForValue().increment(keyFactory.messageSequence());
         if (messageId == null) {
             throw new IllegalStateException("Redis 无法生成消息编号");
@@ -198,8 +270,12 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
                 now.toString(),
                 Double.toString(timestampScore(now)),
                 conversationId.toString(),
-                Long.toString(ttlSeconds)
+                Long.toString(ttlSeconds),
+                ChatConversationStatus.ACTIVE.name()
         );
+        if (created != null && created == -1L) {
+            throw new IllegalStateException("归档会话不能创建新消息");
+        }
         if (created == null || created == 0L) {
             throw new IllegalStateException("会话不存在或不属于当前知识空间");
         }
@@ -399,9 +475,43 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
         );
     }
 
+    private Optional<ChatConversation> updateConversation(
+            Long workspaceId,
+            Long conversationId,
+            String field,
+            String value
+    ) {
+        OffsetDateTime now = OffsetDateTime.now();
+        String updatedJson = redisTemplate.execute(
+                UPDATE_CONVERSATION_SCRIPT,
+                conversationKeys(workspaceId, conversationId),
+                field,
+                value,
+                now.toString(),
+                Double.toString(timestampScore(now)),
+                conversationId.toString(),
+                Long.toString(ttlSeconds)
+        );
+        if (updatedJson == null) {
+            return Optional.empty();
+        }
+        ChatConversation conversation = codec.readConversation(updatedJson);
+        return conversation.workspaceId().equals(workspaceId) && conversation.id().equals(conversationId)
+                ? Optional.of(conversation)
+                : Optional.empty();
+    }
+
     private void requireConversation(Long workspaceId, Long conversationId) {
         if (findConversationByWorkspaceIdAndId(workspaceId, conversationId).isEmpty()) {
             throw new IllegalStateException("会话不存在或不属于当前知识空间");
+        }
+    }
+
+    private void requireActiveConversation(Long workspaceId, Long conversationId) {
+        ChatConversation conversation = findConversationByWorkspaceIdAndId(workspaceId, conversationId)
+                .orElseThrow(() -> new IllegalStateException("会话不存在或不属于当前知识空间"));
+        if (conversation.status() == ChatConversationStatus.ARCHIVED) {
+            throw new IllegalStateException("归档会话不能创建新消息");
         }
     }
 

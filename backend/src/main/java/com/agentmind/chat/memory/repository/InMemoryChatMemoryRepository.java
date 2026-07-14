@@ -58,6 +58,67 @@ public class InMemoryChatMemoryRepository implements ChatMemoryRepository {
     }
 
     @Override
+    public synchronized Optional<ChatConversation> renameConversation(
+            Long workspaceId,
+            Long conversationId,
+            String title
+    ) {
+        AtomicReference<ChatConversation> result = new AtomicReference<>();
+        conversations.computeIfPresent(conversationId, (ignored, existing) -> {
+            if (!existing.workspaceId().equals(workspaceId)) {
+                return existing;
+            }
+            ChatConversation renamed = new ChatConversation(
+                    existing.id(),
+                    existing.workspaceId(),
+                    title,
+                    existing.status(),
+                    existing.createdAt(),
+                    OffsetDateTime.now()
+            );
+            result.set(renamed);
+            return renamed;
+        });
+        return Optional.ofNullable(result.get());
+    }
+
+    @Override
+    public synchronized Optional<ChatConversation> archiveConversation(Long workspaceId, Long conversationId) {
+        AtomicReference<ChatConversation> result = new AtomicReference<>();
+        conversations.computeIfPresent(conversationId, (ignored, existing) -> {
+            if (!existing.workspaceId().equals(workspaceId)) {
+                return existing;
+            }
+            if (existing.status() == ChatConversationStatus.ARCHIVED) {
+                result.set(existing);
+                return existing;
+            }
+            ChatConversation archived = new ChatConversation(
+                    existing.id(),
+                    existing.workspaceId(),
+                    existing.title(),
+                    ChatConversationStatus.ARCHIVED,
+                    existing.createdAt(),
+                    OffsetDateTime.now()
+            );
+            result.set(archived);
+            return archived;
+        });
+        return Optional.ofNullable(result.get());
+    }
+
+    @Override
+    public synchronized boolean deleteConversation(Long workspaceId, Long conversationId) {
+        ChatConversation conversation = conversations.get(conversationId);
+        if (conversation == null || !conversation.workspaceId().equals(workspaceId)) {
+            return false;
+        }
+        conversations.remove(conversationId);
+        messages.entrySet().removeIf(entry -> belongsTo(entry.getValue(), workspaceId, conversationId));
+        return true;
+    }
+
+    @Override
     public List<ChatConversation> findConversationsByWorkspaceId(Long workspaceId, int offset, int limit) {
         return conversations.values().stream()
                 .filter(conversation -> conversation.workspaceId().equals(workspaceId))
@@ -77,14 +138,14 @@ public class InMemoryChatMemoryRepository implements ChatMemoryRepository {
     }
 
     @Override
-    public ChatMessage createMessage(
+    public synchronized ChatMessage createMessage(
             Long workspaceId,
             Long conversationId,
             ChatMessageRole role,
             ChatMessageStatus status,
             String content
     ) {
-        requireConversation(workspaceId, conversationId);
+        requireActiveConversation(workspaceId, conversationId);
         OffsetDateTime now = OffsetDateTime.now();
         ChatMessage message = new ChatMessage(
                 messageIdGenerator.incrementAndGet(),
@@ -203,6 +264,14 @@ public class InMemoryChatMemoryRepository implements ChatMemoryRepository {
     private void requireConversation(Long workspaceId, Long conversationId) {
         if (findConversationByWorkspaceIdAndId(workspaceId, conversationId).isEmpty()) {
             throw new IllegalStateException("会话不存在或不属于当前知识空间");
+        }
+    }
+
+    private void requireActiveConversation(Long workspaceId, Long conversationId) {
+        ChatConversation conversation = findConversationByWorkspaceIdAndId(workspaceId, conversationId)
+                .orElseThrow(() -> new IllegalStateException("会话不存在或不属于当前知识空间"));
+        if (conversation.status() == ChatConversationStatus.ARCHIVED) {
+            throw new IllegalStateException("归档会话不能创建新消息");
         }
     }
 

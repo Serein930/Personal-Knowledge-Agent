@@ -19,6 +19,12 @@ public interface ChatMemoryRepository {
 
     Optional<ChatConversation> findConversationByWorkspaceIdAndId(Long workspaceId, Long conversationId);
 
+    Optional<ChatConversation> renameConversation(Long workspaceId, Long conversationId, String title);
+
+    Optional<ChatConversation> archiveConversation(Long workspaceId, Long conversationId);
+
+    boolean deleteConversation(Long workspaceId, Long conversationId);
+
     List<ChatConversation> findConversationsByWorkspaceId(Long workspaceId, int offset, int limit);
 
     long countConversationsByWorkspaceId(Long workspaceId);

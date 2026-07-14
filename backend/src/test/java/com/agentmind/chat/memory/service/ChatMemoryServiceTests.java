@@ -1,24 +1,32 @@
 package com.agentmind.chat.memory.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.agentmind.chat.memory.config.ChatMemoryProperties;
+import com.agentmind.chat.memory.model.ChatConversationStatus;
 import com.agentmind.chat.memory.model.ChatMessage;
 import com.agentmind.chat.memory.model.ChatMessageRole;
 import com.agentmind.chat.memory.model.ChatMessageStatus;
 import com.agentmind.chat.memory.repository.InMemoryChatMemoryRepository;
+import com.agentmind.common.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 
 class ChatMemoryServiceTests {
 
     private final ChatMemoryProperties properties = new ChatMemoryProperties();
     private final InMemoryChatMemoryRepository repository = new InMemoryChatMemoryRepository();
-    private final ChatMemoryService service = new ChatMemoryService(repository, properties);
+    private final ChatMemoryService service = new ChatMemoryService(
+            repository,
+            properties,
+            (role, content) -> content.length()
+    );
 
     @Test
-    void beginTurnShouldLimitHistoryByMessageCount() {
-        properties.setMaxMessages(2);
-        properties.setMaxContextChars(1_000);
+    void beginTurnShouldLimitHistoryByCompleteTurnCount() {
+        properties.setMaxHistoryTurns(1);
+        properties.setModelContextWindowTokens(128);
+        properties.setReservedContextTokens(0);
 
         ChatTurnContext firstTurn = service.beginTurn(1L, null, "旧问题");
         service.completeAssistant(1L, firstTurn.conversation().id(), firstTurn.assistantMessage().id(), "旧回答");
@@ -34,17 +42,16 @@ class ChatMemoryServiceTests {
     }
 
     @Test
-    void beginTurnShouldLimitHistoryByContextCharacters() {
-        properties.setMaxMessages(10);
-        properties.setMaxContextChars(5);
-        ChatTurnContext firstTurn = service.beginTurn(1L, null, "旧问题");
-        service.completeAssistant(1L, firstTurn.conversation().id(), firstTurn.assistantMessage().id(), "123456789");
+    void beginTurnShouldDropWholeTurnWhenTokenBudgetIsInsufficient() {
+        properties.setMaxHistoryTurns(10);
+        properties.setModelContextWindowTokens(128);
+        properties.setReservedContextTokens(121);
+        ChatTurnContext firstTurn = service.beginTurn(1L, null, "1234");
+        service.completeAssistant(1L, firstTurn.conversation().id(), firstTurn.assistantMessage().id(), "5678");
 
         ChatTurnContext secondTurn = service.beginTurn(1L, firstTurn.conversation().id(), "新问题");
 
-        assertThat(secondTurn.history()).containsExactly(
-                new ChatMemoryEntry(ChatMessageRole.ASSISTANT, "12345")
-        );
+        assertThat(secondTurn.history()).isEmpty();
     }
 
     @Test
@@ -82,8 +89,7 @@ class ChatMemoryServiceTests {
         assertThat(cancelledMessage.content()).isEmpty();
         assertThat(nextTurn.history())
                 .extracting(ChatMemoryEntry::content)
-                .contains("失败问题", "取消问题")
-                .doesNotContain("模型调用失败", "客户端断开");
+                .doesNotContain("失败问题", "取消问题", "模型调用失败", "客户端断开");
     }
 
     @Test
@@ -99,5 +105,19 @@ class ChatMemoryServiceTests {
         ).orElseThrow();
         assertThat(assistantMessage.status()).isEqualTo(ChatMessageStatus.COMPLETED);
         assertThat(assistantMessage.content()).isEqualTo("完整回答");
+    }
+
+    @Test
+    void archivedConversationShouldRejectNewTurn() {
+        ChatTurnContext turn = service.beginTurn(1L, null, "准备归档的问题");
+        service.completeAssistant(1L, turn.conversation().id(), turn.assistantMessage().id(), "归档前回答");
+        repository.archiveConversation(1L, turn.conversation().id());
+
+        assertThatThrownBy(() -> service.beginTurn(1L, turn.conversation().id(), "归档后追问"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("归档会话不能继续问答");
+        assertThat(repository.findConversationByWorkspaceIdAndId(1L, turn.conversation().id())
+                .orElseThrow()
+                .status()).isEqualTo(ChatConversationStatus.ARCHIVED);
     }
 }

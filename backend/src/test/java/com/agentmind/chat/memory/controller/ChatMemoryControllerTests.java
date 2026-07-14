@@ -2,7 +2,9 @@ package com.agentmind.chat.memory.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -97,5 +99,92 @@ class ChatMemoryControllerTests {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code", equalTo("RESOURCE_NOT_FOUND")))
                 .andExpect(jsonPath("$.message", equalTo("会话不存在或无权访问")));
+    }
+
+    @Test
+    void managementApisShouldRenameArchiveDeleteAndEnforceLifecycle() throws Exception {
+        long workspaceId = 903L;
+        MvcResult firstChat = mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/rag/chat", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "用于管理的会话",
+                                  "topK": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        long conversationId = objectMapper.readTree(firstChat.getResponse().getContentAsString())
+                .path("data")
+                .path("conversationId")
+                .asLong();
+
+        mockMvc.perform(patch(
+                        "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}",
+                        workspaceId,
+                        conversationId
+                ).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"title":"  Java   Agent 学习会话  "}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title", equalTo("Java Agent 学习会话")))
+                .andExpect(jsonPath("$.data.status", equalTo("ACTIVE")));
+
+        mockMvc.perform(patch(
+                        "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}",
+                        workspaceId,
+                        conversationId
+                ).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"title":"   "}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", equalTo("BAD_REQUEST")));
+
+        mockMvc.perform(patch(
+                        "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}",
+                        904L,
+                        conversationId
+                ).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"title":"越权修改"}
+                        """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code", equalTo("RESOURCE_NOT_FOUND")));
+
+        mockMvc.perform(post(
+                        "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}/archive",
+                        workspaceId,
+                        conversationId
+                ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status", equalTo("ARCHIVED")));
+
+        mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/rag/chat", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "conversationId": %d,
+                                  "question": "尝试继续归档会话",
+                                  "topK": 3
+                                }
+                                """.formatted(conversationId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", equalTo("RESOURCE_CONFLICT")))
+                .andExpect(jsonPath("$.message", equalTo("归档会话不能继续问答")));
+
+        mockMvc.perform(delete(
+                        "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}",
+                        workspaceId,
+                        conversationId
+                ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", equalTo("会话已删除")));
+
+        mockMvc.perform(get(
+                        "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}/messages",
+                        workspaceId,
+                        conversationId
+                ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code", equalTo("RESOURCE_NOT_FOUND")));
     }
 }

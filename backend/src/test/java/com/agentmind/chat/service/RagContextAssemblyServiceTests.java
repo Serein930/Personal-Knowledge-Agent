@@ -28,7 +28,8 @@ class RagContextAssemblyServiceTests {
     private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
     private final ChatMemoryService chatMemoryService = new ChatMemoryService(
             new InMemoryChatMemoryRepository(),
-            new ChatMemoryProperties()
+            new ChatMemoryProperties(),
+            (role, content) -> content.length()
     );
     private final RagContextAssemblyService service = new RagContextAssemblyService(
             new KnowledgeSearchService(embeddingClient, vectorStore),

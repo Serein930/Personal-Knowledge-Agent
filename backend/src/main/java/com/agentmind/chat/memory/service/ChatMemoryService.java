@@ -2,10 +2,12 @@ package com.agentmind.chat.memory.service;
 
 import com.agentmind.chat.memory.config.ChatMemoryProperties;
 import com.agentmind.chat.memory.model.ChatConversation;
+import com.agentmind.chat.memory.model.ChatConversationStatus;
 import com.agentmind.chat.memory.model.ChatMessage;
 import com.agentmind.chat.memory.model.ChatMessageRole;
 import com.agentmind.chat.memory.model.ChatMessageStatus;
 import com.agentmind.chat.memory.repository.ChatMemoryRepository;
+import com.agentmind.chat.memory.token.ChatTokenCounter;
 import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.exception.ErrorCode;
 import java.util.ArrayDeque;
@@ -27,10 +29,16 @@ public class ChatMemoryService {
 
     private final ChatMemoryRepository repository;
     private final ChatMemoryProperties properties;
+    private final ChatTokenCounter tokenCounter;
 
-    public ChatMemoryService(ChatMemoryRepository repository, ChatMemoryProperties properties) {
+    public ChatMemoryService(
+            ChatMemoryRepository repository,
+            ChatMemoryProperties properties,
+            ChatTokenCounter tokenCounter
+    ) {
         this.repository = repository;
         this.properties = properties;
+        this.tokenCounter = tokenCounter;
     }
 
     /**
@@ -41,7 +49,7 @@ public class ChatMemoryService {
         List<ChatMemoryEntry> history = buildWindow(repository.findRecentCompletedMessages(
                 workspaceId,
                 conversation.id(),
-                Math.max(1, properties.getMaxMessages())
+                Math.max(properties.getHistoryScanMessageLimit(), properties.getMaxHistoryTurns() * 2)
         ));
         ChatMessage userMessage = repository.createMessage(
                 workspaceId,
@@ -116,38 +124,67 @@ public class ChatMemoryService {
         if (requestedConversationId == null) {
             return repository.createConversation(workspaceId, buildTitle(question));
         }
-        return repository.findConversationByWorkspaceIdAndId(workspaceId, requestedConversationId)
+        ChatConversation conversation = repository.findConversationByWorkspaceIdAndId(workspaceId, requestedConversationId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "会话不存在或无权访问"
                 ));
+        if (conversation.status() == ChatConversationStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "归档会话不能继续问答");
+        }
+        return conversation;
     }
 
     private List<ChatMemoryEntry> buildWindow(List<ChatMessage> completedMessages) {
-        int maxContextChars = Math.max(1, properties.getMaxContextChars());
-        Deque<ChatMemoryEntry> selected = new ArrayDeque<>();
-        int usedChars = 0;
+        List<CompletedChatTurn> completedTurns = pairCompletedTurns(completedMessages);
+        Deque<CompletedChatTurn> selectedTurns = new ArrayDeque<>();
+        int historyTokenBudget = properties.getModelContextWindowTokens()
+                - properties.getReservedContextTokens();
+        int usedTokens = 0;
 
-        for (int index = completedMessages.size() - 1; index >= 0; index--) {
-            ChatMessage message = completedMessages.get(index);
+        for (int index = completedTurns.size() - 1; index >= 0; index--) {
+            if (selectedTurns.size() >= properties.getMaxHistoryTurns()) {
+                break;
+            }
+            CompletedChatTurn turn = completedTurns.get(index);
+            int turnTokens = tokenCounter.countTokens(ChatMessageRole.USER, turn.userMessage().content())
+                    + tokenCounter.countTokens(ChatMessageRole.ASSISTANT, turn.assistantMessage().content());
+            if (usedTokens + turnTokens > historyTokenBudget) {
+                break;
+            }
+            selectedTurns.addFirst(turn);
+            usedTokens += turnTokens;
+        }
+
+        List<ChatMemoryEntry> history = new ArrayList<>(selectedTurns.size() * 2);
+        selectedTurns.forEach(turn -> {
+            history.add(new ChatMemoryEntry(ChatMessageRole.USER, turn.userMessage().content()));
+            history.add(new ChatMemoryEntry(ChatMessageRole.ASSISTANT, turn.assistantMessage().content()));
+        });
+        return List.copyOf(history);
+    }
+
+    /**
+     * 将按时间排序的完成消息配对为完整问答轮次。连续用户消息只保留最靠近成功助手回答的一条，
+     * 因而失败或取消回答对应的孤立用户消息不会污染后续提示词。
+     */
+    private List<CompletedChatTurn> pairCompletedTurns(List<ChatMessage> completedMessages) {
+        List<CompletedChatTurn> turns = new ArrayList<>();
+        ChatMessage pendingUserMessage = null;
+        for (ChatMessage message : completedMessages) {
             if (message.content() == null || message.content().isBlank()) {
                 continue;
             }
-            int remainingChars = maxContextChars - usedChars;
-            if (remainingChars <= 0) {
-                break;
+            if (message.role() == ChatMessageRole.USER) {
+                pendingUserMessage = message;
+                continue;
             }
-            String content = message.content();
-            if (content.length() > remainingChars) {
-                if (selected.isEmpty()) {
-                    selected.addFirst(new ChatMemoryEntry(message.role(), content.substring(0, remainingChars)));
-                }
-                break;
+            if (message.role() == ChatMessageRole.ASSISTANT && pendingUserMessage != null) {
+                turns.add(new CompletedChatTurn(pendingUserMessage, message));
+                pendingUserMessage = null;
             }
-            selected.addFirst(new ChatMemoryEntry(message.role(), content));
-            usedChars += content.length();
         }
-        return List.copyOf(new ArrayList<>(selected));
+        return List.copyOf(turns);
     }
 
     private void transitionAssistant(
@@ -191,5 +228,8 @@ public class ChatMemoryService {
 
     private String normalizeReason(String reason) {
         return reason == null ? "" : reason;
+    }
+
+    private record CompletedChatTurn(ChatMessage userMessage, ChatMessage assistantMessage) {
     }
 }

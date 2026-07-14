@@ -47,8 +47,10 @@ agentmind:
   chat:
     memory:
       store: memory
-      max-messages: 12
-      max-context-chars: 6000
+      max-history-turns: 12
+      history-scan-message-limit: 200
+      model-context-window-tokens: 8192
+      reserved-context-tokens: 4096
       key-prefix: agentmind:chat-memory
       serialization-version: 1
       ttl: 7d

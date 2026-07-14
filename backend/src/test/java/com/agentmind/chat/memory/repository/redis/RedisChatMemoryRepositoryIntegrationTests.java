@@ -7,9 +7,12 @@ import com.agentmind.chat.memory.model.ChatConversation;
 import com.agentmind.chat.memory.model.ChatMessage;
 import com.agentmind.chat.memory.model.ChatMessageRole;
 import com.agentmind.chat.memory.model.ChatMessageStatus;
+import com.agentmind.chat.memory.repository.ChatMemoryRepository;
+import com.agentmind.chat.memory.repository.ChatMemoryRepositoryContractTests;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -20,7 +23,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -33,7 +35,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  */
 @Tag("redis")
 @EnabledIfEnvironmentVariable(named = "AGENTMIND_REDIS_INTEGRATION_TEST", matches = "true")
-class RedisChatMemoryRepositoryIntegrationTests {
+class RedisChatMemoryRepositoryIntegrationTests extends ChatMemoryRepositoryContractTests {
 
     private LettuceConnectionFactory connectionFactory;
     private StringRedisTemplate redisTemplate;
@@ -50,7 +52,6 @@ class RedisChatMemoryRepositoryIntegrationTests {
 
         redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
-        clearTestDatabase();
 
         properties = new ChatMemoryProperties();
         properties.setStore("redis");
@@ -63,7 +64,7 @@ class RedisChatMemoryRepositoryIntegrationTests {
     @AfterEach
     void tearDown() {
         if (connectionFactory != null) {
-            clearTestDatabase();
+            clearTestKeys();
             connectionFactory.destroy();
         }
     }
@@ -182,9 +183,18 @@ class RedisChatMemoryRepositoryIntegrationTests {
         }
     }
 
-    private void clearTestDatabase() {
-        try (RedisConnection connection = connectionFactory.getConnection()) {
-            connection.serverCommands().flushDb();
+    @Override
+    protected ChatMemoryRepository repository() {
+        return repository;
+    }
+
+    private void clearTestKeys() {
+        if (redisTemplate == null || properties == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(properties.getKeyPrefix() + "*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
         }
     }
 }
