@@ -71,6 +71,15 @@ public class InMemoryStudyFlashcardRepository implements StudyFlashcardRepositor
     }
 
     @Override
+    public List<StudyFlashcard> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId) {
+        return flashcards.values().stream()
+                .filter(flashcard -> ownerUserId.equals(flashcard.ownerUserId()))
+                .filter(flashcard -> workspaceId.equals(flashcard.workspaceId()))
+                .sorted(Comparator.comparing(StudyFlashcard::createdAt).thenComparing(StudyFlashcard::id))
+                .toList();
+    }
+
+    @Override
     public Optional<StudyFlashcard> findByOwnerUserIdAndWorkspaceIdAndId(
             Long ownerUserId,
             Long workspaceId,

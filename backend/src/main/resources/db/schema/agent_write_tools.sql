@@ -180,3 +180,68 @@ create table if not exists study_flashcard_reviews (
 
 create index if not exists idx_study_flashcard_reviews_card
     on study_flashcard_reviews (owner_user_id, workspace_id, flashcard_id, reviewed_at desc, id desc);
+
+create table if not exists study_review_sessions (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    status varchar(20) not null,
+    total_cards integer not null,
+    reviewed_cards integer not null default 0,
+    correct_cards integer not null default 0,
+    started_at timestamptz not null,
+    completed_at timestamptz,
+    created_at timestamptz not null,
+    updated_at timestamptz not null,
+    constraint ck_study_review_session_status check (status in ('IN_PROGRESS', 'COMPLETED', 'ABANDONED')),
+    constraint ck_study_review_session_counts check (
+        total_cards > 0 and reviewed_cards >= 0 and correct_cards >= 0
+        and correct_cards <= reviewed_cards and reviewed_cards <= total_cards
+    ),
+    constraint uk_study_review_sessions_scope_id unique (id, owner_user_id, workspace_id)
+);
+
+create index if not exists idx_study_review_sessions_scope_started
+    on study_review_sessions (owner_user_id, workspace_id, started_at desc, id desc);
+
+create table if not exists study_review_session_items (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    session_id bigint not null,
+    flashcard_id bigint not null,
+    position integer not null,
+    status varchar(20) not null,
+    score integer,
+    reviewed_at timestamptz,
+    created_at timestamptz not null,
+    constraint ck_study_review_session_item_status check (status in ('PENDING', 'REVIEWED')),
+    constraint ck_study_review_session_item_position check (position > 0),
+    constraint ck_study_review_session_item_score check (score is null or score between 0 and 5),
+    constraint uk_study_review_session_card unique (owner_user_id, workspace_id, session_id, flashcard_id),
+    constraint uk_study_review_session_position unique (owner_user_id, workspace_id, session_id, position),
+    constraint fk_study_review_session_items_session foreign key (session_id, owner_user_id, workspace_id)
+        references study_review_sessions (id, owner_user_id, workspace_id) on delete cascade,
+    constraint fk_study_review_session_items_card foreign key (flashcard_id, owner_user_id, workspace_id)
+        references study_flashcards (id, owner_user_id, workspace_id) on delete cascade
+);
+
+create index if not exists idx_study_review_session_items_queue
+    on study_review_session_items (owner_user_id, workspace_id, session_id, position);
+
+create table if not exists daily_study_plans (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    plan_date date not null,
+    daily_review_target integer not null,
+    due_card_snapshot integer not null,
+    created_at timestamptz not null,
+    updated_at timestamptz not null,
+    constraint ck_daily_study_plan_target check (daily_review_target between 1 and 500),
+    constraint ck_daily_study_plan_due_snapshot check (due_card_snapshot >= 0),
+    constraint uk_daily_study_plan_date unique (owner_user_id, workspace_id, plan_date)
+);
+
+create index if not exists idx_daily_study_plans_scope_date
+    on daily_study_plans (owner_user_id, workspace_id, plan_date desc);

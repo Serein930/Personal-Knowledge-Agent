@@ -504,6 +504,92 @@ GET /api/v1/workspaces/{workspaceId}/flashcards/{flashcardId}/reviews?page=1&pag
 - 卡片调度使用版本条件更新；并发冲突时重新读取最新状态并再次计算，超过重试上限返回冲突。
 - 当前算法由 `agentmind.study.flashcard.algorithm=sm2` 配置，算法端口允许后续增加 FSRS 实现而不修改接口契约。
 
+### 卡片管理
+
+```text
+POST /api/v1/workspaces/{workspaceId}/flashcards/{flashcardId}/suspend
+POST /api/v1/workspaces/{workspaceId}/flashcards/{flashcardId}/resume
+POST /api/v1/workspaces/{workspaceId}/flashcards/{flashcardId}/reschedule
+```
+
+暂停和恢复请求：
+
+```json
+{"expectedVersion": 3}
+```
+
+重新排期请求：
+
+```json
+{
+  "expectedVersion": 3,
+  "dueAt": "2026-07-20T09:00:00+08:00"
+}
+```
+
+规则：
+
+- 客户端必须提交最近读取到的卡片版本号，版本过期返回 `RESOURCE_CONFLICT`。
+- 暂停卡片不再出现在到期队列中，也不能提交评分。
+- 恢复已经过期的卡片时会立即进入到期队列。
+- 暂停卡片需要先恢复，才能手动重新排期。
+
+### 学习统计
+
+```text
+GET /api/v1/workspaces/{workspaceId}/flashcards/statistics
+```
+
+响应包含当前到期数量、今日完成数、今日正确率、连续学习天数、累计评分数、遗忘率、0 至 5 分评分分布和卡片成熟度。复习间隔达到 21 天且状态为 `REVIEW` 的卡片计为成熟卡片。
+
+统计日期边界由 `agentmind.study.time-zone` 控制，默认使用 `Asia/Shanghai`。
+
+### 复习会话
+
+创建会话并冻结一批当前到期卡片：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/review-sessions
+```
+
+```json
+{"limit": 20}
+```
+
+查询会话与会话内评分：
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/cards/{flashcardId}/reviews
+```
+
+会话队列在创建时固定，按到期时间排序。评分请求继续使用卡片评分接口相同的 `requestId` 和 `score` 契约。所有队列项完成后，会话自动迁移为 `COMPLETED`。会话完成后的相同请求重试返回原结果，不重复增加进度。
+
+### 每日学习计划
+
+```text
+POST /api/v1/workspaces/{workspaceId}/study-plans/daily
+GET  /api/v1/workspaces/{workspaceId}/study-plans/daily?date=2026-07-14
+```
+
+保存请求：
+
+```json
+{
+  "planDate": "2026-07-14",
+  "dailyReviewTarget": 20
+}
+```
+
+同一用户、知识空间和日期只保存一份计划，重复保存会更新目标而不创建重复记录。响应根据当天真实复习记录计算完成数量、剩余数量和进度。
+
+### 算法切换
+
+- `agentmind.study.flashcard.algorithm=sm2`：默认模式，保持现有可重复调度策略。
+- `agentmind.study.flashcard.algorithm=fsrs`：启用官方 Java-FSRS 适配器。
+- FSRS 当前按时间顺序重放单卡评分历史恢复稳定度和难度状态，避免把近似公式标记为标准 FSRS。
+- 当前产品按天调度，因此 FSRS 适配器关闭分钟级学习步骤与随机扰动。后续可持久化算法状态快照降低长历史重放成本。
+
 ## 后续实现顺序
 
 1. Stage 1 先实现统一响应、异常处理和健康检查。

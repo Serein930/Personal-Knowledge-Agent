@@ -123,7 +123,14 @@ public class StudyFlashcardReviewApplicationService {
             throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "暂停状态的复习卡片不能提交评分");
         }
         OffsetDateTime reviewedAt = OffsetDateTime.now();
-        StudyFlashcardSchedule nextSchedule = algorithm.calculate(current.schedule(), score, reviewedAt);
+        StudyFlashcardSchedule nextSchedule = algorithm.calculate(
+                current.schedule(),
+                score,
+                reviewedAt,
+                reviewRepository.findChronologicalByOwnerUserIdAndWorkspaceIdAndFlashcardId(
+                        context.ownerUserId(), context.workspaceId(), flashcardId
+                )
+        );
         StudyFlashcard candidate = current.applySchedule(nextSchedule, reviewedAt);
         StudyFlashcard updated = flashcardRepository.updateSchedule(candidate, current.version())
                 .orElseThrow(ConcurrentFlashcardReviewException::new);

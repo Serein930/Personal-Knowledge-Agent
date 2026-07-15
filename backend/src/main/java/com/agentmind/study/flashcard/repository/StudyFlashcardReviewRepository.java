@@ -30,4 +30,18 @@ public interface StudyFlashcardReviewRepository {
             Long workspaceId,
             Long flashcardId
     );
+
+    /**
+     * 按时间正序返回单卡完整历史，供 FSRS 重放算法状态。
+     */
+    List<StudyFlashcardReview> findChronologicalByOwnerUserIdAndWorkspaceIdAndFlashcardId(
+            Long ownerUserId,
+            Long workspaceId,
+            Long flashcardId
+    );
+
+    /**
+     * 返回知识空间全部复习记录，供当前阶段完成统计聚合。数据规模增长后可由数据库聚合投影替换。
+     */
+    List<StudyFlashcardReview> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId);
 }

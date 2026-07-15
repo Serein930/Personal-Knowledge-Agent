@@ -2,6 +2,8 @@ package com.agentmind.study.flashcard.algorithm;
 
 import com.agentmind.study.flashcard.model.StudyFlashcardSchedule;
 import com.agentmind.study.flashcard.model.StudyFlashcardStatus;
+import com.agentmind.study.flashcard.model.StudyFlashcardReview;
+import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -32,7 +34,8 @@ public class Sm2SpacedRepetitionAlgorithm implements SpacedRepetitionAlgorithm {
     public StudyFlashcardSchedule calculate(
             StudyFlashcardSchedule current,
             int score,
-            java.time.OffsetDateTime reviewedAt
+            java.time.OffsetDateTime reviewedAt,
+            List<StudyFlashcardReview> history
     ) {
         if (score < 0 || score > 5) {
             throw new IllegalArgumentException("SM-2 评分必须在 0 到 5 之间");

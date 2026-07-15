@@ -92,4 +92,30 @@ public record StudyFlashcard(
                 now
         );
     }
+
+    /**
+     * 应用人工管理状态。暂停、恢复和重新排期同样增加版本号，防止管理操作覆盖并发评分结果。
+     */
+    public StudyFlashcard manage(StudyFlashcardStatus nextStatus, OffsetDateTime nextDueAt, OffsetDateTime now) {
+        return new StudyFlashcard(
+                id,
+                ownerUserId,
+                workspaceId,
+                sourceConversationId,
+                requestId,
+                question,
+                answer,
+                explanation,
+                nextStatus,
+                repetitionCount,
+                intervalDays,
+                easeFactor,
+                lapseCount,
+                nextDueAt,
+                lastReviewedAt,
+                version + 1,
+                createdAt,
+                now
+        );
+    }
 }

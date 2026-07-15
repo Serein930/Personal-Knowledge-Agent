@@ -106,6 +106,34 @@ public class JdbcStudyFlashcardReviewRepository implements StudyFlashcardReviewR
         return count == null ? 0 : count;
     }
 
+    @Override
+    public List<StudyFlashcardReview> findChronologicalByOwnerUserIdAndWorkspaceIdAndFlashcardId(
+            Long ownerUserId,
+            Long workspaceId,
+            Long flashcardId
+    ) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from study_flashcard_reviews "
+                        + "where owner_user_id = ? and workspace_id = ? and flashcard_id = ? "
+                        + "order by reviewed_at, id",
+                rowMapper,
+                ownerUserId,
+                workspaceId,
+                flashcardId
+        );
+    }
+
+    @Override
+    public List<StudyFlashcardReview> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from study_flashcard_reviews "
+                        + "where owner_user_id = ? and workspace_id = ? order by reviewed_at, id",
+                rowMapper,
+                ownerUserId,
+                workspaceId
+        );
+    }
+
     private StudyFlashcardReview mapReview(ResultSet resultSet, int rowNumber) throws SQLException {
         return new StudyFlashcardReview(
                 resultSet.getLong("id"),

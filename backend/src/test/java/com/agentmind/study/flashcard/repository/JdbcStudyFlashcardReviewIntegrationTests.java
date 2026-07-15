@@ -66,6 +66,9 @@ class JdbcStudyFlashcardReviewIntegrationTests {
         try (Connection connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/schema/agent_write_tools.sql"));
         }
+        jdbcTemplate.update("delete from study_review_session_items");
+        jdbcTemplate.update("delete from study_review_sessions");
+        jdbcTemplate.update("delete from daily_study_plans");
         jdbcTemplate.update("delete from study_flashcard_reviews");
         jdbcTemplate.update("delete from study_flashcards");
     }

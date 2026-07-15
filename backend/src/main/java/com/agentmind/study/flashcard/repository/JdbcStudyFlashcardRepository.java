@@ -85,6 +85,17 @@ public class JdbcStudyFlashcardRepository implements StudyFlashcardRepository {
     }
 
     @Override
+    public List<StudyFlashcard> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from study_flashcards "
+                        + "where owner_user_id = ? and workspace_id = ? order by created_at, id",
+                rowMapper,
+                ownerUserId,
+                workspaceId
+        );
+    }
+
+    @Override
     public Optional<StudyFlashcard> findByOwnerUserIdAndWorkspaceIdAndId(
             Long ownerUserId,
             Long workspaceId,

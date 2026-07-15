@@ -84,4 +84,29 @@ public class InMemoryStudyFlashcardReviewRepository implements StudyFlashcardRev
                 .filter(item -> flashcardId.equals(item.flashcardId()))
                 .count();
     }
+
+    @Override
+    public List<StudyFlashcardReview> findChronologicalByOwnerUserIdAndWorkspaceIdAndFlashcardId(
+            Long ownerUserId,
+            Long workspaceId,
+            Long flashcardId
+    ) {
+        return reviews.values().stream()
+                .filter(item -> ownerUserId.equals(item.ownerUserId()))
+                .filter(item -> workspaceId.equals(item.workspaceId()))
+                .filter(item -> flashcardId.equals(item.flashcardId()))
+                .sorted(Comparator.comparing(StudyFlashcardReview::reviewedAt)
+                        .thenComparing(StudyFlashcardReview::id))
+                .toList();
+    }
+
+    @Override
+    public List<StudyFlashcardReview> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId) {
+        return reviews.values().stream()
+                .filter(item -> ownerUserId.equals(item.ownerUserId()))
+                .filter(item -> workspaceId.equals(item.workspaceId()))
+                .sorted(Comparator.comparing(StudyFlashcardReview::reviewedAt)
+                        .thenComparing(StudyFlashcardReview::id))
+                .toList();
+    }
 }

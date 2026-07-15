@@ -75,6 +75,7 @@ agentmind:
       serialization-version: 1
       ttl: 7d
   study:
+    time-zone: Asia/Shanghai
     flashcard:
       algorithm: sm2
   ingestion:

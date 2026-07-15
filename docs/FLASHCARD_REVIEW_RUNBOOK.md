@@ -2,7 +2,7 @@
 
 ## 本阶段范围
 
-本阶段完成复习卡片状态、到期查询、评分记录和 SM-2 调度，不包含学习计划、卡片暂停接口、FSRS 参数训练和前端复习页面。
+本阶段已完成复习卡片状态、到期查询、评分记录、SM-2 调度、卡片管理、复习会话、统计、每日计划和前端复习工作台。FSRS 参数训练和个性化参数优化仍属于后续阶段。
 
 默认配置：
 
@@ -14,6 +14,34 @@ agentmind:
 ```
 
 `SpacedRepetitionAlgorithm` 是稳定算法端口，`Sm2SpacedRepetitionAlgorithm` 是当前默认实现。后续增加 FSRS 时应新增实现和配置值，不应把算法判断写入控制层或仓储层。
+
+切换官方 Java-FSRS 适配器：
+
+```powershell
+mvn spring-boot:run "-Dspring-boot.run.arguments=--agentmind.study.flashcard.algorithm=fsrs"
+```
+
+FSRS 适配器会按时间正序重放单卡历史评分，当前不进行参数训练。默认开发、自动测试和常规联调仍使用 SM-2。
+
+## 复习工作流接口
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/flashcards/statistics
+POST /api/v1/workspaces/{workspaceId}/review-sessions
+GET  /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/cards/{flashcardId}/reviews
+POST /api/v1/workspaces/{workspaceId}/study-plans/daily
+GET  /api/v1/workspaces/{workspaceId}/study-plans/daily?date=YYYY-MM-DD
+```
+
+前端启动后进入“学习计划”导航即可使用真实复习工作台：
+
+```powershell
+cd D:\Program\AgentMind\ui
+npm run dev
+```
+
+页面包括到期数量、今日完成、连续学习、遗忘率、每日目标、固定复习队列、答案揭示、0 至 5 分评分、评分分布、成熟度和卡片暂停/恢复。
 
 ## 评分语义
 
@@ -105,10 +133,18 @@ select id, status, repetition_count, interval_days, ease_factor,
 from study_flashcards
 order by id desc;
 
-select flashcard_id, request_id, score, before_status, after_status,
-       before_interval_days, after_interval_days, algorithm, reviewed_at
+select flashcard_id, request_id, score, previous_status, next_status,
+       previous_interval_days, next_interval_days, algorithm, reviewed_at
 from study_flashcard_reviews
 order by id desc;
+
+select id, status, total_cards, reviewed_cards, correct_cards, started_at, completed_at
+from study_review_sessions
+order by id desc;
+
+select plan_date, daily_review_target, due_card_snapshot, updated_at
+from daily_study_plans
+order by plan_date desc;
 ```
 
 每次成功评分应满足：

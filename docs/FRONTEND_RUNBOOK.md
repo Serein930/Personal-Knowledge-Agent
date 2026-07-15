@@ -51,11 +51,13 @@ http://localhost:5173
 - 页面文字是否溢出或重叠。
 - 表格在较窄宽度下是否出现横向滚动而不是挤压变形。
 - 设置页是否正确读取 `VITE_API_BASE_URL`。
+- 复习工作台是否能加载统计、保存今日目标、创建到期队列、显示答案并提交评分。
+- 卡片暂停后是否离开到期数量，恢复后是否重新显示为活动状态。
 - 控制台是否存在 TypeScript 或运行时错误。
 
 ## 本阶段说明
 
-采集中心、知识库和 Agent 问答已经接入真实后端。默认知识空间编号为 `1`，可通过 `VITE_WORKSPACE_ID` 修改；后端地址默认是 `http://localhost:8080/api`。
+采集中心、知识库、Agent 问答和复习工作台已经接入真实后端。默认知识空间编号为 `1`，可通过 `VITE_WORKSPACE_ID` 修改；后端地址默认是 `http://localhost:8080/api`。
 
 ```powershell
 $env:VITE_API_BASE_URL = "http://localhost:8080/api"
@@ -64,6 +66,8 @@ npm run dev
 ```
 
 问答页面通过 `fetch` 解析 POST SSE，支持 `delta`、`citation`、`tool_call`、`tool_confirmation_required` 和 `complete` 事件。确认令牌只保存在当前页面内存中，不写入浏览器持久化存储。
+
+复习工作台通过普通 REST 接口加载每日计划、学习统计和卡片队列。评分请求为每次用户操作生成新的 `requestId`；发生网络重试时应复用同一个编号，后端据此防止重复推进调度。
 
 ## 当前环境验证记录
 

@@ -95,8 +95,75 @@ export interface StudyFlashcardDto {
   question: string;
   answer: string;
   explanation: string;
+  status: 'NEW' | 'LEARNING' | 'REVIEW' | 'SUSPENDED';
+  repetitionCount: number;
+  intervalDays: number;
+  easeFactor: number;
+  lapseCount: number;
+  dueAt: string;
+  lastReviewedAt?: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StudyReviewStatisticsDto {
+  dueCount: number;
+  completedToday: number;
+  accuracyToday: number;
+  currentStreakDays: number;
+  totalReviews: number;
+  lapseRate: number;
+  scoreDistribution: Array<{ score: number; count: number }>;
+  maturity: {
+    newCount: number;
+    learningCount: number;
+    youngCount: number;
+    matureCount: number;
+    suspendedCount: number;
+  };
+  generatedAt: string;
+}
+
+export interface DailyStudyPlanDto {
+  id: number;
+  workspaceId: number;
+  planDate: string;
+  dailyReviewTarget: number;
+  dueCardSnapshot: number;
+  completedReviews: number;
+  remainingReviews: number;
+  progress: number;
+  completed: boolean;
+  updatedAt: string;
+}
+
+export interface StudyReviewSessionDto {
+  id: number;
+  workspaceId: number;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
+  totalCards: number;
+  reviewedCards: number;
+  correctCards: number;
+  progress: number;
+  queue: Array<{
+    id: number;
+    position: number;
+    status: 'PENDING' | 'REVIEWED';
+    score?: number;
+    reviewedAt?: string;
+    flashcard: StudyFlashcardDto;
+  }>;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface SubmittedSessionReviewDto {
+  session: StudyReviewSessionDto;
+  review: {
+    flashcard: StudyFlashcardDto;
+    reused: boolean;
+  };
 }
 
 export type ToolConfirmationStatus =

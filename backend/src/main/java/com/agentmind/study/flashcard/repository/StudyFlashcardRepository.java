@@ -21,6 +21,11 @@ public interface StudyFlashcardRepository {
 
     long countByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId);
 
+    /**
+     * 统计和计划生成需要读取知识空间内全部卡片。仓储实现应始终带用户与知识空间过滤。
+     */
+    List<StudyFlashcard> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId);
+
     Optional<StudyFlashcard> findByOwnerUserIdAndWorkspaceIdAndId(
             Long ownerUserId,
             Long workspaceId,
