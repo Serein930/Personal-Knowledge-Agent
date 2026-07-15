@@ -46,7 +46,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -62,9 +64,9 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest(properties = {
         "agentmind.agent.persistence.store=jdbc",
         "agentmind.vector-store.type=memory",
-        "spring.datasource.url=jdbc:postgresql://localhost:5432/agentmind",
-        "spring.datasource.username=agentmind",
-        "spring.datasource.password=agentmind_dev_password"
+        "spring.datasource.url=${AGENTMIND_POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/agentmind}",
+        "spring.datasource.username=${AGENTMIND_POSTGRES_USERNAME:agentmind}",
+        "spring.datasource.password=${AGENTMIND_POSTGRES_PASSWORD:agentmind_dev_password}"
 })
 @AutoConfigureMockMvc
 @Import(JdbcAgentWriteToolIntegrationTests.FailingWriteToolConfiguration.class)
@@ -102,16 +104,25 @@ class JdbcAgentWriteToolIntegrationTests {
     @BeforeEach
     void setUpSchema() throws Exception {
         try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/schema/agent_write_tools.sql"));
+            ResourceDatabasePopulator populator = new ResourceDatabasePopulator(
+                    new ClassPathResource("db/schema/agent_write_tools.sql")
+            );
+            // 保留 PostgreSQL DO $$ 匿名块，由数据库一次性完成脚本解析。
+            populator.setSeparator(ScriptUtils.EOF_STATEMENT_SEPARATOR);
+            populator.populate(connection);
         }
         jdbcTemplate.update("delete from agent_tool_confirmations");
         jdbcTemplate.update("delete from agent_tool_call_audits");
         jdbcTemplate.update("delete from knowledge_notes");
+        jdbcTemplate.update("delete from daily_study_task_events");
         jdbcTemplate.update("delete from daily_study_task_cards");
         jdbcTemplate.update("delete from daily_study_tasks");
         jdbcTemplate.update("delete from study_review_session_items");
         jdbcTemplate.update("delete from study_review_sessions");
         jdbcTemplate.update("delete from daily_study_plans");
+        jdbcTemplate.update("delete from conversation_learning_summaries");
+        jdbcTemplate.update("delete from learning_topic_profiles");
+        jdbcTemplate.update("delete from fsrs_user_profile_versions");
         jdbcTemplate.update("delete from study_flashcard_fsrs_states");
         jdbcTemplate.update("delete from fsrs_parameter_optimization_jobs");
         jdbcTemplate.update("delete from fsrs_user_profiles");
@@ -126,7 +137,9 @@ class JdbcAgentWriteToolIntegrationTests {
         assertThat(confirmationRepository).isInstanceOf(JdbcAgentToolConfirmationRepository.class);
         assertThat(noteRepository).isInstanceOf(JdbcKnowledgeNoteRepository.class);
         assertThat(flashcardRepository).isInstanceOf(JdbcStudyFlashcardRepository.class);
-        assertThat(auditRepository.getClass().getSimpleName()).isEqualTo("JdbcAgentToolCallAuditRepository");
+        // 审计仓储带事务代理时运行时类名会包含 CGLIB 后缀，应检查代理背后的目标类型。
+        assertThat(AopUtils.getTargetClass(auditRepository).getSimpleName())
+                .isEqualTo("JdbcAgentToolCallAuditRepository");
 
         long workspaceId = 19_001L;
         String requestBody = """

@@ -596,11 +596,24 @@ GET  /api/v1/workspaces/{workspaceId}/study-plans/daily?date=2026-07-14
 ```text
 GET  /api/v1/workspaces/{workspaceId}/study/fsrs/profile
 PUT  /api/v1/workspaces/{workspaceId}/study/fsrs/profile
+GET  /api/v1/workspaces/{workspaceId}/study/fsrs/profile/versions?page=1&pageSize=20
+POST /api/v1/workspaces/{workspaceId}/study/fsrs/profile/rollback
 POST /api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs
 GET  /api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs?page=1&pageSize=20
 ```
 
-用户参数属于用户级资产，知识空间路径用于执行当前请求的权限复核。更新请求必须提交完整参数数组和 `0.70` 至 `0.99` 的期望保持率。每次更新增加参数版本，并记录 `DEFAULT`、`MANUAL` 或 `OPTIMIZED` 来源。
+用户参数属于用户级资产，知识空间路径用于执行当前请求的权限复核。更新请求必须提交完整参数数组和 `0.70` 至 `0.99` 的期望保持率。每次更新增加参数版本，并记录 `DEFAULT`、`MANUAL`、`OPTIMIZED` 或 `ROLLBACK` 来源。
+
+回滚请求同时提交目标版本和当前预期版本：
+
+```json
+{
+  "targetVersion": 3,
+  "expectedCurrentVersion": 7
+}
+```
+
+系统不会覆盖旧版本，而是复制目标参数并创建一个新的回滚版本。当前版本与 `expectedCurrentVersion` 不一致时返回 `RESOURCE_CONFLICT`。
 
 优化任务请求：
 
@@ -608,7 +621,7 @@ GET  /api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs?page=1&pageSi
 {"applyResult": false}
 ```
 
-当前本地优化器至少需要 20 条跨知识空间复习记录。它只校准期望保持率，保留完整 FSRS 权重；`applyResult=false` 只生成建议，`true` 才写入新版本参数。后续接入专用权重优化器时保持任务接口不变。
+当前本地优化器至少需要 50 条跨知识空间复习记录。优化器按卡片和时间顺序重放历史，通过时间切分形成训练集与验证集，再以回忆概率的二元交叉熵为目标对 FSRS 权重执行确定性坐标下降。只有训练损失下降且验证损失至少改善 `0.001` 时才接受建议；`applyResult=false` 只保存任务结果，`true` 才创建新的 `OPTIMIZED` 参数版本。
 
 ### 复习会话生命周期
 
@@ -642,9 +655,41 @@ IN_PROGRESS/PAUSED -> ABANDONED
 }
 ```
 
-计划响应包含 `DUE_REVIEW`、`WEAK_POINT_REVIEW`、`TOPIC_REVIEW` 和 `DOCUMENT_REVIEW` 任务。任务保存生成时选中的卡片编号，历史计划不会因后续排期变化而漂移；完成进度按当天已复习的不同卡片计算。
+计划响应包含 `DUE_REVIEW`、`WEAK_POINT_REVIEW`、`TOPIC_REVIEW`、`DOCUMENT_REVIEW`、`MASTERY_REINFORCEMENT` 和 `CONVERSATION_REVIEW` 任务。任务保存生成时选中的卡片编号，历史计划不会因后续排期变化而漂移；掌握强化和会话复习任务来自学习画像及长期会话摘要。
 
 写工具 `study_plan.create` 使用相同参数，但必须先创建 `PENDING_CONFIRMATION` 确认单。用户确认前数据库中不会出现计划。
+
+### 每日任务状态与反馈
+
+```text
+POST /api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/complete
+POST /api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/skip
+POST /api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/reschedule
+POST /api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/feedback
+GET  /api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/events
+```
+
+完成和跳过请求提交 `expectedVersion` 与可选说明；重新安排额外提交 `targetDate`；反馈提交 1 至 5 分和可选文本。任务使用版本条件更新，成功后版本加一，并写入不可变事件。重复提交旧版本返回 `RESOURCE_CONFLICT`，跨知识空间访问表现为资源不存在。
+
+### 学习画像与长期摘要
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/study/learning-profile
+POST /api/v1/workspaces/{workspaceId}/study/learning-profile/refresh
+GET  /api/v1/workspaces/{workspaceId}/study/conversation-summaries
+POST /api/v1/workspaces/{workspaceId}/study/conversation-summaries/refresh
+```
+
+学习画像按主题返回卡片数、复习数、正确率、遗忘率、掌握分数、最近复习时间和 `WEAK`、`AT_RISK`、`STABLE`、`STRONG` 等级。长期摘要只读取完整成功的会话消息，失败或取消消息不参与摘要和计划生成。
+
+### 学习维护任务
+
+```text
+POST /api/v1/workspaces/{workspaceId}/study/maintenance/run
+GET  /api/v1/workspaces/{workspaceId}/study/maintenance/status
+```
+
+定时维护默认关闭。开启后按活跃用户范围刷新画像与摘要、按最小间隔创建 FSRS 优化任务，并补偿因进程中断未同步完成的每日任务。状态接口返回最近执行时间、耗时、处理范围、优化数量、补偿数量、重新安排数量和失败原因。
 
 ### 学习趋势
 

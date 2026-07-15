@@ -339,6 +339,47 @@ create table if not exists fsrs_parameter_optimization_jobs (
 create index if not exists idx_fsrs_optimization_owner_created
     on fsrs_parameter_optimization_jobs (owner_user_id, created_at desc, id desc);
 
+-- Stage 8 个性化学习增强：为真正的权重拟合补充权重、损失和应用版本证据。
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists effective_observation_count integer not null default 0;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists previous_parameters jsonb not null default '[]'::jsonb;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists recommended_parameters jsonb not null default '[]'::jsonb;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists training_loss_before numeric(12, 6) not null default 0;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists training_loss_after numeric(12, 6) not null default 0;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists validation_loss_before numeric(12, 6) not null default 0;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists validation_loss_after numeric(12, 6) not null default 0;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists accepted boolean not null default false;
+alter table fsrs_parameter_optimization_jobs
+    add column if not exists applied_version bigint;
+
+alter table fsrs_user_profiles drop constraint if exists ck_fsrs_user_profile_source;
+alter table fsrs_user_profiles add constraint ck_fsrs_user_profile_source
+    check (source in ('DEFAULT', 'MANUAL', 'OPTIMIZED', 'ROLLBACK'));
+
+create table if not exists fsrs_user_profile_versions (
+    owner_user_id bigint not null,
+    version bigint not null,
+    parameters jsonb not null,
+    desired_retention numeric(5, 4) not null,
+    source varchar(20) not null,
+    change_reason varchar(500) not null,
+    created_at timestamptz not null,
+    primary key (owner_user_id, version),
+    constraint ck_fsrs_profile_version_number check (version >= 0),
+    constraint ck_fsrs_profile_version_retention check (desired_retention between 0.70 and 0.99),
+    constraint ck_fsrs_profile_version_source check (source in ('DEFAULT', 'MANUAL', 'OPTIMIZED', 'ROLLBACK')),
+    constraint ck_fsrs_profile_version_parameters check (
+        jsonb_typeof(parameters) = 'array' and jsonb_array_length(parameters) > 0
+    )
+);
+
 -- 学习任务保存生成时选中的卡片集合，使历史计划可解释且不会随实时排期漂移。
 create table if not exists daily_study_tasks (
     id bigserial primary key,
@@ -376,3 +417,124 @@ create table if not exists daily_study_task_cards (
 
 create index if not exists idx_daily_study_tasks_plan
     on daily_study_tasks (owner_user_id, workspace_id, plan_id, priority, id);
+
+-- 学习任务从生成建议升级为可执行工作流，并保留不可变状态事件。
+alter table daily_study_tasks add column if not exists status varchar(20) not null default 'PENDING';
+alter table daily_study_tasks add column if not exists scheduled_date date;
+update daily_study_tasks task
+set scheduled_date = plan.plan_date
+from daily_study_plans plan
+where task.plan_id = plan.id and task.scheduled_date is null;
+alter table daily_study_tasks alter column scheduled_date set not null;
+alter table daily_study_tasks add column if not exists feedback_score integer;
+alter table daily_study_tasks add column if not exists feedback_comment varchar(500);
+alter table daily_study_tasks add column if not exists completed_at timestamptz;
+alter table daily_study_tasks add column if not exists skipped_at timestamptz;
+alter table daily_study_tasks add column if not exists version bigint not null default 0;
+alter table daily_study_tasks add column if not exists updated_at timestamptz;
+update daily_study_tasks set updated_at = created_at where updated_at is null;
+alter table daily_study_tasks alter column updated_at set not null;
+
+alter table daily_study_tasks drop constraint if exists ck_daily_study_task_type;
+alter table daily_study_tasks add constraint ck_daily_study_task_type check (
+    task_type in (
+        'DUE_REVIEW', 'WEAK_POINT_REVIEW', 'TOPIC_REVIEW', 'DOCUMENT_REVIEW',
+        'MASTERY_REINFORCEMENT', 'CONVERSATION_REVIEW'
+    )
+);
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'ck_daily_study_task_status') then
+        alter table daily_study_tasks add constraint ck_daily_study_task_status
+            check (status in ('PENDING', 'COMPLETED', 'SKIPPED'));
+    end if;
+    if not exists (select 1 from pg_constraint where conname = 'ck_daily_study_task_feedback') then
+        alter table daily_study_tasks add constraint ck_daily_study_task_feedback
+            check (feedback_score is null or feedback_score between 1 and 5);
+    end if;
+    if not exists (select 1 from pg_constraint where conname = 'ck_daily_study_task_version') then
+        alter table daily_study_tasks add constraint ck_daily_study_task_version check (version >= 0);
+    end if;
+end $$;
+
+create index if not exists idx_daily_study_tasks_maintenance
+    on daily_study_tasks (status, scheduled_date, id)
+    where status = 'PENDING';
+
+create table if not exists daily_study_task_events (
+    id bigserial primary key,
+    task_id bigint not null,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    action varchar(30) not null,
+    previous_status varchar(20) not null,
+    next_status varchar(20) not null,
+    previous_scheduled_date date not null,
+    next_scheduled_date date not null,
+    feedback_score integer,
+    comment varchar(500),
+    created_at timestamptz not null,
+    constraint ck_daily_study_task_event_action check (
+        action in ('CREATED', 'COMPLETED', 'SKIPPED', 'RESCHEDULED', 'FEEDBACK_RECORDED', 'COMPENSATED')
+    ),
+    constraint ck_daily_study_task_event_status check (
+        previous_status in ('PENDING', 'COMPLETED', 'SKIPPED')
+        and next_status in ('PENDING', 'COMPLETED', 'SKIPPED')
+    ),
+    constraint ck_daily_study_task_event_feedback check (
+        feedback_score is null or feedback_score between 1 and 5
+    ),
+    constraint fk_daily_study_task_event_scope foreign key (task_id, owner_user_id, workspace_id)
+        references daily_study_tasks (id, owner_user_id, workspace_id) on delete cascade
+);
+
+create index if not exists idx_daily_study_task_events_task
+    on daily_study_task_events (owner_user_id, workspace_id, task_id, created_at, id);
+
+-- 主题画像是可重建快照；评分记录仍是唯一事实来源。
+create table if not exists learning_topic_profiles (
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    topic varchar(100) not null,
+    card_count integer not null,
+    review_count integer not null,
+    success_rate numeric(6, 2) not null,
+    lapse_rate numeric(6, 2) not null,
+    mastery_score numeric(6, 2) not null,
+    level varchar(20) not null,
+    last_reviewed_at timestamptz,
+    updated_at timestamptz not null,
+    primary key (owner_user_id, workspace_id, topic),
+    constraint ck_learning_topic_profile_counts check (card_count >= 0 and review_count >= 0),
+    constraint ck_learning_topic_profile_rates check (
+        success_rate between 0 and 100 and lapse_rate between 0 and 100 and mastery_score between 0 and 100
+    ),
+    constraint ck_learning_topic_profile_level check (level in ('WEAK', 'AT_RISK', 'STABLE', 'STRONG'))
+);
+
+create index if not exists idx_learning_topic_profiles_weakness
+    on learning_topic_profiles (owner_user_id, workspace_id, mastery_score, topic);
+
+-- 长期会话摘要独立于 Redis 短期窗口，消息过期后仍保留压缩后的学习信号。
+create table if not exists conversation_learning_summaries (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    conversation_id bigint not null,
+    summary varchar(1000) not null,
+    topics jsonb not null,
+    weak_topics jsonb not null,
+    message_count integer not null,
+    version bigint not null,
+    created_at timestamptz not null,
+    updated_at timestamptz not null,
+    constraint uk_conversation_learning_summary unique (owner_user_id, workspace_id, conversation_id),
+    constraint ck_conversation_learning_summary_counts check (message_count > 0 and version >= 0),
+    constraint ck_conversation_learning_summary_topics check (
+        jsonb_typeof(topics) = 'array' and jsonb_typeof(weak_topics) = 'array'
+    )
+);
+
+create index if not exists idx_conversation_learning_summaries_scope
+    on conversation_learning_summaries (owner_user_id, workspace_id, updated_at desc, id desc);

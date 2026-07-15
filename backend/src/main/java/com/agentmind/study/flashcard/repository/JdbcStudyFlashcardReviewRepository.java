@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import com.agentmind.study.maintenance.model.StudyDataScope;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -142,6 +143,19 @@ public class JdbcStudyFlashcardReviewRepository implements StudyFlashcardReviewR
                 rowMapper,
                 ownerUserId
         );
+    }
+
+    @Override
+    public List<StudyDataScope> findActiveScopes(int limit) {
+        return jdbcTemplate.query("""
+                        select owner_user_id, workspace_id
+                        from study_flashcard_reviews
+                        group by owner_user_id, workspace_id
+                        order by max(reviewed_at) desc
+                        limit ?
+                        """, (resultSet, rowNumber) -> new StudyDataScope(
+                        resultSet.getLong("owner_user_id"), resultSet.getLong("workspace_id")
+                ), limit);
     }
 
     private StudyFlashcardReview mapReview(ResultSet resultSet, int rowNumber) throws SQLException {

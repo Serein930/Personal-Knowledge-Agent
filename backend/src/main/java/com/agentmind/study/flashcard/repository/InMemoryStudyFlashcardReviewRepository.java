@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import com.agentmind.study.maintenance.model.StudyDataScope;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -116,6 +117,17 @@ public class InMemoryStudyFlashcardReviewRepository implements StudyFlashcardRev
                 .filter(item -> ownerUserId.equals(item.ownerUserId()))
                 .sorted(Comparator.comparing(StudyFlashcardReview::reviewedAt)
                         .thenComparing(StudyFlashcardReview::id))
+                .toList();
+    }
+
+    @Override
+    public List<StudyDataScope> findActiveScopes(int limit) {
+        return reviews.values().stream()
+                .sorted(Comparator.comparing(StudyFlashcardReview::reviewedAt).reversed()
+                        .thenComparing(StudyFlashcardReview::id, Comparator.reverseOrder()))
+                .map(review -> new StudyDataScope(review.ownerUserId(), review.workspaceId()))
+                .distinct()
+                .limit(limit)
                 .toList();
     }
 }

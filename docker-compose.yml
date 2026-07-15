@@ -8,7 +8,8 @@ services:
       POSTGRES_USER: agentmind
       POSTGRES_PASSWORD: agentmind_dev_password
     ports:
-      - "5432:5432"
+      # 本机已有 PostgreSQL 时，可通过 AGENTMIND_POSTGRES_PORT 改用其他端口。
+      - "${AGENTMIND_POSTGRES_PORT:-5432}:5432"
     volumes:
       - agentmind-postgres-data:/var/lib/postgresql/data
       - ./backend/src/main/resources/db/schema/knowledge_vector_chunks.sql:/docker-entrypoint-initdb.d/01-knowledge-vector-chunks.sql:ro

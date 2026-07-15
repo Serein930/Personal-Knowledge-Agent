@@ -139,8 +139,11 @@ export interface DailyStudyPlanDto {
   completed: boolean;
   tasks: Array<{
     id: number;
-    type: 'DUE_REVIEW' | 'WEAK_POINT_REVIEW' | 'TOPIC_REVIEW' | 'DOCUMENT_REVIEW';
+    type: 'DUE_REVIEW' | 'WEAK_POINT_REVIEW' | 'TOPIC_REVIEW' | 'DOCUMENT_REVIEW'
+      | 'MASTERY_REINFORCEMENT' | 'CONVERSATION_REVIEW';
     priority: 'HIGH' | 'MEDIUM' | 'LOW';
+    status: 'PENDING' | 'COMPLETED' | 'SKIPPED';
+    scheduledDate: string;
     topic?: string;
     sourceDocumentId?: number;
     targetCardCount: number;
@@ -148,8 +151,50 @@ export interface DailyStudyPlanDto {
     completed: boolean;
     reason: string;
     flashcardIds: number[];
+    feedbackScore?: number;
+    feedbackComment?: string;
+    completedAt?: string;
+    skippedAt?: string;
+    version: number;
+    updatedAt: string;
   }>;
   updatedAt: string;
+}
+
+export interface LearningTopicProfileDto {
+  topic: string;
+  cardCount: number;
+  reviewCount: number;
+  successRate: number;
+  lapseRate: number;
+  masteryScore: number;
+  level: 'WEAK' | 'AT_RISK' | 'STABLE' | 'STRONG';
+  lastReviewedAt?: string;
+  updatedAt: string;
+}
+
+export interface ConversationLearningSummaryDto {
+  id: number;
+  conversationId: number;
+  summary: string;
+  topics: string[];
+  weakTopics: string[];
+  messageCount: number;
+  version: number;
+  updatedAt: string;
+}
+
+export interface StudyMaintenanceStatusDto {
+  running: boolean;
+  lastStartedAt?: string;
+  lastCompletedAt?: string;
+  lastDurationMillis: number;
+  processedScopes: number;
+  optimizationJobs: number;
+  compensatedTasks: number;
+  rescheduledTasks: number;
+  failureCount: number;
+  lastError?: string;
 }
 
 export interface StudyReviewSessionDto {

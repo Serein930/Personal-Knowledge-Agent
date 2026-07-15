@@ -4,8 +4,12 @@ import com.agentmind.study.flashcard.model.StudyFlashcard;
 import com.agentmind.study.flashcard.model.StudyFlashcardStatus;
 import com.agentmind.study.plan.model.DailyStudyTask;
 import com.agentmind.study.plan.model.DailyStudyTaskPriority;
+import com.agentmind.study.plan.model.DailyStudyTaskStatus;
 import com.agentmind.study.plan.model.DailyStudyTaskType;
 import com.agentmind.study.plan.model.dto.SaveDailyStudyPlanRequest;
+import com.agentmind.study.memory.model.ConversationLearningSummary;
+import com.agentmind.study.profile.model.LearningTopicLevel;
+import com.agentmind.study.profile.model.LearningTopicProfile;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,6 +35,8 @@ public class DailyStudyTaskGenerator {
             Long ownerUserId,
             Long workspaceId,
             List<StudyFlashcard> cards,
+            List<LearningTopicProfile> learningProfiles,
+            List<ConversationLearningSummary> conversationSummaries,
             SaveDailyStudyPlanRequest request,
             OffsetDateTime planDeadline,
             OffsetDateTime createdAt
@@ -43,7 +49,64 @@ public class DailyStudyTaskGenerator {
         addWeakPointTasks(tasks, ownerUserId, workspaceId, activeCards, createdAt);
         addPreferredTopicTasks(tasks, ownerUserId, workspaceId, activeCards, request, createdAt);
         addDocumentTasks(tasks, ownerUserId, workspaceId, activeCards, request, createdAt);
-        return List.copyOf(tasks);
+        addProfileTasks(tasks, ownerUserId, workspaceId, activeCards, learningProfiles, createdAt);
+        addConversationTasks(tasks, ownerUserId, workspaceId, activeCards, conversationSummaries, createdAt);
+        return tasks.stream().map(task -> withScheduledDate(task, request.planDate())).toList();
+    }
+
+    private void addProfileTasks(
+            List<DailyStudyTask> tasks,
+            Long ownerUserId,
+            Long workspaceId,
+            List<StudyFlashcard> cards,
+            List<LearningTopicProfile> profiles,
+            OffsetDateTime createdAt
+    ) {
+        profiles.stream()
+                .filter(profile -> profile.level() == LearningTopicLevel.WEAK
+                        || profile.level() == LearningTopicLevel.AT_RISK)
+                .limit(3)
+                .forEach(profile -> {
+                    List<Long> ids = cards.stream()
+                            .filter(card -> card.topic() != null && card.topic().equalsIgnoreCase(profile.topic()))
+                            .sorted(Comparator.comparingInt(StudyFlashcard::lapseCount).reversed()
+                                    .thenComparing(StudyFlashcard::dueAt))
+                            .limit(20).map(StudyFlashcard::id).toList();
+                    if (!ids.isEmpty()) {
+                        tasks.add(task(
+                                ownerUserId, workspaceId, DailyStudyTaskType.MASTERY_REINFORCEMENT,
+                                DailyStudyTaskPriority.HIGH, profile.topic(), null,
+                                "学习画像掌握度为" + profile.masteryScore() + "，遗忘率为" + profile.lapseRate() + "%",
+                                ids, createdAt
+                        ));
+                    }
+                });
+    }
+
+    private void addConversationTasks(
+            List<DailyStudyTask> tasks,
+            Long ownerUserId,
+            Long workspaceId,
+            List<StudyFlashcard> cards,
+            List<ConversationLearningSummary> summaries,
+            OffsetDateTime createdAt
+    ) {
+        summaries.stream()
+                .flatMap(summary -> summary.weakTopics().stream())
+                .distinct()
+                .limit(3)
+                .forEach(topic -> {
+                    List<Long> ids = cards.stream()
+                            .filter(card -> card.topic() != null && card.topic().equalsIgnoreCase(topic))
+                            .limit(20).map(StudyFlashcard::id).toList();
+                    if (!ids.isEmpty()) {
+                        tasks.add(task(
+                                ownerUserId, workspaceId, DailyStudyTaskType.CONVERSATION_REVIEW,
+                                DailyStudyTaskPriority.HIGH, topic, null,
+                                "近期会话中明确表达了该主题的理解困难", ids, createdAt
+                        ));
+                    }
+                });
     }
 
     private void addDueTask(
@@ -154,8 +217,19 @@ public class DailyStudyTaskGenerator {
             OffsetDateTime createdAt
     ) {
         return new DailyStudyTask(
-                null, null, ownerUserId, workspaceId, type, priority, topic, sourceDocumentId,
-                flashcardIds.size(), reason, flashcardIds, createdAt
+                null, null, ownerUserId, workspaceId, type, priority,
+                DailyStudyTaskStatus.PENDING, null, topic, sourceDocumentId,
+                flashcardIds.size(), reason, flashcardIds, null, null, null, null,
+                0, createdAt, createdAt
+        );
+    }
+
+    private DailyStudyTask withScheduledDate(DailyStudyTask task, java.time.LocalDate scheduledDate) {
+        return new DailyStudyTask(
+                task.id(), task.planId(), task.ownerUserId(), task.workspaceId(), task.type(), task.priority(),
+                task.status(), scheduledDate, task.topic(), task.sourceDocumentId(), task.targetCardCount(),
+                task.reason(), task.flashcardIds(), task.feedbackScore(), task.feedbackComment(),
+                task.completedAt(), task.skippedAt(), task.version(), task.createdAt(), task.updatedAt()
         );
     }
 

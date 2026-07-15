@@ -78,6 +78,12 @@ agentmind:
     time-zone: Asia/Shanghai
     flashcard:
       algorithm: sm2
+    maintenance:
+      enabled: false
+      fixed-delay-millis: 21600000
+      initial-delay-millis: 60000
+      minimum-optimization-interval: 7d
+      batch-size: 100
   ingestion:
     max-upload-size-bytes: 20971520
     web-fetch-timeout-seconds: 8

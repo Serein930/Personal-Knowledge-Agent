@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Optional;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -37,5 +38,13 @@ public class InMemoryFsrsOptimizationJobRepository implements FsrsOptimizationJo
     @Override
     public long countByOwnerUserId(Long ownerUserId) {
         return jobs.values().stream().filter(job -> ownerUserId.equals(job.ownerUserId())).count();
+    }
+
+    @Override
+    public Optional<FsrsOptimizationJob> findLatestByOwnerUserId(Long ownerUserId) {
+        return jobs.values().stream()
+                .filter(job -> ownerUserId.equals(job.ownerUserId()))
+                .max(Comparator.comparing(FsrsOptimizationJob::createdAt)
+                        .thenComparing(FsrsOptimizationJob::id));
     }
 }

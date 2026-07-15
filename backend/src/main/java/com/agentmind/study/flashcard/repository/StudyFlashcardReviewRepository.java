@@ -3,6 +3,7 @@ package com.agentmind.study.flashcard.repository;
 import com.agentmind.study.flashcard.model.StudyFlashcardReview;
 import java.util.List;
 import java.util.Optional;
+import com.agentmind.study.maintenance.model.StudyDataScope;
 
 /**
  * 复习评分记录存储端口。
@@ -47,4 +48,7 @@ public interface StudyFlashcardReviewRepository {
 
     /** 返回用户跨知识空间的全部复习事实，供用户级 FSRS 参数优化使用。 */
     List<StudyFlashcardReview> findAllByOwnerUserId(Long ownerUserId);
+
+    /** 返回最近有复习行为的用户与知识空间，供后台维护分批处理。 */
+    List<StudyDataScope> findActiveScopes(int limit);
 }

@@ -2,7 +2,7 @@
 
 ## 本阶段边界
 
-本阶段把复习行为沉淀为三类长期数据：FSRS 卡片状态快照、用户级参数档案、可解释的每日学习任务。默认算法仍为 SM-2；只有显式配置 `agentmind.study.flashcard.algorithm=fsrs` 时才使用 FSRS 快照。
+本阶段把复习行为沉淀为 FSRS 卡片快照与参数版本、主题学习画像、长期会话摘要、可追踪的每日任务及维护运行状态。默认算法仍为 SM-2；只有显式配置 `agentmind.study.flashcard.algorithm=fsrs` 时才使用 FSRS 快照。
 
 ## FSRS 快照验证
 
@@ -38,7 +38,24 @@ Invoke-RestMethod -Method Post `
   -Body $body
 ```
 
-少于 20 条历史记录时应返回 `SKIPPED`。样本足够时返回 `SUCCEEDED` 和推荐保持率；只有 `applyResult=true` 才增加用户参数版本。
+少于 50 条历史记录时应返回 `SKIPPED`。样本足够时，优化器按时间切分训练集和验证集，以二元交叉熵拟合完整 FSRS 权重。只有训练、验证损失都改善且 `applyResult=true` 时才增加用户参数版本。
+
+查询版本并回滚：
+
+```powershell
+Invoke-RestMethod -Method Get `
+  -Uri "http://localhost:8081/api/v1/workspaces/1/study/fsrs/profile/versions?page=1&pageSize=20" `
+  -Headers @{"X-Demo-User-Id"="1"}
+
+$body = @{targetVersion=0; expectedCurrentVersion=1} | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8081/api/v1/workspaces/1/study/fsrs/profile/rollback" `
+  -Headers @{"X-Demo-User-Id"="1"} `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+回滚后应产生新的 `ROLLBACK` 版本，目标版本和中间版本仍能查询。
 
 ## 会话生命周期
 
@@ -52,8 +69,39 @@ Invoke-RestMethod -Method Post `
 - `WEAK_POINT_REVIEW`：卡片存在历史回忆失败。
 - `TOPIC_REVIEW`：匹配用户指定主题。
 - `DOCUMENT_REVIEW`：匹配用户指定来源文档。
+- `MASTERY_REINFORCEMENT`：主题画像被判定为薄弱或有风险。
+- `CONVERSATION_REVIEW`：近期完整会话摘要识别到用户明确表达的薄弱主题。
 
 Agent 写工具名为 `study_plan.create`。创建确认单后先查询计划，应返回不存在；确认令牌成功后再次查询，计划和任务才应出现。
+
+## 每日任务状态验证
+
+从计划响应取一个任务编号，依次调用完成和反馈接口。每一步都必须提交最近读取到的 `expectedVersion`：
+
+```powershell
+$complete = @{expectedVersion=0; comment="已完成复习"} | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8081/api/v1/workspaces/1/study-tasks/1/complete" `
+  -ContentType "application/json" -Body $complete
+
+$feedback = @{expectedVersion=1; score=5; comment="内容有效"} | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8081/api/v1/workspaces/1/study-tasks/1/feedback" `
+  -ContentType "application/json" -Body $feedback
+```
+
+事件查询应返回 `COMPLETED` 与 `FEEDBACK_RECORDED` 两条不可变记录。跳过与重新安排使用相同乐观锁语义。
+
+## 画像、摘要与维护任务
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8081/api/v1/workspaces/1/study/learning-profile/refresh"
+Invoke-RestMethod -Method Post -Uri "http://localhost:8081/api/v1/workspaces/1/study/conversation-summaries/refresh"
+Invoke-RestMethod -Method Post -Uri "http://localhost:8081/api/v1/workspaces/1/study/maintenance/run"
+Invoke-RestMethod -Method Get  -Uri "http://localhost:8081/api/v1/workspaces/1/study/maintenance/status"
+```
+
+后台调度默认关闭。需要自动执行时设置 `agentmind.study.maintenance.enabled=true`；默认每 6 小时运行，FSRS 优化至少间隔 7 天。维护任务会补偿已发生真实复习但仍为待完成的任务，并把逾期未完成任务重新安排到当天。
 
 ## 趋势验证
 
@@ -70,7 +118,15 @@ Invoke-RestMethod -Method Get `
 ```powershell
 cd D:\Program\AgentMind\backend
 $env:AGENTMIND_AGENT_JDBC_INTEGRATION_TEST = "true"
-mvn -Dtest=JdbcStudyFlashcardReviewIntegrationTests,JdbcAgentWriteToolIntegrationTests test
+$env:AGENTMIND_POSTGRES_JDBC_URL = "jdbc:postgresql://localhost:55432/agentmind"
+mvn -Dtest=JdbcStudyFlashcardReviewIntegrationTests,JdbcAgentWriteToolIntegrationTests,JdbcStudyPersonalizationIntegrationTests test
 ```
 
-测试会初始化并清空本地学习系统相关表，只能连接本地开发数据库。覆盖 FSRS 快照持久化、并发评分、计划任务事务和确认式写工具。
+若本机 `5432` 已被占用，可在仓库根目录这样启动容器：
+
+```powershell
+$env:AGENTMIND_POSTGRES_PORT = "55432"
+docker compose up -d agentmind-postgres
+```
+
+测试会初始化并清空本地学习系统相关表，只能连接本地开发数据库。覆盖 FSRS 快照与参数版本、并发评分、画像快照、会话摘要、任务事件、计划事务和确认式写工具。

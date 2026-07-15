@@ -4,7 +4,9 @@ import com.agentmind.agent.tool.model.AgentToolExecutionContext;
 import com.agentmind.common.response.ApiResponse;
 import com.agentmind.common.response.PageResponse;
 import com.agentmind.study.flashcard.fsrs.model.dto.FsrsOptimizationJobResponse;
+import com.agentmind.study.flashcard.fsrs.model.dto.FsrsProfileVersionResponse;
 import com.agentmind.study.flashcard.fsrs.model.dto.FsrsUserProfileResponse;
+import com.agentmind.study.flashcard.fsrs.model.dto.RollbackFsrsProfileRequest;
 import com.agentmind.study.flashcard.fsrs.model.dto.StartFsrsOptimizationRequest;
 import com.agentmind.study.flashcard.fsrs.model.dto.UpdateFsrsUserProfileRequest;
 import com.agentmind.study.flashcard.fsrs.service.FsrsOptimizationApplicationService;
@@ -68,6 +70,29 @@ public class FsrsProfileController {
             @RequestBody StartFsrsOptimizationRequest request
     ) {
         return ApiResponse.success(optimizationService.start(context(ownerUserId, workspaceId), request));
+    }
+
+    @GetMapping("/profile/versions")
+    public ApiResponse<PageResponse<FsrsProfileVersionResponse>> listProfileVersions(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
+    ) {
+        return ApiResponse.success(profileService.listVersions(
+                context(ownerUserId, workspaceId), page, pageSize
+        ));
+    }
+
+    @PostMapping("/profile/rollback")
+    public ApiResponse<FsrsUserProfileResponse> rollbackProfile(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @Valid @RequestBody RollbackFsrsProfileRequest request
+    ) {
+        return ApiResponse.success(profileService.rollback(context(ownerUserId, workspaceId), request));
     }
 
     @GetMapping("/optimization-jobs")

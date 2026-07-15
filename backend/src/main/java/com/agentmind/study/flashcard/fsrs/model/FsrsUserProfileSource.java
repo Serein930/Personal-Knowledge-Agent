@@ -4,5 +4,6 @@ package com.agentmind.study.flashcard.fsrs.model;
 public enum FsrsUserProfileSource {
     DEFAULT,
     MANUAL,
-    OPTIMIZED
+    OPTIMIZED,
+    ROLLBACK
 }

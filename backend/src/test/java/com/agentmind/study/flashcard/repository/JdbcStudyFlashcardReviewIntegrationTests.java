@@ -27,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 
 /**
@@ -41,9 +42,9 @@ import org.springframework.jdbc.datasource.init.ScriptUtils;
         "agentmind.agent.persistence.store=jdbc",
         "agentmind.study.flashcard.algorithm=fsrs",
         "agentmind.vector-store.type=memory",
-        "spring.datasource.url=jdbc:postgresql://localhost:5432/agentmind",
-        "spring.datasource.username=agentmind",
-        "spring.datasource.password=agentmind_dev_password"
+        "spring.datasource.url=${AGENTMIND_POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/agentmind}",
+        "spring.datasource.username=${AGENTMIND_POSTGRES_USERNAME:agentmind}",
+        "spring.datasource.password=${AGENTMIND_POSTGRES_PASSWORD:agentmind_dev_password}"
 })
 class JdbcStudyFlashcardReviewIntegrationTests {
 
@@ -65,13 +66,22 @@ class JdbcStudyFlashcardReviewIntegrationTests {
     @BeforeEach
     void setUpSchema() throws Exception {
         try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/schema/agent_write_tools.sql"));
+            ResourceDatabasePopulator populator = new ResourceDatabasePopulator(
+                    new ClassPathResource("db/schema/agent_write_tools.sql")
+            );
+            // 保留 PostgreSQL DO $$ 匿名块，由数据库一次性完成脚本解析。
+            populator.setSeparator(ScriptUtils.EOF_STATEMENT_SEPARATOR);
+            populator.populate(connection);
         }
+        jdbcTemplate.update("delete from daily_study_task_events");
         jdbcTemplate.update("delete from daily_study_task_cards");
         jdbcTemplate.update("delete from daily_study_tasks");
         jdbcTemplate.update("delete from study_review_session_items");
         jdbcTemplate.update("delete from study_review_sessions");
         jdbcTemplate.update("delete from daily_study_plans");
+        jdbcTemplate.update("delete from conversation_learning_summaries");
+        jdbcTemplate.update("delete from learning_topic_profiles");
+        jdbcTemplate.update("delete from fsrs_user_profile_versions");
         jdbcTemplate.update("delete from study_flashcard_fsrs_states");
         jdbcTemplate.update("delete from fsrs_parameter_optimization_jobs");
         jdbcTemplate.update("delete from fsrs_user_profiles");

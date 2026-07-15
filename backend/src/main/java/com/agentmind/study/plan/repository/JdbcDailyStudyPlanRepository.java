@@ -2,7 +2,10 @@ package com.agentmind.study.plan.repository;
 
 import com.agentmind.study.plan.model.DailyStudyPlan;
 import com.agentmind.study.plan.model.DailyStudyTask;
+import com.agentmind.study.plan.model.DailyStudyTaskAction;
+import com.agentmind.study.plan.model.DailyStudyTaskEvent;
 import com.agentmind.study.plan.model.DailyStudyTaskPriority;
+import com.agentmind.study.plan.model.DailyStudyTaskStatus;
 import com.agentmind.study.plan.model.DailyStudyTaskType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -52,26 +55,33 @@ public class JdbcDailyStudyPlanRepository implements DailyStudyPlanRepository {
                 ).stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("保存每日学习计划失败"));
-        jdbcTemplate.update(
-                "delete from daily_study_tasks where owner_user_id = ? and workspace_id = ? and plan_id = ?",
-                stored.ownerUserId(), stored.workspaceId(), stored.id()
+        Integer taskCount = jdbcTemplate.queryForObject(
+                "select count(*) from daily_study_tasks where owner_user_id = ? and workspace_id = ? and plan_id = ?",
+                Integer.class, stored.ownerUserId(), stored.workspaceId(), stored.id()
         );
-        for (DailyStudyTask task : tasks) {
-            Long taskId = jdbcTemplate.queryForObject("""
-                    insert into daily_study_tasks (
-                        plan_id, owner_user_id, workspace_id, task_type, priority, topic,
-                        source_document_id, target_card_count, reason, created_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
-                    """, Long.class,
-                    stored.id(), task.ownerUserId(), task.workspaceId(), task.type().name(),
-                    task.priority().name(), task.topic(), task.sourceDocumentId(),
-                    task.targetCardCount(), task.reason(), task.createdAt());
-            for (Long flashcardId : task.flashcardIds()) {
-                jdbcTemplate.update("""
-                        insert into daily_study_task_cards (
-                            task_id, owner_user_id, workspace_id, flashcard_id
-                        ) values (?, ?, ?, ?)
-                        """, taskId, task.ownerUserId(), task.workspaceId(), flashcardId);
+        // 更新每日目标时保留已生成任务及其执行历史；只有新计划才写入初始任务快照。
+        if (taskCount == null || taskCount == 0) {
+            for (DailyStudyTask task : tasks) {
+                Long taskId = jdbcTemplate.queryForObject("""
+                        insert into daily_study_tasks (
+                            plan_id, owner_user_id, workspace_id, task_type, priority, status,
+                            scheduled_date, topic, source_document_id, target_card_count, reason,
+                            feedback_score, feedback_comment, completed_at, skipped_at, version,
+                            created_at, updated_at
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
+                        """, Long.class,
+                        stored.id(), task.ownerUserId(), task.workspaceId(), task.type().name(),
+                        task.priority().name(), task.status().name(), task.scheduledDate(), task.topic(),
+                        task.sourceDocumentId(), task.targetCardCount(), task.reason(), task.feedbackScore(),
+                        task.feedbackComment(), task.completedAt(), task.skippedAt(), task.version(),
+                        task.createdAt(), task.updatedAt());
+                for (Long flashcardId : task.flashcardIds()) {
+                    jdbcTemplate.update("""
+                            insert into daily_study_task_cards (
+                                task_id, owner_user_id, workspace_id, flashcard_id
+                            ) values (?, ?, ?, ?)
+                            """, taskId, task.ownerUserId(), task.workspaceId(), flashcardId);
+                }
             }
         }
         return stored;
@@ -84,8 +94,10 @@ public class JdbcDailyStudyPlanRepository implements DailyStudyPlanRepository {
             Long planId
     ) {
         return jdbcTemplate.query("""
-                        select id, plan_id, owner_user_id, workspace_id, task_type, priority,
-                               topic, source_document_id, target_card_count, reason, created_at
+                        select id, plan_id, owner_user_id, workspace_id, task_type, priority, status,
+                               scheduled_date, topic, source_document_id, target_card_count, reason,
+                               feedback_score, feedback_comment, completed_at, skipped_at, version,
+                               created_at, updated_at
                         from daily_study_tasks
                         where owner_user_id = ? and workspace_id = ? and plan_id = ?
                         order by case priority when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end, id
@@ -94,11 +106,119 @@ public class JdbcDailyStudyPlanRepository implements DailyStudyPlanRepository {
                         resultSet.getLong("owner_user_id"), resultSet.getLong("workspace_id"),
                         DailyStudyTaskType.valueOf(resultSet.getString("task_type")),
                         DailyStudyTaskPriority.valueOf(resultSet.getString("priority")),
+                        DailyStudyTaskStatus.valueOf(resultSet.getString("status")),
+                        resultSet.getObject("scheduled_date", LocalDate.class),
                         resultSet.getString("topic"), nullableLong(resultSet, "source_document_id"),
                         resultSet.getInt("target_card_count"), resultSet.getString("reason"),
                         findTaskFlashcardIds(resultSet.getLong("id"), ownerUserId, workspaceId),
-                        resultSet.getObject("created_at", OffsetDateTime.class)
+                        nullableInteger(resultSet, "feedback_score"), resultSet.getString("feedback_comment"),
+                        resultSet.getObject("completed_at", OffsetDateTime.class),
+                        resultSet.getObject("skipped_at", OffsetDateTime.class), resultSet.getLong("version"),
+                        resultSet.getObject("created_at", OffsetDateTime.class),
+                        resultSet.getObject("updated_at", OffsetDateTime.class)
                 ), ownerUserId, workspaceId, planId);
+    }
+
+    @Override
+    public Optional<DailyStudyTask> findTaskByScopeAndId(Long ownerUserId, Long workspaceId, Long taskId) {
+        return queryTasks("where owner_user_id = ? and workspace_id = ? and id = ?", ownerUserId, workspaceId, taskId)
+                .stream().findFirst();
+    }
+
+    @Override
+    public Optional<DailyStudyTask> updateTask(DailyStudyTask task, long expectedVersion) {
+        return jdbcTemplate.query("""
+                        update daily_study_tasks
+                        set status = ?, scheduled_date = ?, feedback_score = ?, feedback_comment = ?,
+                            completed_at = ?, skipped_at = ?, version = ?, updated_at = ?
+                        where id = ? and owner_user_id = ? and workspace_id = ? and version = ?
+                        returning id, plan_id, owner_user_id, workspace_id, task_type, priority, status,
+                                  scheduled_date, topic, source_document_id, target_card_count, reason,
+                                  feedback_score, feedback_comment, completed_at, skipped_at, version,
+                                  created_at, updated_at
+                        """, (resultSet, rowNumber) -> mapTask(resultSet),
+                task.status().name(), task.scheduledDate(), task.feedbackScore(), task.feedbackComment(),
+                task.completedAt(), task.skippedAt(), task.version(), task.updatedAt(), task.id(),
+                task.ownerUserId(), task.workspaceId(), expectedVersion).stream().findFirst();
+    }
+
+    @Override
+    public DailyStudyTaskEvent saveTaskEvent(DailyStudyTaskEvent event) {
+        return jdbcTemplate.query("""
+                        insert into daily_study_task_events (
+                            task_id, owner_user_id, workspace_id, action, previous_status, next_status,
+                            previous_scheduled_date, next_scheduled_date, feedback_score, comment, created_at
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        returning id, task_id, owner_user_id, workspace_id, action, previous_status, next_status,
+                                  previous_scheduled_date, next_scheduled_date, feedback_score, comment, created_at
+                        """, (resultSet, rowNumber) -> mapEvent(resultSet),
+                event.taskId(), event.ownerUserId(), event.workspaceId(), event.action().name(),
+                event.previousStatus().name(), event.nextStatus().name(), event.previousScheduledDate(),
+                event.nextScheduledDate(), event.feedbackScore(), event.comment(), event.createdAt())
+                .stream().findFirst().orElseThrow(() -> new IllegalStateException("保存学习任务事件失败"));
+    }
+
+    @Override
+    public List<DailyStudyTaskEvent> findTaskEvents(Long ownerUserId, Long workspaceId, Long taskId) {
+        return jdbcTemplate.query("""
+                        select id, task_id, owner_user_id, workspace_id, action, previous_status, next_status,
+                               previous_scheduled_date, next_scheduled_date, feedback_score, comment, created_at
+                        from daily_study_task_events
+                        where owner_user_id = ? and workspace_id = ? and task_id = ?
+                        order by created_at, id
+                        """, (resultSet, rowNumber) -> mapEvent(resultSet), ownerUserId, workspaceId, taskId);
+    }
+
+    @Override
+    public List<DailyStudyTask> findPendingTasksScheduledOnOrBefore(LocalDate date, int limit) {
+        return queryTasks(
+                "where status = 'PENDING' and scheduled_date <= ? order by scheduled_date, id limit ?",
+                date, limit
+        );
+    }
+
+    private List<DailyStudyTask> queryTasks(String suffix, Object... arguments) {
+        return jdbcTemplate.query("""
+                        select id, plan_id, owner_user_id, workspace_id, task_type, priority, status,
+                               scheduled_date, topic, source_document_id, target_card_count, reason,
+                               feedback_score, feedback_comment, completed_at, skipped_at, version,
+                               created_at, updated_at
+                        from daily_study_tasks
+                        """ + suffix, (resultSet, rowNumber) -> mapTask(resultSet), arguments);
+    }
+
+    private DailyStudyTask mapTask(ResultSet resultSet) throws SQLException {
+        long taskId = resultSet.getLong("id");
+        long ownerUserId = resultSet.getLong("owner_user_id");
+        long workspaceId = resultSet.getLong("workspace_id");
+        return new DailyStudyTask(
+                taskId, resultSet.getLong("plan_id"), ownerUserId, workspaceId,
+                DailyStudyTaskType.valueOf(resultSet.getString("task_type")),
+                DailyStudyTaskPriority.valueOf(resultSet.getString("priority")),
+                DailyStudyTaskStatus.valueOf(resultSet.getString("status")),
+                resultSet.getObject("scheduled_date", LocalDate.class), resultSet.getString("topic"),
+                nullableLong(resultSet, "source_document_id"), resultSet.getInt("target_card_count"),
+                resultSet.getString("reason"), findTaskFlashcardIds(taskId, ownerUserId, workspaceId),
+                nullableInteger(resultSet, "feedback_score"), resultSet.getString("feedback_comment"),
+                resultSet.getObject("completed_at", OffsetDateTime.class),
+                resultSet.getObject("skipped_at", OffsetDateTime.class), resultSet.getLong("version"),
+                resultSet.getObject("created_at", OffsetDateTime.class),
+                resultSet.getObject("updated_at", OffsetDateTime.class)
+        );
+    }
+
+    private DailyStudyTaskEvent mapEvent(ResultSet resultSet) throws SQLException {
+        return new DailyStudyTaskEvent(
+                resultSet.getLong("id"), resultSet.getLong("task_id"),
+                resultSet.getLong("owner_user_id"), resultSet.getLong("workspace_id"),
+                DailyStudyTaskAction.valueOf(resultSet.getString("action")),
+                DailyStudyTaskStatus.valueOf(resultSet.getString("previous_status")),
+                DailyStudyTaskStatus.valueOf(resultSet.getString("next_status")),
+                resultSet.getObject("previous_scheduled_date", LocalDate.class),
+                resultSet.getObject("next_scheduled_date", LocalDate.class),
+                nullableInteger(resultSet, "feedback_score"), resultSet.getString("comment"),
+                resultSet.getObject("created_at", OffsetDateTime.class)
+        );
     }
 
     private List<Long> findTaskFlashcardIds(Long taskId, Long ownerUserId, Long workspaceId) {
@@ -138,6 +258,11 @@ public class JdbcDailyStudyPlanRepository implements DailyStudyPlanRepository {
 
     private Long nullableLong(ResultSet resultSet, String column) throws SQLException {
         long value = resultSet.getLong(column);
+        return resultSet.wasNull() ? null : value;
+    }
+
+    private Integer nullableInteger(ResultSet resultSet, String column) throws SQLException {
+        int value = resultSet.getInt(column);
         return resultSet.wasNull() ? null : value;
     }
 }
