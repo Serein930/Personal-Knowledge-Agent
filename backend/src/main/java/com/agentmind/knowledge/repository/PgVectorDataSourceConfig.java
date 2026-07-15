@@ -22,7 +22,8 @@ import org.springframework.util.StringUtils;
  */
 @Configuration
 @ConditionalOnExpression("'${agentmind.vector-store.type:memory}' == 'pgvector' "
-        + "or '${agentmind.agent.persistence.store:memory}' == 'jdbc'")
+        + "or '${agentmind.agent.persistence.store:memory}' == 'jdbc' "
+        + "or '${agentmind.evaluation.store:memory}' == 'jdbc'")
 public class PgVectorDataSourceConfig {
 
     @Bean
@@ -33,7 +34,7 @@ public class PgVectorDataSourceConfig {
             @Value("${spring.datasource.password:}") String password
     ) {
         if (!StringUtils.hasText(url)) {
-            throw new IllegalStateException("启用数据库向量库或智能体 JDBC 持久化时必须配置 spring.datasource.url");
+            throw new IllegalStateException("启用数据库向量库或 JDBC 持久化时必须配置 spring.datasource.url");
         }
         return new DriverManagerBackedDataSource(url, username, password);
     }

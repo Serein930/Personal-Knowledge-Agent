@@ -43,6 +43,120 @@ export interface RagTraceDto {
   result: string;
 }
 
+export interface RagEvaluationCaseDto {
+  caseKey: string;
+  question: string;
+  expectedRelevantChunkIds: string[];
+  expectedRelevantDocumentIds: number[];
+  expectedRefusal: boolean;
+  expectedAnswerKeywords: string[];
+}
+
+export interface RagEvaluationDatasetDto {
+  id: number;
+  name: string;
+  description: string;
+  latestVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RagEvaluationDatasetVersionDto {
+  id: number;
+  datasetId: number;
+  version: number;
+  changeNote: string;
+  cases: RagEvaluationCaseDto[];
+  createdAt: string;
+}
+
+export interface RagEvaluationMetricsDto {
+  caseCount: number;
+  recallAtK: number;
+  meanReciprocalRank: number;
+  citationCoverage: number;
+  refusalAccuracy: number;
+  answerKeywordCoverage: number;
+  averageLatencyMillis: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  tokenUsageEstimated: boolean;
+  estimatedCostUsd: number;
+}
+
+export interface RagEvaluationCaseResultDto {
+  caseKey: string;
+  question: string;
+  retrievedSources: Array<{
+    chunkId: string;
+    documentId: number;
+    rank: number;
+    score: number;
+  }>;
+  relevantRetrievedCount: number;
+  relevantExpectedCount: number;
+  firstRelevantRank?: number;
+  recallAtK: number;
+  reciprocalRank: number;
+  citationCovered: boolean;
+  expectedRefusal: boolean;
+  actualRefusal: boolean;
+  refusalCorrect: boolean;
+  answerKeywordCoverage: number;
+  elapsedMillis: number;
+  promptTokens: number;
+  completionTokens: number;
+  tokenUsageEstimated: boolean;
+  estimatedCostUsd: number;
+}
+
+export type RagEvaluationJobStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+
+export interface RagEvaluationJobDto {
+  id: number;
+  datasetId: number;
+  datasetVersion: number;
+  status: RagEvaluationJobStatus;
+  retrievalStrategy: string;
+  topK: number;
+  promptVersion: string;
+  modelName: string;
+  baselineJobId?: number;
+  metrics?: RagEvaluationMetricsDto;
+  caseResults: RagEvaluationCaseResultDto[];
+  failureReason?: string;
+  createdAt: string;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface RagEvaluationComparisonDto {
+  currentJobId: number;
+  baselineJobId?: number;
+  comparable: boolean;
+  message: string;
+  delta?: {
+    recallAtK: number;
+    meanReciprocalRank: number;
+    citationCoverage: number;
+    refusalAccuracy: number;
+    answerKeywordCoverage: number;
+    averageLatencyMillis: number;
+    totalTokens: number;
+    estimatedCostUsd: number;
+  };
+}
+
+export interface RagEvaluationDashboardDto {
+  datasetCount: number;
+  totalJobCount: number;
+  successfulJobCount: number;
+  latestSuccessfulJob?: RagEvaluationJobDto;
+  latestComparison?: RagEvaluationComparisonDto;
+  recentJobs: RagEvaluationJobDto[];
+}
+
 export type BackendIngestionStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELED';
 export type BackendDocumentSourceType = 'PDF' | 'MARKDOWN' | 'WEB_PAGE' | 'WORD' | 'TEXT' | 'CODE';
 

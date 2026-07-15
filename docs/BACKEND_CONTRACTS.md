@@ -701,6 +701,48 @@ GET /api/v1/workspaces/{workspaceId}/study/analytics/trends?from=2026-07-01&to=2
 
 ## 后续实现顺序
 
+## Stage 9 固定 RAG 评估契约
+
+### 评估集与不可变版本
+
+```text
+POST /api/v1/workspaces/{workspaceId}/evaluations/datasets
+GET  /api/v1/workspaces/{workspaceId}/evaluations/datasets?page=1&pageSize=20
+POST /api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/versions
+GET  /api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/versions
+GET  /api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/versions/{version}
+```
+
+评估题由稳定的 `caseKey`、问题、期望相关片段或文档、期望拒答标志和可选答案关键词组成。
+可回答题至少配置一个期望片段或期望文档；拒答题允许没有相关来源。同一版本内 `caseKey` 不允许重复，
+版本创建后不提供修改接口，修正样本必须创建下一版本。
+
+### 评估任务与基线
+
+```text
+POST /api/v1/workspaces/{workspaceId}/evaluations/jobs
+GET  /api/v1/workspaces/{workspaceId}/evaluations/jobs?page=1&pageSize=20
+GET  /api/v1/workspaces/{workspaceId}/evaluations/jobs/{jobId}
+GET  /api/v1/workspaces/{workspaceId}/evaluations/jobs/{jobId}/comparison?baselineJobId={baselineJobId}
+GET  /api/v1/workspaces/{workspaceId}/evaluations/dashboard
+```
+
+启动请求提交 `datasetId`、`datasetVersion` 和 1 至 20 的 `topK`。本阶段同步执行最多两百题，
+先保存 `RUNNING` 快照，再保存 `SUCCEEDED` 或 `FAILED` 终态。同一评估集版本再次成功运行时，
+自动关联上一条成功任务作为基线。显式基线也必须属于相同用户、知识空间、评估集和版本。
+
+### 指标口径
+
+- `Recall@K`：只统计配置了期望相关来源的题目，计算前 K 条结果覆盖了多少期望来源。
+- `MRR`：只统计配置了期望相关来源的题目，取首个相关结果排名倒数的平均值。
+- `引用覆盖率`：只统计应回答题，要求检索命中相关来源且最终未拒答。
+- `拒答准确率`：统计全部题目，比较实际拒答与期望拒答是否一致。
+- `答案关键词覆盖率`：只统计配置了答案关键词的题目，作为轻量可重复的回答内容指标。
+- `平均耗时`：单题检索、拒答、提示词构造与回答生成的端到端平均耗时。
+- `Token 与成本`：优先使用模型供应商用量；模拟模型使用统一 Token 计算端口估算，并显式标记估算值。
+
+基线差值始终为“当前任务减去基线任务”。质量指标为正通常代表改善；耗时、Token 和成本为正代表资源消耗上升。
+
 1. Stage 1 先实现统一响应、异常处理和健康检查。
 2. Stage 2 实现核心 DTO、枚举和领域模型骨架。
 3. Stage 3 开始落地文件上传、URL 采集和文档列表接口。

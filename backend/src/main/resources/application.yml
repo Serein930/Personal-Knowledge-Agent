@@ -64,6 +64,12 @@ agentmind:
     max-tool-round-trips: 4
     write-tool-proposals-enabled: true
     observation-store: memory
+  evaluation:
+    store: memory
+    maximum-cases-per-version: 200
+    # 单价单位为美元/百万令牌；本地默认零成本，真实模型联调时通过环境配置覆盖。
+    input-cost-per-million-tokens: ${AGENTMIND_EVALUATION_INPUT_COST:0}
+    output-cost-per-million-tokens: ${AGENTMIND_EVALUATION_OUTPUT_COST:0}
   chat:
     memory:
       store: memory

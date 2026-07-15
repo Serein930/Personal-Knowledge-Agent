@@ -61,8 +61,8 @@ export function AppShell({ activePage, onPageChange, children }: AppShellProps) 
             <h1>面向个人学习资料的智能知识中枢</h1>
           </div>
           <div className="topbar__status">
-            <span>Stage 3</span>
-            <strong>前端联调准备中</strong>
+            <span>Stage 9</span>
+            <strong>评估闭环联调中</strong>
           </div>
         </header>
 
