@@ -6,6 +6,11 @@ import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.exception.ErrorCode;
 import com.agentmind.common.response.PageResponse;
 import com.agentmind.study.flashcard.algorithm.SpacedRepetitionAlgorithm;
+import com.agentmind.study.flashcard.algorithm.StatefulSpacedRepetitionAlgorithm;
+import com.agentmind.study.flashcard.fsrs.model.FsrsCardSnapshot;
+import com.agentmind.study.flashcard.fsrs.model.FsrsUserProfile;
+import com.agentmind.study.flashcard.fsrs.repository.FsrsCardSnapshotRepository;
+import com.agentmind.study.flashcard.fsrs.service.FsrsUserProfileService;
 import com.agentmind.study.flashcard.model.StudyFlashcard;
 import com.agentmind.study.flashcard.model.StudyFlashcardReview;
 import com.agentmind.study.flashcard.model.StudyFlashcardSchedule;
@@ -16,6 +21,8 @@ import com.agentmind.study.flashcard.model.dto.SubmittedFlashcardReviewResponse;
 import com.agentmind.study.flashcard.repository.StudyFlashcardRepository;
 import com.agentmind.study.flashcard.repository.StudyFlashcardReviewRepository;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +43,8 @@ public class StudyFlashcardReviewApplicationService {
     private final FlashcardReviewTransactionBoundary transactionBoundary;
     private final AgentToolExecutionAuthorizer authorizer;
     private final StudyFlashcardResponseMapper responseMapper;
+    private final FsrsCardSnapshotRepository fsrsSnapshotRepository;
+    private final FsrsUserProfileService fsrsUserProfileService;
 
     public StudyFlashcardReviewApplicationService(
             StudyFlashcardRepository flashcardRepository,
@@ -43,7 +52,9 @@ public class StudyFlashcardReviewApplicationService {
             SpacedRepetitionAlgorithm algorithm,
             FlashcardReviewTransactionBoundary transactionBoundary,
             AgentToolExecutionAuthorizer authorizer,
-            StudyFlashcardResponseMapper responseMapper
+            StudyFlashcardResponseMapper responseMapper,
+            FsrsCardSnapshotRepository fsrsSnapshotRepository,
+            FsrsUserProfileService fsrsUserProfileService
     ) {
         this.flashcardRepository = flashcardRepository;
         this.reviewRepository = reviewRepository;
@@ -51,6 +62,8 @@ public class StudyFlashcardReviewApplicationService {
         this.transactionBoundary = transactionBoundary;
         this.authorizer = authorizer;
         this.responseMapper = responseMapper;
+        this.fsrsSnapshotRepository = fsrsSnapshotRepository;
+        this.fsrsUserProfileService = fsrsUserProfileService;
     }
 
     public SubmittedFlashcardReviewResponse submit(
@@ -123,20 +136,49 @@ public class StudyFlashcardReviewApplicationService {
             throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "暂停状态的复习卡片不能提交评分");
         }
         OffsetDateTime reviewedAt = OffsetDateTime.now();
-        StudyFlashcardSchedule nextSchedule = algorithm.calculate(
-                current.schedule(),
-                score,
-                reviewedAt,
-                reviewRepository.findChronologicalByOwnerUserIdAndWorkspaceIdAndFlashcardId(
+        List<StudyFlashcardReview> history = reviewRepository
+                .findChronologicalByOwnerUserIdAndWorkspaceIdAndFlashcardId(
                         context.ownerUserId(), context.workspaceId(), flashcardId
-                )
-        );
+                );
+        StatefulSpacedRepetitionAlgorithm.StatefulCalculation statefulCalculation = null;
+        Optional<FsrsCardSnapshot> currentSnapshot = Optional.empty();
+        FsrsUserProfile fsrsProfile = null;
+        StudyFlashcardSchedule nextSchedule;
+        if (algorithm instanceof StatefulSpacedRepetitionAlgorithm statefulAlgorithm) {
+            currentSnapshot = fsrsSnapshotRepository.findByScopeAndFlashcardId(
+                    context.ownerUserId(), context.workspaceId(), flashcardId
+            );
+            fsrsProfile = fsrsUserProfileService.getOrCreate(context.ownerUserId());
+            statefulCalculation = statefulAlgorithm.calculateWithSnapshot(
+                    flashcardId,
+                    current.schedule(),
+                    score,
+                    reviewedAt,
+                    history,
+                    currentSnapshot,
+                    fsrsProfile
+            );
+            nextSchedule = statefulCalculation.schedule();
+        } else {
+            nextSchedule = algorithm.calculate(current.schedule(), score, reviewedAt, history);
+        }
         StudyFlashcard candidate = current.applySchedule(nextSchedule, reviewedAt);
         StudyFlashcard updated = flashcardRepository.updateSchedule(candidate, current.version())
                 .orElseThrow(ConcurrentFlashcardReviewException::new);
         StudyFlashcardReview savedReview = reviewRepository.save(createReview(
                 current, updated, requestId, score, reviewedAt
         ));
+        if (statefulCalculation != null && fsrsProfile != null) {
+            OffsetDateTime snapshotCreatedAt = currentSnapshot
+                    .map(FsrsCardSnapshot::createdAt)
+                    .orElse(reviewedAt);
+            fsrsSnapshotRepository.save(new FsrsCardSnapshot(
+                    context.ownerUserId(), context.workspaceId(), flashcardId,
+                    algorithm.name(), statefulCalculation.snapshotSchemaVersion(),
+                    fsrsProfile.version(),
+                    statefulCalculation.snapshotPayload(), snapshotCreatedAt, reviewedAt
+            ));
+        }
         return new SubmittedFlashcardReviewResponse(
                 responseMapper.toFlashcardResponse(updated),
                 responseMapper.toReviewResponse(savedReview),

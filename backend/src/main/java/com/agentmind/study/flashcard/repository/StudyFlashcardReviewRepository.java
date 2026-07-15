@@ -44,4 +44,7 @@ public interface StudyFlashcardReviewRepository {
      * 返回知识空间全部复习记录，供当前阶段完成统计聚合。数据规模增长后可由数据库聚合投影替换。
      */
     List<StudyFlashcardReview> findAllByOwnerUserIdAndWorkspaceId(Long ownerUserId, Long workspaceId);
+
+    /** 返回用户跨知识空间的全部复习事实，供用户级 FSRS 参数优化使用。 */
+    List<StudyFlashcardReview> findAllByOwnerUserId(Long ownerUserId);
 }

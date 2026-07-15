@@ -22,7 +22,8 @@ import org.springframework.stereotype.Repository;
 public class JdbcStudyReviewSessionRepository implements StudyReviewSessionRepository {
 
     private static final String SESSION_COLUMNS = "id, owner_user_id, workspace_id, status, total_cards, "
-            + "reviewed_cards, correct_cards, started_at, completed_at, created_at, updated_at";
+            + "reviewed_cards, correct_cards, started_at, paused_at, completed_at, abandoned_at, "
+            + "created_at, updated_at";
     private static final String ITEM_COLUMNS = "id, owner_user_id, workspace_id, session_id, flashcard_id, "
             + "position, status, score, reviewed_at, created_at";
 
@@ -39,12 +40,12 @@ public class JdbcStudyReviewSessionRepository implements StudyReviewSessionRepos
         Long sessionId = jdbcTemplate.queryForObject("""
                 insert into study_review_sessions (
                     owner_user_id, workspace_id, status, total_cards, reviewed_cards, correct_cards,
-                    started_at, completed_at, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
+                    started_at, paused_at, completed_at, abandoned_at, created_at, updated_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
                 """, Long.class,
                 session.ownerUserId(), session.workspaceId(), session.status().name(), session.totalCards(),
-                session.reviewedCards(), session.correctCards(), session.startedAt(), session.completedAt(),
-                session.createdAt(), session.updatedAt());
+                session.reviewedCards(), session.correctCards(), session.startedAt(), session.pausedAt(),
+                session.completedAt(), session.abandonedAt(), session.createdAt(), session.updatedAt());
         for (StudyReviewSessionItem item : items) {
             jdbcTemplate.update("""
                     insert into study_review_session_items (
@@ -69,6 +70,25 @@ public class JdbcStudyReviewSessionRepository implements StudyReviewSessionRepos
                         sessionId
                 ).stream()
                 .findFirst();
+    }
+
+    @Override
+    public List<StudyReviewSession> findByScope(Long ownerUserId, Long workspaceId, int offset, int limit) {
+        return jdbcTemplate.query(
+                "select " + SESSION_COLUMNS + " from study_review_sessions "
+                        + "where owner_user_id = ? and workspace_id = ? "
+                        + "order by started_at desc, id desc offset ? limit ?",
+                sessionMapper, ownerUserId, workspaceId, offset, limit
+        );
+    }
+
+    @Override
+    public long countByScope(Long ownerUserId, Long workspaceId) {
+        Long count = jdbcTemplate.queryForObject(
+                "select count(*) from study_review_sessions where owner_user_id = ? and workspace_id = ?",
+                Long.class, ownerUserId, workspaceId
+        );
+        return count == null ? 0 : count;
     }
 
     @Override
@@ -129,6 +149,29 @@ public class JdbcStudyReviewSessionRepository implements StudyReviewSessionRepos
                         .orElseThrow(() -> new IllegalStateException("复习会话不存在")));
     }
 
+    @Override
+    public Optional<StudyReviewSession> transitionStatus(
+            Long ownerUserId,
+            Long workspaceId,
+            Long sessionId,
+            StudyReviewSessionStatus expectedStatus,
+            StudyReviewSessionStatus nextStatus,
+            OffsetDateTime changedAt
+    ) {
+        return jdbcTemplate.query("""
+                        update study_review_sessions
+                        set status = ?,
+                            paused_at = case when ? = 'PAUSED' then ? else paused_at end,
+                            abandoned_at = case when ? = 'ABANDONED' then ? else abandoned_at end,
+                            updated_at = ?
+                        where owner_user_id = ? and workspace_id = ? and id = ? and status = ?
+                        returning %s
+                        """.formatted(SESSION_COLUMNS), sessionMapper,
+                nextStatus.name(), nextStatus.name(), changedAt,
+                nextStatus.name(), changedAt, changedAt,
+                ownerUserId, workspaceId, sessionId, expectedStatus.name()).stream().findFirst();
+    }
+
     private StudyReviewSession mapSession(ResultSet resultSet, int rowNumber) throws SQLException {
         return new StudyReviewSession(
                 resultSet.getLong("id"), resultSet.getLong("owner_user_id"), resultSet.getLong("workspace_id"),
@@ -136,7 +179,9 @@ public class JdbcStudyReviewSessionRepository implements StudyReviewSessionRepos
                 resultSet.getInt("total_cards"), resultSet.getInt("reviewed_cards"),
                 resultSet.getInt("correct_cards"),
                 resultSet.getObject("started_at", OffsetDateTime.class),
+                resultSet.getObject("paused_at", OffsetDateTime.class),
                 resultSet.getObject("completed_at", OffsetDateTime.class),
+                resultSet.getObject("abandoned_at", OffsetDateTime.class),
                 resultSet.getObject("created_at", OffsetDateTime.class),
                 resultSet.getObject("updated_at", OffsetDateTime.class)
         );

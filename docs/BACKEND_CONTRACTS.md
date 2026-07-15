@@ -587,8 +587,72 @@ GET  /api/v1/workspaces/{workspaceId}/study-plans/daily?date=2026-07-14
 
 - `agentmind.study.flashcard.algorithm=sm2`：默认模式，保持现有可重复调度策略。
 - `agentmind.study.flashcard.algorithm=fsrs`：启用官方 Java-FSRS 适配器。
-- FSRS 当前按时间顺序重放单卡评分历史恢复稳定度和难度状态，避免把近似公式标记为标准 FSRS。
-- 当前产品按天调度，因此 FSRS 适配器关闭分钟级学习步骤与随机扰动。后续可持久化算法状态快照降低长历史重放成本。
+- FSRS 每次成功评分后把第三方库卡片状态保存到 `study_flashcard_fsrs_states`；下一次计算优先读取快照。
+- 旧卡片、快照版本不兼容或算法版本变化时，才按时间顺序重放单卡评分历史完成迁移。
+- 当前产品按天调度，因此 FSRS 适配器关闭分钟级学习步骤与随机扰动。
+
+### FSRS 用户参数与优化任务
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/study/fsrs/profile
+PUT  /api/v1/workspaces/{workspaceId}/study/fsrs/profile
+POST /api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs
+GET  /api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs?page=1&pageSize=20
+```
+
+用户参数属于用户级资产，知识空间路径用于执行当前请求的权限复核。更新请求必须提交完整参数数组和 `0.70` 至 `0.99` 的期望保持率。每次更新增加参数版本，并记录 `DEFAULT`、`MANUAL` 或 `OPTIMIZED` 来源。
+
+优化任务请求：
+
+```json
+{"applyResult": false}
+```
+
+当前本地优化器至少需要 20 条跨知识空间复习记录。它只校准期望保持率，保留完整 FSRS 权重；`applyResult=false` 只生成建议，`true` 才写入新版本参数。后续接入专用权重优化器时保持任务接口不变。
+
+### 复习会话生命周期
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/review-sessions?page=1&pageSize=20
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/pause
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/resume
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/abandon
+```
+
+允许的状态迁移为：
+
+```text
+IN_PROGRESS -> PAUSED -> IN_PROGRESS
+IN_PROGRESS -> COMPLETED
+IN_PROGRESS/PAUSED -> ABANDONED
+```
+
+只有 `IN_PROGRESS` 可以提交新的评分。状态迁移使用预期状态条件更新，并发失败返回 `RESOURCE_CONFLICT`。已完成队列项的相同幂等请求仍可以读取原评分结果。
+
+### 个性化每日学习任务
+
+每日计划请求新增可选字段：
+
+```json
+{
+  "planDate": "2026-07-16",
+  "dailyReviewTarget": 20,
+  "preferredTopics": ["Java并发", "Spring AI"],
+  "sourceDocumentIds": [101, 102]
+}
+```
+
+计划响应包含 `DUE_REVIEW`、`WEAK_POINT_REVIEW`、`TOPIC_REVIEW` 和 `DOCUMENT_REVIEW` 任务。任务保存生成时选中的卡片编号，历史计划不会因后续排期变化而漂移；完成进度按当天已复习的不同卡片计算。
+
+写工具 `study_plan.create` 使用相同参数，但必须先创建 `PENDING_CONFIRMATION` 确认单。用户确认前数据库中不会出现计划。
+
+### 学习趋势
+
+```text
+GET /api/v1/workspaces/{workspaceId}/study/analytics/trends?from=2026-07-01&to=2026-07-31
+```
+
+单次最多查询 366 天，响应同时返回每日点和以周一为起点的自然周聚合，包含复习次数、不同卡片数、活跃天数、正确数、遗忘数和正确率。所有日期边界使用 `agentmind.study.time-zone`。
 
 ## 后续实现顺序
 

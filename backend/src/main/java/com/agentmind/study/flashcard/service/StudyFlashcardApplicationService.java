@@ -40,14 +40,35 @@ public class StudyFlashcardApplicationService {
             String answer,
             String explanation
     ) {
+        return createFromAgent(context, question, answer, explanation, null, null);
+    }
+
+    /** 创建带知识来源的卡片，为后续按主题和文档生成学习任务保留结构化关联。 */
+    public StudyFlashcardResponse createFromAgent(
+            AgentToolExecutionContext context,
+            String question,
+            String answer,
+            String explanation,
+            Long sourceDocumentId,
+            String topic
+    ) {
         OffsetDateTime now = OffsetDateTime.now();
         StudyFlashcard saved = flashcardRepository.save(new StudyFlashcard(
-                null, context.ownerUserId(), context.workspaceId(), context.conversationId(), context.requestId(),
+                null, context.ownerUserId(), context.workspaceId(), context.conversationId(),
+                sourceDocumentId, normalizeTopic(topic), context.requestId(),
                 question, answer, explanation,
                 StudyFlashcardStatus.NEW, 0, 0, 2.5, 0, now, null, 0,
                 now, now
         ));
         return responseMapper.toFlashcardResponse(saved);
+    }
+
+    private String normalizeTopic(String topic) {
+        if (topic == null || topic.isBlank()) {
+            return null;
+        }
+        String normalized = topic.trim();
+        return normalized.length() <= 100 ? normalized : normalized.substring(0, 100);
     }
 
     public PageResponse<StudyFlashcardResponse> list(

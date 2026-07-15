@@ -17,7 +17,9 @@ public record StudyReviewSession(
         int reviewedCards,
         int correctCards,
         OffsetDateTime startedAt,
+        OffsetDateTime pausedAt,
         OffsetDateTime completedAt,
+        OffsetDateTime abandonedAt,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {
@@ -25,7 +27,7 @@ public record StudyReviewSession(
     public StudyReviewSession withId(Long generatedId) {
         return new StudyReviewSession(
                 generatedId, ownerUserId, workspaceId, status, totalCards, reviewedCards, correctCards,
-                startedAt, completedAt, createdAt, updatedAt
+                startedAt, pausedAt, completedAt, abandonedAt, createdAt, updatedAt
         );
     }
 }

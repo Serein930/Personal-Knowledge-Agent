@@ -19,7 +19,7 @@ import org.springframework.stereotype.Repository;
 public class JdbcStudyFlashcardRepository implements StudyFlashcardRepository {
 
     private static final String COLUMNS = """
-            id, owner_user_id, workspace_id, source_conversation_id, request_id,
+            id, owner_user_id, workspace_id, source_conversation_id, source_document_id, topic, request_id,
             question, answer, explanation, status, repetition_count, interval_days,
             ease_factor, lapse_count, due_at, last_reviewed_at, version, created_at, updated_at
             """;
@@ -35,15 +35,16 @@ public class JdbcStudyFlashcardRepository implements StudyFlashcardRepository {
     public StudyFlashcard save(StudyFlashcard flashcard) {
         List<StudyFlashcard> inserted = jdbcTemplate.query("""
                 insert into study_flashcards (
-                    owner_user_id, workspace_id, source_conversation_id, request_id,
+                    owner_user_id, workspace_id, source_conversation_id, source_document_id, topic, request_id,
                     question, answer, explanation, status, repetition_count, interval_days,
                     ease_factor, lapse_count, due_at, last_reviewed_at, version, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict (owner_user_id, workspace_id, request_id) do nothing
                 returning %s
                 """.formatted(COLUMNS), rowMapper,
                 flashcard.ownerUserId(), flashcard.workspaceId(), flashcard.sourceConversationId(),
-                flashcard.requestId(), flashcard.question(), flashcard.answer(), flashcard.explanation(),
+                flashcard.sourceDocumentId(), flashcard.topic(), flashcard.requestId(),
+                flashcard.question(), flashcard.answer(), flashcard.explanation(),
                 flashcard.status().name(), flashcard.repetitionCount(), flashcard.intervalDays(),
                 flashcard.easeFactor(), flashcard.lapseCount(), flashcard.dueAt(), flashcard.lastReviewedAt(),
                 flashcard.version(),
@@ -173,6 +174,8 @@ public class JdbcStudyFlashcardRepository implements StudyFlashcardRepository {
                 resultSet.getLong("owner_user_id"),
                 resultSet.getLong("workspace_id"),
                 nullableLong(resultSet, "source_conversation_id"),
+                nullableLong(resultSet, "source_document_id"),
+                resultSet.getString("topic"),
                 resultSet.getString("request_id"),
                 resultSet.getString("question"),
                 resultSet.getString("answer"),

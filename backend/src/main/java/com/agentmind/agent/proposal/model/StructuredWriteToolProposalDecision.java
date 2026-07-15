@@ -1,6 +1,7 @@
 package com.agentmind.agent.proposal.model;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import java.util.List;
 
 /**
  * Spring AI 结构化输出目标。
@@ -10,11 +11,14 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
  */
 public record StructuredWriteToolProposalDecision(
         @JsonPropertyDescription("是否需要向用户提出写入建议") boolean proposalRequired,
-        @JsonPropertyDescription("只能是 note.create 或 flashcard.create") String toolName,
+        @JsonPropertyDescription("只能是 note.create、flashcard.create 或 study_plan.create") String toolName,
         @JsonPropertyDescription("笔记标题，仅 note.create 使用") String title,
         @JsonPropertyDescription("笔记正文，仅 note.create 使用") String content,
         @JsonPropertyDescription("复习卡片问题，仅 flashcard.create 使用") String question,
         @JsonPropertyDescription("复习卡片答案，仅 flashcard.create 使用") String answer,
-        @JsonPropertyDescription("复习卡片补充解释，可为空") String explanation
+        @JsonPropertyDescription("复习卡片补充解释，可为空") String explanation,
+        @JsonPropertyDescription("计划日期，仅 study_plan.create 使用，格式为YYYY-MM-DD") String planDate,
+        @JsonPropertyDescription("每日复习数量，仅 study_plan.create 使用") Integer dailyReviewTarget,
+        @JsonPropertyDescription("偏好学习主题，仅 study_plan.create 使用") List<String> preferredTopics
 ) {
 }

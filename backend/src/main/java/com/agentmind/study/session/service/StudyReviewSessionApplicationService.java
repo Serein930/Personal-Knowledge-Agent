@@ -4,6 +4,7 @@ import com.agentmind.agent.service.AgentToolExecutionAuthorizer;
 import com.agentmind.agent.tool.model.AgentToolExecutionContext;
 import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.exception.ErrorCode;
+import com.agentmind.common.response.PageResponse;
 import com.agentmind.study.flashcard.model.StudyFlashcard;
 import com.agentmind.study.flashcard.model.dto.SubmitFlashcardReviewRequest;
 import com.agentmind.study.flashcard.model.dto.SubmittedFlashcardReviewResponse;
@@ -73,7 +74,7 @@ public class StudyReviewSessionApplicationService {
         }
         StudyReviewSession session = new StudyReviewSession(
                 null, context.ownerUserId(), context.workspaceId(), StudyReviewSessionStatus.IN_PROGRESS,
-                dueCards.size(), 0, 0, now, null, now, now
+                dueCards.size(), 0, 0, now, null, null, null, now, now
         );
         List<StudyReviewSessionItem> items = IntStream.range(0, dueCards.size())
                 .mapToObj(index -> new StudyReviewSessionItem(
@@ -90,6 +91,56 @@ public class StudyReviewSessionApplicationService {
         return mapResponse(requireSession(context, sessionId));
     }
 
+    public PageResponse<StudyReviewSessionResponse> list(
+            AgentToolExecutionContext context,
+            int page,
+            int pageSize
+    ) {
+        authorizer.authorize(context);
+        int offset = (page - 1) * pageSize;
+        return new PageResponse<>(
+                sessionRepository.findByScope(
+                                context.ownerUserId(), context.workspaceId(), offset, pageSize
+                        ).stream()
+                        .map(this::mapResponse)
+                        .toList(),
+                page,
+                pageSize,
+                sessionRepository.countByScope(context.ownerUserId(), context.workspaceId())
+        );
+    }
+
+    public StudyReviewSessionResponse pause(AgentToolExecutionContext context, Long sessionId) {
+        return transition(
+                context, sessionId, StudyReviewSessionStatus.IN_PROGRESS, StudyReviewSessionStatus.PAUSED,
+                "只有进行中的复习会话可以暂停"
+        );
+    }
+
+    public StudyReviewSessionResponse resume(AgentToolExecutionContext context, Long sessionId) {
+        return transition(
+                context, sessionId, StudyReviewSessionStatus.PAUSED, StudyReviewSessionStatus.IN_PROGRESS,
+                "只有暂停的复习会话可以恢复"
+        );
+    }
+
+    public StudyReviewSessionResponse abandon(AgentToolExecutionContext context, Long sessionId) {
+        authorizer.authorize(context);
+        StudyReviewSession current = requireSession(context, sessionId);
+        if (current.status() != StudyReviewSessionStatus.IN_PROGRESS
+                && current.status() != StudyReviewSessionStatus.PAUSED) {
+            throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "只有未结束的复习会话可以放弃");
+        }
+        StudyReviewSession updated = sessionRepository.transitionStatus(
+                        context.ownerUserId(), context.workspaceId(), sessionId,
+                        current.status(), StudyReviewSessionStatus.ABANDONED, OffsetDateTime.now()
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_CONFLICT, "复习会话状态已经变化，请刷新后重试"
+                ));
+        return mapResponse(updated);
+    }
+
     public SubmittedSessionReviewResponse submitReview(
             AgentToolExecutionContext context,
             Long sessionId,
@@ -100,9 +151,12 @@ public class StudyReviewSessionApplicationService {
         return transactionBoundary.execute(() -> {
             StudyReviewSession session = requireSession(context, sessionId);
             StudyReviewSessionItem item = requireQueueItem(context, sessionId, flashcardId);
-            if (session.status() != StudyReviewSessionStatus.IN_PROGRESS
-                    && item.status() != StudyReviewSessionItemStatus.REVIEWED) {
-                throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "当前复习会话已经结束");
+            if (session.status() != StudyReviewSessionStatus.IN_PROGRESS) {
+                if (item.status() == StudyReviewSessionItemStatus.REVIEWED) {
+                    SubmittedFlashcardReviewResponse reused = reviewService.submit(context, flashcardId, request);
+                    return new SubmittedSessionReviewResponse(mapResponse(session), reused);
+                }
+                throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "当前复习会话未处于可评分状态");
             }
             SubmittedFlashcardReviewResponse review = reviewService.submit(context, flashcardId, request);
             StudyReviewSession updated = sessionRepository.markReviewed(
@@ -111,6 +165,28 @@ public class StudyReviewSessionApplicationService {
             );
             return new SubmittedSessionReviewResponse(mapResponse(updated), review);
         });
+    }
+
+    private StudyReviewSessionResponse transition(
+            AgentToolExecutionContext context,
+            Long sessionId,
+            StudyReviewSessionStatus expectedStatus,
+            StudyReviewSessionStatus nextStatus,
+            String invalidMessage
+    ) {
+        authorizer.authorize(context);
+        StudyReviewSession current = requireSession(context, sessionId);
+        if (current.status() != expectedStatus) {
+            throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, invalidMessage);
+        }
+        StudyReviewSession updated = sessionRepository.transitionStatus(
+                        context.ownerUserId(), context.workspaceId(), sessionId,
+                        expectedStatus, nextStatus, OffsetDateTime.now()
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_CONFLICT, "复习会话状态已经变化，请刷新后重试"
+                ));
+        return mapResponse(updated);
     }
 
     private StudyReviewSession requireSession(AgentToolExecutionContext context, Long sessionId) {
@@ -163,7 +239,8 @@ public class StudyReviewSessionApplicationService {
         return new StudyReviewSessionResponse(
                 session.id(), session.workspaceId(), session.status(), session.totalCards(),
                 session.reviewedCards(), session.correctCards(), progress, queue,
-                session.startedAt(), session.completedAt()
+                session.startedAt(), session.pausedAt(), session.completedAt(),
+                session.abandonedAt(), session.updatedAt()
         );
     }
 }

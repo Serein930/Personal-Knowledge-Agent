@@ -134,6 +134,16 @@ public class JdbcStudyFlashcardReviewRepository implements StudyFlashcardReviewR
         );
     }
 
+    @Override
+    public List<StudyFlashcardReview> findAllByOwnerUserId(Long ownerUserId) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from study_flashcard_reviews "
+                        + "where owner_user_id = ? order by reviewed_at, id",
+                rowMapper,
+                ownerUserId
+        );
+    }
+
     private StudyFlashcardReview mapReview(ResultSet resultSet, int rowNumber) throws SQLException {
         return new StudyFlashcardReview(
                 resultSet.getLong("id"),

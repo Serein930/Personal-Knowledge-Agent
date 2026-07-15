@@ -10,6 +10,8 @@ public record StudyFlashcardResponse(
         Long id,
         Long workspaceId,
         Long sourceConversationId,
+        Long sourceDocumentId,
+        String topic,
         String requestId,
         String question,
         String answer,

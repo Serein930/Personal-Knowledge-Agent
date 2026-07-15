@@ -17,6 +17,8 @@ public class StudyFlashcardResponseMapper {
                 flashcard.id(),
                 flashcard.workspaceId(),
                 flashcard.sourceConversationId(),
+                flashcard.sourceDocumentId(),
+                flashcard.topic(),
                 flashcard.requestId(),
                 flashcard.question(),
                 flashcard.answer(),

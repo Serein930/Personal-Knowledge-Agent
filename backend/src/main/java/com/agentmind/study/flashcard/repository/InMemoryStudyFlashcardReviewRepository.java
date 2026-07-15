@@ -109,4 +109,13 @@ public class InMemoryStudyFlashcardReviewRepository implements StudyFlashcardRev
                         .thenComparing(StudyFlashcardReview::id))
                 .toList();
     }
+
+    @Override
+    public List<StudyFlashcardReview> findAllByOwnerUserId(Long ownerUserId) {
+        return reviews.values().stream()
+                .filter(item -> ownerUserId.equals(item.ownerUserId()))
+                .sorted(Comparator.comparing(StudyFlashcardReview::reviewedAt)
+                        .thenComparing(StudyFlashcardReview::id))
+                .toList();
+    }
 }

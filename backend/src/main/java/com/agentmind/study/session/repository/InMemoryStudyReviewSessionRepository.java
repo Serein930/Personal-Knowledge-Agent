@@ -7,6 +7,7 @@ import com.agentmind.study.session.model.StudyReviewSessionStatus;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Comparator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -57,6 +58,26 @@ public class InMemoryStudyReviewSessionRepository implements StudyReviewSessionR
     }
 
     @Override
+    public List<StudyReviewSession> findByScope(Long ownerUserId, Long workspaceId, int offset, int limit) {
+        return sessions.values().stream()
+                .filter(session -> ownerUserId.equals(session.ownerUserId()))
+                .filter(session -> workspaceId.equals(session.workspaceId()))
+                .sorted(Comparator.comparing(StudyReviewSession::startedAt).reversed()
+                        .thenComparing(StudyReviewSession::id, Comparator.reverseOrder()))
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
+    public long countByScope(Long ownerUserId, Long workspaceId) {
+        return sessions.values().stream()
+                .filter(session -> ownerUserId.equals(session.ownerUserId()))
+                .filter(session -> workspaceId.equals(session.workspaceId()))
+                .count();
+    }
+
+    @Override
     public List<StudyReviewSessionItem> findItemsByScopeAndSessionId(
             Long ownerUserId,
             Long workspaceId,
@@ -100,9 +121,35 @@ public class InMemoryStudyReviewSessionRepository implements StudyReviewSessionR
                 session.id(), session.ownerUserId(), session.workspaceId(),
                 completed ? StudyReviewSessionStatus.COMPLETED : StudyReviewSessionStatus.IN_PROGRESS,
                 session.totalCards(), reviewedCards, correctCards, session.startedAt(),
-                completed ? reviewedAt : null, session.createdAt(), reviewedAt
+                session.pausedAt(), completed ? reviewedAt : null, session.abandonedAt(),
+                session.createdAt(), reviewedAt
         );
         sessions.put(updated.id(), updated);
         return updated;
+    }
+
+    @Override
+    public synchronized Optional<StudyReviewSession> transitionStatus(
+            Long ownerUserId,
+            Long workspaceId,
+            Long sessionId,
+            StudyReviewSessionStatus expectedStatus,
+            StudyReviewSessionStatus nextStatus,
+            OffsetDateTime changedAt
+    ) {
+        StudyReviewSession current = findByScopeAndId(ownerUserId, workspaceId, sessionId).orElse(null);
+        if (current == null || current.status() != expectedStatus) {
+            return Optional.empty();
+        }
+        StudyReviewSession updated = new StudyReviewSession(
+                current.id(), current.ownerUserId(), current.workspaceId(), nextStatus,
+                current.totalCards(), current.reviewedCards(), current.correctCards(), current.startedAt(),
+                nextStatus == StudyReviewSessionStatus.PAUSED ? changedAt : current.pausedAt(),
+                current.completedAt(),
+                nextStatus == StudyReviewSessionStatus.ABANDONED ? changedAt : current.abandonedAt(),
+                current.createdAt(), changedAt
+        );
+        sessions.put(updated.id(), updated);
+        return Optional.of(updated);
     }
 }

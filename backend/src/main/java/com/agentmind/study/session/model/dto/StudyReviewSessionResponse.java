@@ -19,7 +19,10 @@ public record StudyReviewSessionResponse(
         double progress,
         List<QueueItem> queue,
         OffsetDateTime startedAt,
-        OffsetDateTime completedAt
+        OffsetDateTime pausedAt,
+        OffsetDateTime completedAt,
+        OffsetDateTime abandonedAt,
+        OffsetDateTime updatedAt
 ) {
 
     /**

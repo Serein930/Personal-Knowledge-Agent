@@ -70,6 +70,8 @@ create table if not exists knowledge_notes (
     owner_user_id bigint not null,
     workspace_id bigint not null,
     source_conversation_id bigint,
+    source_document_id bigint,
+    topic varchar(100),
     request_id varchar(100) not null,
     title varchar(120) not null,
     content text not null,
@@ -121,6 +123,8 @@ alter table study_flashcards add column if not exists lapse_count integer not nu
 alter table study_flashcards add column if not exists due_at timestamptz not null default now();
 alter table study_flashcards add column if not exists last_reviewed_at timestamptz;
 alter table study_flashcards add column if not exists version bigint not null default 0;
+alter table study_flashcards add column if not exists source_document_id bigint;
+alter table study_flashcards add column if not exists topic varchar(100);
 
 do $$
 begin
@@ -145,6 +149,14 @@ create index if not exists idx_study_flashcards_scope_created
 create index if not exists idx_study_flashcards_due
     on study_flashcards (owner_user_id, workspace_id, due_at, id)
     where status <> 'SUSPENDED';
+
+create index if not exists idx_study_flashcards_topic
+    on study_flashcards (owner_user_id, workspace_id, topic)
+    where topic is not null;
+
+create index if not exists idx_study_flashcards_source_document
+    on study_flashcards (owner_user_id, workspace_id, source_document_id)
+    where source_document_id is not null;
 
 create table if not exists study_flashcard_reviews (
     id bigserial primary key,
@@ -190,16 +202,24 @@ create table if not exists study_review_sessions (
     reviewed_cards integer not null default 0,
     correct_cards integer not null default 0,
     started_at timestamptz not null,
+    paused_at timestamptz,
     completed_at timestamptz,
+    abandoned_at timestamptz,
     created_at timestamptz not null,
     updated_at timestamptz not null,
-    constraint ck_study_review_session_status check (status in ('IN_PROGRESS', 'COMPLETED', 'ABANDONED')),
+    constraint ck_study_review_session_status check (status in ('IN_PROGRESS', 'PAUSED', 'COMPLETED', 'ABANDONED')),
     constraint ck_study_review_session_counts check (
         total_cards > 0 and reviewed_cards >= 0 and correct_cards >= 0
         and correct_cards <= reviewed_cards and reviewed_cards <= total_cards
     ),
     constraint uk_study_review_sessions_scope_id unique (id, owner_user_id, workspace_id)
 );
+
+alter table study_review_sessions add column if not exists paused_at timestamptz;
+alter table study_review_sessions add column if not exists abandoned_at timestamptz;
+alter table study_review_sessions drop constraint if exists ck_study_review_session_status;
+alter table study_review_sessions add constraint ck_study_review_session_status
+    check (status in ('IN_PROGRESS', 'PAUSED', 'COMPLETED', 'ABANDONED'));
 
 create index if not exists idx_study_review_sessions_scope_started
     on study_review_sessions (owner_user_id, workspace_id, started_at desc, id desc);
@@ -240,8 +260,119 @@ create table if not exists daily_study_plans (
     updated_at timestamptz not null,
     constraint ck_daily_study_plan_target check (daily_review_target between 1 and 500),
     constraint ck_daily_study_plan_due_snapshot check (due_card_snapshot >= 0),
-    constraint uk_daily_study_plan_date unique (owner_user_id, workspace_id, plan_date)
+    constraint uk_daily_study_plan_date unique (owner_user_id, workspace_id, plan_date),
+    constraint uk_daily_study_plan_scope_id unique (id, owner_user_id, workspace_id)
 );
 
 create index if not exists idx_daily_study_plans_scope_date
     on daily_study_plans (owner_user_id, workspace_id, plan_date desc);
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'uk_daily_study_plan_scope_id') then
+        alter table daily_study_plans add constraint uk_daily_study_plan_scope_id
+            unique (id, owner_user_id, workspace_id);
+    end if;
+end $$;
+
+-- FSRS 卡片状态单独保存，避免通用卡片表绑定第三方算法字段。
+create table if not exists study_flashcard_fsrs_states (
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    flashcard_id bigint not null,
+    algorithm_version varchar(50) not null,
+    schema_version integer not null,
+    profile_version bigint not null default 0,
+    payload jsonb not null,
+    created_at timestamptz not null,
+    updated_at timestamptz not null,
+    primary key (owner_user_id, workspace_id, flashcard_id),
+    constraint ck_study_flashcard_fsrs_schema check (schema_version > 0),
+    constraint ck_study_flashcard_fsrs_profile_version check (profile_version >= 0),
+    constraint fk_study_flashcard_fsrs_scope foreign key (flashcard_id, owner_user_id, workspace_id)
+        references study_flashcards (id, owner_user_id, workspace_id) on delete cascade
+);
+
+alter table study_flashcard_fsrs_states add column if not exists profile_version bigint not null default 0;
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'ck_study_flashcard_fsrs_profile_version') then
+        alter table study_flashcard_fsrs_states add constraint ck_study_flashcard_fsrs_profile_version
+            check (profile_version >= 0);
+    end if;
+end $$;
+
+create table if not exists fsrs_user_profiles (
+    owner_user_id bigint primary key,
+    parameters jsonb not null,
+    desired_retention numeric(5, 4) not null,
+    version bigint not null,
+    source varchar(20) not null,
+    created_at timestamptz not null,
+    updated_at timestamptz not null,
+    constraint ck_fsrs_user_profile_retention check (desired_retention between 0.70 and 0.99),
+    constraint ck_fsrs_user_profile_version check (version >= 0),
+    constraint ck_fsrs_user_profile_source check (source in ('DEFAULT', 'MANUAL', 'OPTIMIZED')),
+    constraint ck_fsrs_user_profile_parameters check (
+        jsonb_typeof(parameters) = 'array' and jsonb_array_length(parameters) > 0
+    )
+);
+
+create table if not exists fsrs_parameter_optimization_jobs (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    status varchar(20) not null,
+    review_count integer not null,
+    observed_lapse_rate numeric(6, 2) not null,
+    previous_desired_retention numeric(5, 4) not null,
+    recommended_desired_retention numeric(5, 4) not null,
+    applied boolean not null,
+    message varchar(500) not null,
+    created_at timestamptz not null,
+    completed_at timestamptz,
+    constraint ck_fsrs_optimization_status check (status in ('RUNNING', 'SUCCEEDED', 'SKIPPED', 'FAILED')),
+    constraint ck_fsrs_optimization_review_count check (review_count >= 0),
+    constraint ck_fsrs_optimization_lapse_rate check (observed_lapse_rate between 0 and 100)
+);
+
+create index if not exists idx_fsrs_optimization_owner_created
+    on fsrs_parameter_optimization_jobs (owner_user_id, created_at desc, id desc);
+
+-- 学习任务保存生成时选中的卡片集合，使历史计划可解释且不会随实时排期漂移。
+create table if not exists daily_study_tasks (
+    id bigserial primary key,
+    plan_id bigint not null,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    task_type varchar(30) not null,
+    priority varchar(10) not null,
+    topic varchar(100),
+    source_document_id bigint,
+    target_card_count integer not null,
+    reason varchar(500) not null,
+    created_at timestamptz not null,
+    constraint ck_daily_study_task_type check (
+        task_type in ('DUE_REVIEW', 'WEAK_POINT_REVIEW', 'TOPIC_REVIEW', 'DOCUMENT_REVIEW')
+    ),
+    constraint ck_daily_study_task_priority check (priority in ('HIGH', 'MEDIUM', 'LOW')),
+    constraint ck_daily_study_task_target check (target_card_count > 0),
+    constraint uk_daily_study_task_scope_id unique (id, owner_user_id, workspace_id),
+    constraint fk_daily_study_task_plan foreign key (plan_id, owner_user_id, workspace_id)
+        references daily_study_plans (id, owner_user_id, workspace_id) on delete cascade
+);
+
+create table if not exists daily_study_task_cards (
+    task_id bigint not null,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    flashcard_id bigint not null,
+    primary key (task_id, flashcard_id),
+    constraint fk_daily_study_task_cards_task foreign key (task_id, owner_user_id, workspace_id)
+        references daily_study_tasks (id, owner_user_id, workspace_id) on delete cascade,
+    constraint fk_daily_study_task_cards_flashcard foreign key (flashcard_id, owner_user_id, workspace_id)
+        references study_flashcards (id, owner_user_id, workspace_id) on delete cascade
+);
+
+create index if not exists idx_daily_study_tasks_plan
+    on daily_study_tasks (owner_user_id, workspace_id, plan_id, priority, id);

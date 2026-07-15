@@ -5,6 +5,7 @@ package com.agentmind.study.session.model;
  */
 public enum StudyReviewSessionStatus {
     IN_PROGRESS,
+    PAUSED,
     COMPLETED,
     ABANDONED
 }

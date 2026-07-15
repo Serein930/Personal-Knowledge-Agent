@@ -80,6 +80,8 @@ export interface KnowledgeNoteDto {
   id: number;
   workspaceId: number;
   sourceConversationId?: number;
+  sourceDocumentId?: number;
+  topic?: string;
   requestId: string;
   title: string;
   content: string;
@@ -135,13 +137,25 @@ export interface DailyStudyPlanDto {
   remainingReviews: number;
   progress: number;
   completed: boolean;
+  tasks: Array<{
+    id: number;
+    type: 'DUE_REVIEW' | 'WEAK_POINT_REVIEW' | 'TOPIC_REVIEW' | 'DOCUMENT_REVIEW';
+    priority: 'HIGH' | 'MEDIUM' | 'LOW';
+    topic?: string;
+    sourceDocumentId?: number;
+    targetCardCount: number;
+    completedCardCount: number;
+    completed: boolean;
+    reason: string;
+    flashcardIds: number[];
+  }>;
   updatedAt: string;
 }
 
 export interface StudyReviewSessionDto {
   id: number;
   workspaceId: number;
-  status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
+  status: 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'ABANDONED';
   totalCards: number;
   reviewedCards: number;
   correctCards: number;
@@ -155,7 +169,37 @@ export interface StudyReviewSessionDto {
     flashcard: StudyFlashcardDto;
   }>;
   startedAt: string;
+  pausedAt?: string;
   completedAt?: string;
+  abandonedAt?: string;
+  updatedAt: string;
+}
+
+export interface StudyTrendDto {
+  from: string;
+  to: string;
+  totalReviews: number;
+  uniqueFlashcards: number;
+  activeDays: number;
+  accuracy: number;
+  daily: Array<{
+    date: string;
+    reviewCount: number;
+    uniqueFlashcards: number;
+    correctCount: number;
+    lapseCount: number;
+    accuracy: number;
+  }>;
+  weekly: Array<{
+    weekStart: string;
+    weekEnd: string;
+    reviewCount: number;
+    uniqueFlashcards: number;
+    activeDays: number;
+    correctCount: number;
+    lapseCount: number;
+    accuracy: number;
+  }>;
 }
 
 export interface SubmittedSessionReviewDto {

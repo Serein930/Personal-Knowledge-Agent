@@ -2,7 +2,7 @@
 
 ## 本阶段范围
 
-本阶段已完成复习卡片状态、到期查询、评分记录、SM-2 调度、卡片管理、复习会话、统计、每日计划和前端复习工作台。FSRS 参数训练和个性化参数优化仍属于后续阶段。
+本阶段已完成复习卡片状态、到期查询、评分记录、SM-2 调度、FSRS 状态快照、用户参数、优化任务、会话生命周期、个性化每日任务、学习趋势和前端复习工作台。
 
 默认配置：
 
@@ -21,7 +21,7 @@ agentmind:
 mvn spring-boot:run "-Dspring-boot.run.arguments=--agentmind.study.flashcard.algorithm=fsrs"
 ```
 
-FSRS 适配器会按时间正序重放单卡历史评分，当前不进行参数训练。默认开发、自动测试和常规联调仍使用 SM-2。
+FSRS 适配器会优先读取持久化卡片快照，仅在旧卡没有快照或版本不兼容时按时间正序重放历史评分。当前优化任务校准用户期望保持率，不把该过程描述成 FSRS 权重训练。默认开发、自动测试和常规联调仍使用 SM-2。
 
 ## 复习工作流接口
 
@@ -29,9 +29,16 @@ FSRS 适配器会按时间正序重放单卡历史评分，当前不进行参数
 GET  /api/v1/workspaces/{workspaceId}/flashcards/statistics
 POST /api/v1/workspaces/{workspaceId}/review-sessions
 GET  /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}
+GET  /api/v1/workspaces/{workspaceId}/review-sessions?page=1&pageSize=20
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/pause
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/resume
+POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/abandon
 POST /api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/cards/{flashcardId}/reviews
 POST /api/v1/workspaces/{workspaceId}/study-plans/daily
 GET  /api/v1/workspaces/{workspaceId}/study-plans/daily?date=YYYY-MM-DD
+GET  /api/v1/workspaces/{workspaceId}/study/analytics/trends?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET  /api/v1/workspaces/{workspaceId}/study/fsrs/profile
+POST /api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs
 ```
 
 前端启动后进入“学习计划”导航即可使用真实复习工作台：
@@ -138,13 +145,26 @@ select flashcard_id, request_id, score, previous_status, next_status,
 from study_flashcard_reviews
 order by id desc;
 
-select id, status, total_cards, reviewed_cards, correct_cards, started_at, completed_at
+select id, status, total_cards, reviewed_cards, correct_cards,
+       started_at, paused_at, completed_at, abandoned_at
 from study_review_sessions
 order by id desc;
 
 select plan_date, daily_review_target, due_card_snapshot, updated_at
 from daily_study_plans
 order by plan_date desc;
+
+select plan_id, task_type, priority, topic, source_document_id,
+       target_card_count, reason
+from daily_study_tasks
+order by plan_id desc, id;
+
+select flashcard_id, algorithm_version, schema_version,
+       payload ->> 'stability' as stability,
+       payload ->> 'difficulty' as difficulty,
+       updated_at
+from study_flashcard_fsrs_states
+order by updated_at desc;
 ```
 
 每次成功评分应满足：

@@ -98,6 +98,7 @@ class StudyWorkflowControllerTests {
                         .content(planRequest))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.dailyReviewTarget", equalTo(2)))
+                .andExpect(jsonPath("$.data.tasks[0].type", equalTo("DUE_REVIEW")))
                 .andReturn();
         long planId = objectMapper.readTree(savedPlan.getResponse().getContentAsString())
                 .path("data").path("id").asLong();
@@ -146,6 +147,15 @@ class StudyWorkflowControllerTests {
                 .andExpect(jsonPath("$.data.completed", equalTo(true)))
                 .andExpect(jsonPath("$.data.progress", closeTo(100.0, 0.01)));
 
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study/analytics/trends", workspaceId)
+                        .param("from", LocalDate.now().toString())
+                        .param("to", LocalDate.now().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalReviews", equalTo(2)))
+                .andExpect(jsonPath("$.data.uniqueFlashcards", equalTo(2)))
+                .andExpect(jsonPath("$.data.daily[0].accuracy", closeTo(50.0, 0.01)))
+                .andExpect(jsonPath("$.data.weekly[0].activeDays", equalTo(1)));
+
         mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/study-plans/daily", workspaceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -157,6 +167,129 @@ class StudyWorkflowControllerTests {
 
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}", 46_999L, sessionId))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void sessionShouldSupportPauseResumeAbandonAndHistory() throws Exception {
+        long workspaceId = 46_003L;
+        saveCard(workspaceId, StudyFlashcardStatus.NEW, 0, OffsetDateTime.now().minusMinutes(1));
+        MvcResult created = mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/review-sessions", workspaceId
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"limit\":1}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode session = objectMapper.readTree(created.getResponse().getContentAsString()).path("data");
+        long sessionId = session.path("id").asLong();
+        long cardId = session.path("queue").get(0).path("flashcard").path("id").asLong();
+
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/pause",
+                            workspaceId, sessionId
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status", equalTo("PAUSED")))
+                .andExpect(jsonPath("$.data.pausedAt").isNotEmpty());
+        submitSessionReview(workspaceId, sessionId, cardId, "paused-review", 4)
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/review-sessions", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].status", equalTo("PAUSED")));
+
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/resume",
+                            workspaceId, sessionId
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status", equalTo("IN_PROGRESS")));
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/review-sessions/{sessionId}/abandon",
+                            workspaceId, sessionId
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status", equalTo("ABANDONED")))
+                .andExpect(jsonPath("$.data.abandonedAt").isNotEmpty());
+        submitSessionReview(workspaceId, sessionId, cardId, "abandoned-review", 4)
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void personalizedPlanShouldUseTopicDocumentWeakPointAndConfirmation() throws Exception {
+        long workspaceId = 46_004L;
+        savePersonalizedCard(workspaceId, "并发编程", 7001L, 2);
+        savePersonalizedCard(workspaceId, "Spring AI", 7002L, 0);
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+
+        mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/study-plans/daily", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "planDate":"%s",
+                                  "dailyReviewTarget":10,
+                                  "preferredTopics":["Spring AI"],
+                                  "sourceDocumentIds":[7001]
+                                }
+                                """.formatted(tomorrow)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks[?(@.type == 'WEAK_POINT_REVIEW')]").isNotEmpty())
+                .andExpect(jsonPath("$.data.tasks[?(@.type == 'TOPIC_REVIEW')]").isNotEmpty())
+                .andExpect(jsonPath("$.data.tasks[?(@.type == 'DOCUMENT_REVIEW')]").isNotEmpty());
+
+        long agentWorkspaceId = 46_005L;
+        LocalDate agentPlanDate = LocalDate.now().plusDays(2);
+        MvcResult confirmationCreated = mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations", agentWorkspaceId
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolName":"study_plan.create",
+                                  "requestId":"agent-plan-confirmed-001",
+                                  "arguments":{"planDate":"%s","dailyReviewTarget":15}
+                                }
+                                """.formatted(agentPlanDate)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.confirmation.status", equalTo("PENDING_CONFIRMATION")))
+                .andReturn();
+        JsonNode confirmation = objectMapper.readTree(
+                confirmationCreated.getResponse().getContentAsString()
+        ).path("data");
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study-plans/daily", agentWorkspaceId)
+                        .param("date", agentPlanDate.toString()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{id}/confirm",
+                            agentWorkspaceId,
+                            confirmation.path("confirmation").path("id").asLong()
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.createObjectNode()
+                                .put("confirmationToken", confirmation.path("confirmationToken").asText())
+                                .toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.confirmation.status", equalTo("SUCCEEDED")));
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study-plans/daily", agentWorkspaceId)
+                        .param("date", agentPlanDate.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dailyReviewTarget", equalTo(15)));
+    }
+
+    @Test
+    void fsrsProfileAndInsufficientOptimizationShouldBeQueryable() throws Exception {
+        long workspaceId = 46_006L;
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study/fsrs/profile", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source", equalTo("DEFAULT")))
+                .andExpect(jsonPath("$.data.parameters").isArray());
+        mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/study/fsrs/optimization-jobs", workspaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applyResult\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status", equalTo("SKIPPED")))
+                .andExpect(jsonPath("$.data.applied", equalTo(false)));
     }
 
     private org.springframework.test.web.servlet.ResultActions submitSessionReview(
@@ -191,6 +324,22 @@ class StudyWorkflowControllerTests {
                 status, status == StudyFlashcardStatus.REVIEW ? 3 : 0, intervalDays, 2.5, 0,
                 dueAt, status == StudyFlashcardStatus.REVIEW ? now.minusDays(intervalDays) : null,
                 0, now, now
+        ));
+    }
+
+    private StudyFlashcard savePersonalizedCard(
+            long workspaceId,
+            String topic,
+            long sourceDocumentId,
+            int lapseCount
+    ) {
+        OffsetDateTime now = OffsetDateTime.now();
+        return flashcardRepository.save(new StudyFlashcard(
+                null, 1L, workspaceId, null, sourceDocumentId, topic,
+                "personalized-card-" + UUID.randomUUID(),
+                topic + "测试问题", topic + "测试答案", null,
+                StudyFlashcardStatus.REVIEW, 3, 7, 2.5, lapseCount,
+                now.minusMinutes(1), now.minusDays(7), 0, now, now
         ));
     }
 }

@@ -13,6 +13,8 @@ public record StudyFlashcard(
         Long ownerUserId,
         Long workspaceId,
         Long sourceConversationId,
+        Long sourceDocumentId,
+        String topic,
         String requestId,
         String question,
         String answer,
@@ -29,12 +31,42 @@ public record StudyFlashcard(
         OffsetDateTime updatedAt
 ) {
 
+    /** 兼容尚未携带主题和来源文档的既有创建流程及测试数据。 */
+    public StudyFlashcard(
+            Long id,
+            Long ownerUserId,
+            Long workspaceId,
+            Long sourceConversationId,
+            String requestId,
+            String question,
+            String answer,
+            String explanation,
+            StudyFlashcardStatus status,
+            int repetitionCount,
+            int intervalDays,
+            double easeFactor,
+            int lapseCount,
+            OffsetDateTime dueAt,
+            OffsetDateTime lastReviewedAt,
+            long version,
+            OffsetDateTime createdAt,
+            OffsetDateTime updatedAt
+    ) {
+        this(
+                id, ownerUserId, workspaceId, sourceConversationId, null, null, requestId,
+                question, answer, explanation, status, repetitionCount, intervalDays,
+                easeFactor, lapseCount, dueAt, lastReviewedAt, version, createdAt, updatedAt
+        );
+    }
+
     public StudyFlashcard withId(Long generatedId) {
         return new StudyFlashcard(
                 generatedId,
                 ownerUserId,
                 workspaceId,
                 sourceConversationId,
+                sourceDocumentId,
+                topic,
                 requestId,
                 question,
                 answer,
@@ -76,6 +108,8 @@ public record StudyFlashcard(
                 ownerUserId,
                 workspaceId,
                 sourceConversationId,
+                sourceDocumentId,
+                topic,
                 requestId,
                 question,
                 answer,
@@ -102,6 +136,8 @@ public record StudyFlashcard(
                 ownerUserId,
                 workspaceId,
                 sourceConversationId,
+                sourceDocumentId,
+                topic,
                 requestId,
                 question,
                 answer,

@@ -2,6 +2,7 @@ package com.agentmind.study.plan.model.dto;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * 每日学习计划及其实时完成进度。
@@ -16,6 +17,7 @@ public record DailyStudyPlanResponse(
         long remainingReviews,
         double progress,
         boolean completed,
+        List<DailyStudyTaskResponse> tasks,
         OffsetDateTime updatedAt
 ) {
 }

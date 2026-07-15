@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.time.OffsetDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -106,9 +107,14 @@ class JdbcAgentWriteToolIntegrationTests {
         jdbcTemplate.update("delete from agent_tool_confirmations");
         jdbcTemplate.update("delete from agent_tool_call_audits");
         jdbcTemplate.update("delete from knowledge_notes");
+        jdbcTemplate.update("delete from daily_study_task_cards");
+        jdbcTemplate.update("delete from daily_study_tasks");
         jdbcTemplate.update("delete from study_review_session_items");
         jdbcTemplate.update("delete from study_review_sessions");
         jdbcTemplate.update("delete from daily_study_plans");
+        jdbcTemplate.update("delete from study_flashcard_fsrs_states");
+        jdbcTemplate.update("delete from fsrs_parameter_optimization_jobs");
+        jdbcTemplate.update("delete from fsrs_user_profiles");
         // 复习记录通过外键关联卡片，必须先清理明细记录再清理卡片主表。
         jdbcTemplate.update("delete from study_flashcard_reviews");
         jdbcTemplate.update("delete from study_flashcards");
@@ -162,6 +168,39 @@ class JdbcAgentWriteToolIntegrationTests {
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/flashcards", workspaceId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total", equalTo(1)));
+
+        // 第二个确认式写工具验证计划、任务和卡片关联可以在 PostgreSQL 同一事务中提交。
+        MvcResult planConfirmationCreated = mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations", workspaceId
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toolName":"study_plan.create",
+                                  "requestId":"jdbc-study-plan-001",
+                                  "arguments":{"planDate":"%s","dailyReviewTarget":10}
+                                }
+                                """.formatted(LocalDate.now())))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode planConfirmationData = objectMapper.readTree(
+                planConfirmationCreated.getResponse().getContentAsString()
+        ).path("data");
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/agent/write-tool-confirmations/{id}/confirm",
+                            workspaceId,
+                            planConfirmationData.path("confirmation").path("id").asLong()
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.createObjectNode()
+                                .put("confirmationToken", planConfirmationData.path("confirmationToken").asText())
+                                .toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.confirmation.status", equalTo("SUCCEEDED")));
+
+        assertThat(jdbcTemplate.queryForObject("select count(*) from daily_study_plans", Long.class)).isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject("select count(*) from daily_study_tasks", Long.class)).isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject("select count(*) from daily_study_task_cards", Long.class)).isEqualTo(1L);
     }
 
     @Test

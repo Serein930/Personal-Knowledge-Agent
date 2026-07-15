@@ -3,9 +3,11 @@ package com.agentmind.agent.proposal;
 import com.agentmind.agent.proposal.model.WriteToolProposalCandidate;
 import com.agentmind.agent.tool.CreateFlashcardAgentTool;
 import com.agentmind.agent.tool.CreateNoteAgentTool;
+import com.agentmind.agent.tool.CreateStudyPlanAgentTool;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
+import java.time.LocalDate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -27,6 +29,12 @@ public class RuleBasedWriteToolProposalCandidateFactory {
     public List<WriteToolProposalCandidate> create(String userQuestion, String generatedAnswer) {
         if (!StringUtils.hasText(generatedAnswer)) {
             return List.of();
+        }
+        if (containsAny(userQuestion, "学习计划", "复习计划", "今日复习", "安排复习")) {
+            ObjectNode arguments = objectMapper.createObjectNode()
+                    .put("planDate", LocalDate.now().toString())
+                    .put("dailyReviewTarget", 20);
+            return List.of(new WriteToolProposalCandidate(CreateStudyPlanAgentTool.TOOL_NAME, arguments));
         }
         if (containsAny(userQuestion, "复习卡片", "闪卡", "记忆卡片")) {
             ObjectNode arguments = objectMapper.createObjectNode()

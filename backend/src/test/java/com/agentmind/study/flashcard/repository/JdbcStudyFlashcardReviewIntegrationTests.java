@@ -39,6 +39,7 @@ import org.springframework.jdbc.datasource.init.ScriptUtils;
 @EnabledIfEnvironmentVariable(named = "AGENTMIND_AGENT_JDBC_INTEGRATION_TEST", matches = "true")
 @SpringBootTest(properties = {
         "agentmind.agent.persistence.store=jdbc",
+        "agentmind.study.flashcard.algorithm=fsrs",
         "agentmind.vector-store.type=memory",
         "spring.datasource.url=jdbc:postgresql://localhost:5432/agentmind",
         "spring.datasource.username=agentmind",
@@ -66,9 +67,14 @@ class JdbcStudyFlashcardReviewIntegrationTests {
         try (Connection connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/schema/agent_write_tools.sql"));
         }
+        jdbcTemplate.update("delete from daily_study_task_cards");
+        jdbcTemplate.update("delete from daily_study_tasks");
         jdbcTemplate.update("delete from study_review_session_items");
         jdbcTemplate.update("delete from study_review_sessions");
         jdbcTemplate.update("delete from daily_study_plans");
+        jdbcTemplate.update("delete from study_flashcard_fsrs_states");
+        jdbcTemplate.update("delete from fsrs_parameter_optimization_jobs");
+        jdbcTemplate.update("delete from fsrs_user_profiles");
         jdbcTemplate.update("delete from study_flashcard_reviews");
         jdbcTemplate.update("delete from study_flashcards");
     }
@@ -110,6 +116,10 @@ class JdbcStudyFlashcardReviewIntegrationTests {
         assertThat(reviewRepository.countByOwnerUserIdAndWorkspaceIdAndFlashcardId(
                 1L, workspaceId, flashcard.id()
         )).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from study_flashcard_fsrs_states where flashcard_id = ?",
+                Long.class, flashcard.id()
+        )).isEqualTo(1L);
     }
 
     @Test
