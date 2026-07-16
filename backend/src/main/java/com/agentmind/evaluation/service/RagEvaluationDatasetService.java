@@ -130,7 +130,7 @@ public class RagEvaluationDatasetService {
         ));
     }
 
-    private RagEvaluationDataset requireDataset(AgentToolExecutionContext context, Long datasetId) {
+    RagEvaluationDataset requireDataset(AgentToolExecutionContext context, Long datasetId) {
         return repository.findDatasetByScopeAndId(context.ownerUserId(), context.workspaceId(), datasetId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND, "评估集不存在或无权访问"

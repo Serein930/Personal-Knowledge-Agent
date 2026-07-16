@@ -67,6 +67,11 @@ agentmind:
   evaluation:
     store: memory
     maximum-cases-per-version: 200
+    chunk-strategy-version: markdown-aware-v1
+    executor-core-pool-size: 2
+    executor-max-pool-size: 4
+    executor-queue-capacity: 100
+    maximum-import-bytes: 5242880
     # 单价单位为美元/百万令牌；本地默认零成本，真实模型联调时通过环境配置覆盖。
     input-cost-per-million-tokens: ${AGENTMIND_EVALUATION_INPUT_COST:0}
     output-cost-per-million-tokens: ${AGENTMIND_EVALUATION_OUTPUT_COST:0}

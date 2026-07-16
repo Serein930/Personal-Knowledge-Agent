@@ -10,14 +10,26 @@ import com.agentmind.evaluation.model.dto.RagEvaluationDashboardResponse;
 import com.agentmind.evaluation.model.dto.RagEvaluationDatasetResponse;
 import com.agentmind.evaluation.model.dto.RagEvaluationDatasetVersionResponse;
 import com.agentmind.evaluation.model.dto.RagEvaluationJobResponse;
+import com.agentmind.evaluation.model.dto.RagEvaluationTrendResponse;
+import com.agentmind.evaluation.model.dto.RagEvaluationVersionDiffResponse;
 import com.agentmind.evaluation.model.dto.StartRagEvaluationJobRequest;
+import com.agentmind.evaluation.model.RagEvaluationExchangeFormat;
+import com.agentmind.evaluation.model.dto.RagEvaluationExportFile;
+import com.agentmind.evaluation.service.RagEvaluationAnalysisService;
+import com.agentmind.evaluation.service.RagEvaluationDatasetExchangeService;
 import com.agentmind.evaluation.service.RagEvaluationDatasetService;
 import com.agentmind.evaluation.service.RagEvaluationJobService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 检索增强生成固定评估接口。
@@ -39,13 +52,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class RagEvaluationController {
 
     private final RagEvaluationDatasetService datasetService;
+    private final RagEvaluationDatasetExchangeService exchangeService;
+    private final RagEvaluationAnalysisService analysisService;
     private final RagEvaluationJobService jobService;
 
     public RagEvaluationController(
             RagEvaluationDatasetService datasetService,
+            RagEvaluationDatasetExchangeService exchangeService,
+            RagEvaluationAnalysisService analysisService,
             RagEvaluationJobService jobService
     ) {
         this.datasetService = datasetService;
+        this.exchangeService = exchangeService;
+        this.analysisService = analysisService;
         this.jobService = jobService;
     }
 
@@ -107,14 +126,98 @@ public class RagEvaluationController {
         ));
     }
 
+    @PostMapping(value = "/datasets/import", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<RagEvaluationDatasetVersionResponse>> importDataset(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @RequestParam RagEvaluationExchangeFormat format,
+            @RequestParam MultipartFile file
+    ) throws IOException {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                exchangeService.importDataset(context(ownerUserId, workspaceId), format, file.getBytes())
+        ));
+    }
+
+    @GetMapping("/datasets/{datasetId}/versions/{version}/export")
+    public ResponseEntity<byte[]> exportDataset(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
+            @PathVariable @Positive(message = "评估集版本必须为正数") int version,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @RequestParam(defaultValue = "JSON") RagEvaluationExchangeFormat format
+    ) {
+        RagEvaluationExportFile file = exchangeService.exportDataset(
+                context(ownerUserId, workspaceId), datasetId, version, format
+        );
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(file.fileName(), StandardCharsets.UTF_8).build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CONTENT_TYPE, file.contentType())
+                .body(file.content());
+    }
+
+    @GetMapping("/datasets/{datasetId}/trends")
+    public ApiResponse<RagEvaluationTrendResponse> trend(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @RequestParam(required = false) @Positive(message = "评估集版本必须为正数") Integer version,
+            @RequestParam(defaultValue = "30") @Min(value = 1, message = "趋势点数量不能小于1")
+            @Max(value = 200, message = "趋势点数量不能超过200") int limit
+    ) {
+        return ApiResponse.success(analysisService.trend(
+                context(ownerUserId, workspaceId), datasetId, version, limit
+        ));
+    }
+
+    @GetMapping("/datasets/{datasetId}/versions/diff")
+    public ApiResponse<RagEvaluationVersionDiffResponse> versionDiff(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @RequestParam @Positive(message = "起始版本必须为正数") int fromVersion,
+            @RequestParam @Positive(message = "目标版本必须为正数") int toVersion
+    ) {
+        return ApiResponse.success(analysisService.versionDiff(
+                context(ownerUserId, workspaceId), datasetId, fromVersion, toVersion
+        ));
+    }
+
     @PostMapping("/jobs")
-    public ApiResponse<RagEvaluationJobResponse> startJob(
+    public ResponseEntity<ApiResponse<RagEvaluationJobResponse>> startJob(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
             @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody StartRagEvaluationJobRequest request
     ) {
-        return ApiResponse.success(jobService.start(context(ownerUserId, workspaceId), request));
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success(jobService.start(context(ownerUserId, workspaceId), request)));
+    }
+
+    @PostMapping("/jobs/{jobId}/cancel")
+    public ApiResponse<RagEvaluationJobResponse> cancelJob(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "评估任务编号必须为正数") Long jobId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+    ) {
+        return ApiResponse.success(jobService.cancel(context(ownerUserId, workspaceId), jobId));
+    }
+
+    @PostMapping("/jobs/{jobId}/retry")
+    public ResponseEntity<ApiResponse<RagEvaluationJobResponse>> retryJob(
+            @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
+            @PathVariable @Positive(message = "评估任务编号必须为正数") Long jobId,
+            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
+            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+    ) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success(jobService.retry(context(ownerUserId, workspaceId), jobId)));
     }
 
     @GetMapping("/jobs")

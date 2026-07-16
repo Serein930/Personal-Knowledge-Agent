@@ -589,6 +589,8 @@ textarea {
 .evaluation-header-actions {
   display: flex;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .evaluation-metric-grid {
@@ -622,6 +624,62 @@ textarea {
   width: 100%;
 }
 
+.evaluation-experiment-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.evaluation-experiment-panel h3,
+.evaluation-trend-panel h3 {
+  margin-bottom: 0;
+}
+
+.evaluation-run-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: center;
+}
+
+.evaluation-run-grid .ant-select,
+.evaluation-run-grid .ant-input-number {
+  width: 100%;
+}
+
+.evaluation-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.evaluation-field > span {
+  padding: 0 11px;
+  white-space: nowrap;
+  color: #334155;
+}
+
+.evaluation-field .ant-input,
+.evaluation-field .ant-input-number {
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.evaluation-table-actions {
+  display: flex;
+  min-width: 72px;
+  align-items: center;
+}
+
+.evaluation-trend-panel {
+  min-height: 350px;
+}
+
 @media (max-width: 1080px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -649,6 +707,10 @@ textarea {
   .evaluation-run-panel {
     grid-template-columns: minmax(0, 1fr) minmax(160px, 0.6fr);
   }
+
+  .evaluation-run-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -659,9 +721,20 @@ textarea {
   }
 
   .evaluation-header-actions,
-  .evaluation-run-panel {
+  .evaluation-run-panel,
+  .evaluation-run-grid {
     width: 100%;
     grid-template-columns: 1fr;
+  }
+
+  .section-header__action {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .evaluation-header-actions {
+    flex-wrap: wrap;
   }
 
   .evaluation-header-actions button {

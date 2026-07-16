@@ -1,0 +1,43 @@
+name: RAG质量门禁
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace_id:
+        description: 知识空间编号
+        required: true
+        type: string
+      dataset_id:
+        description: 已部署环境中的固定评估集编号
+        required: true
+        type: string
+      dataset_version:
+        description: 固定评估集版本
+        required: true
+        default: "1"
+        type: string
+
+jobs:
+  quality-gate:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 执行固定评估质量门禁
+        shell: pwsh
+        env:
+          RAG_EVALUATION_BASE_URL: ${{ secrets.RAG_EVALUATION_BASE_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RAG_EVALUATION_BASE_URL)) {
+            throw "请先配置仓库密钥 RAG_EVALUATION_BASE_URL，例如 https://staging.example.com/api"
+          }
+          ./scripts/run-rag-quality-gate.ps1 `
+            -BaseUrl $env:RAG_EVALUATION_BASE_URL `
+            -WorkspaceId "${{ inputs.workspace_id }}" `
+            -DatasetId "${{ inputs.dataset_id }}" `
+            -DatasetVersion "${{ inputs.dataset_version }}" `
+            -RetrievalStrategy HYBRID `
+            -RerankStrategy LEXICAL `
+            -MinimumRecallAtK 80 `
+            -MinimumNdcgAtK 70

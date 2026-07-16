@@ -17,6 +17,11 @@ public class RagEvaluationProperties {
     private BigDecimal inputCostPerMillionTokens = BigDecimal.ZERO;
     private BigDecimal outputCostPerMillionTokens = BigDecimal.ZERO;
     private int maximumCasesPerVersion = 200;
+    private String chunkStrategyVersion = "markdown-aware-v1";
+    private int executorCorePoolSize = 2;
+    private int executorMaxPoolSize = 4;
+    private int executorQueueCapacity = 100;
+    private int maximumImportBytes = 5 * 1024 * 1024;
 
     public BigDecimal getInputCostPerMillionTokens() {
         return inputCostPerMillionTokens;
@@ -40,5 +45,45 @@ public class RagEvaluationProperties {
 
     public void setMaximumCasesPerVersion(int maximumCasesPerVersion) {
         this.maximumCasesPerVersion = maximumCasesPerVersion;
+    }
+
+    public String getChunkStrategyVersion() {
+        return chunkStrategyVersion;
+    }
+
+    public void setChunkStrategyVersion(String chunkStrategyVersion) {
+        this.chunkStrategyVersion = chunkStrategyVersion;
+    }
+
+    public int getExecutorCorePoolSize() {
+        return executorCorePoolSize;
+    }
+
+    public void setExecutorCorePoolSize(int executorCorePoolSize) {
+        this.executorCorePoolSize = executorCorePoolSize;
+    }
+
+    public int getExecutorMaxPoolSize() {
+        return executorMaxPoolSize;
+    }
+
+    public void setExecutorMaxPoolSize(int executorMaxPoolSize) {
+        this.executorMaxPoolSize = executorMaxPoolSize;
+    }
+
+    public int getExecutorQueueCapacity() {
+        return executorQueueCapacity;
+    }
+
+    public void setExecutorQueueCapacity(int executorQueueCapacity) {
+        this.executorQueueCapacity = executorQueueCapacity;
+    }
+
+    public int getMaximumImportBytes() {
+        return maximumImportBytes;
+    }
+
+    public void setMaximumImportBytes(int maximumImportBytes) {
+        this.maximumImportBytes = maximumImportBytes;
     }
 }

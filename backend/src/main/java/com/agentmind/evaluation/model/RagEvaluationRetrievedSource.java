@@ -5,6 +5,7 @@ public record RagEvaluationRetrievedSource(
         String chunkId,
         Long documentId,
         int rank,
-        double score
+        double score,
+        String content
 ) {
 }

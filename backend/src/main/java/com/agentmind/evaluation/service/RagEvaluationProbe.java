@@ -11,8 +11,11 @@ import com.agentmind.chat.service.RagPromptTemplate;
 import com.agentmind.chat.service.RagRefusalDecision;
 import com.agentmind.chat.service.RagRefusalPolicy;
 import com.agentmind.evaluation.config.RagEvaluationProperties;
+import com.agentmind.evaluation.model.RagEvaluationExperimentConfig;
+import com.agentmind.evaluation.model.RagEvaluationPhaseTiming;
 import com.agentmind.evaluation.model.RagEvaluationRetrievedSource;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResponse;
+import com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse;
 import com.agentmind.knowledge.service.KnowledgeSearchService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,6 +40,7 @@ public class RagEvaluationProbe {
     private final AnswerGenerator answerGenerator;
     private final ChatTokenCounter tokenCounter;
     private final RagEvaluationProperties evaluationProperties;
+    private final RagEvaluationCandidateRanker candidateRanker;
 
     public RagEvaluationProbe(
             KnowledgeSearchService searchService,
@@ -44,7 +48,8 @@ public class RagEvaluationProbe {
             RagPromptTemplate promptTemplate,
             AnswerGenerator answerGenerator,
             ChatTokenCounter tokenCounter,
-            RagEvaluationProperties evaluationProperties
+            RagEvaluationProperties evaluationProperties,
+            RagEvaluationCandidateRanker candidateRanker
     ) {
         this.searchService = searchService;
         this.refusalPolicy = refusalPolicy;
@@ -52,12 +57,28 @@ public class RagEvaluationProbe {
         this.answerGenerator = answerGenerator;
         this.tokenCounter = tokenCounter;
         this.evaluationProperties = evaluationProperties;
+        this.candidateRanker = candidateRanker;
     }
 
-    public RagEvaluationProbeResult execute(Long ownerUserId, Long workspaceId, String question, int topK) {
+    public RagEvaluationProbeResult execute(
+            Long ownerUserId,
+            Long workspaceId,
+            String question,
+            RagEvaluationExperimentConfig experimentConfig
+    ) {
         long startedNanos = System.nanoTime();
-        KnowledgeSearchResponse search = searchService.search(workspaceId, question, topK);
-        List<RagCitationResponse> citations = toCitations(search.results());
+        long retrievalStartedNanos = System.nanoTime();
+        KnowledgeSearchResponse search = searchService.search(
+                workspaceId, question, experimentConfig.candidatePoolSize()
+        );
+        long retrievalMillis = elapsedMillis(retrievalStartedNanos);
+        long rerankStartedNanos = System.nanoTime();
+        List<KnowledgeSearchResultResponse> rankedResults = candidateRanker.rank(
+                question, search.results(), experimentConfig
+        );
+        long rerankMillis = elapsedMillis(rerankStartedNanos);
+        long generationStartedNanos = System.nanoTime();
+        List<RagCitationResponse> citations = toCitations(rankedResults);
         RagRefusalDecision refusalDecision = refusalPolicy.decide(citations);
         String promptContext = promptTemplate.buildPromptContext(question, citations, List.of());
         String generationPrompt = promptTemplate.buildGenerationPrompt(question, promptContext, refusalDecision);
@@ -65,12 +86,14 @@ public class RagEvaluationProbe {
                 workspaceId, ownerUserId, null, null, question, promptTemplate.promptVersion(),
                 promptContext, generationPrompt, citations, refusalDecision
         ));
+        long generationMillis = elapsedMillis(generationStartedNanos);
         TokenSnapshot tokens = resolveTokens(generated.usage(), generationPrompt, generated.content());
-        long elapsedMillis = Math.max(0, (System.nanoTime() - startedNanos) / 1_000_000);
+        long totalMillis = elapsedMillis(startedNanos);
         return new RagEvaluationProbeResult(
-                IntStream.range(0, search.results().size())
-                        .mapToObj(index -> toRetrievedSource(search.results().get(index), index + 1)).toList(),
-                refusalDecision.shouldRefuse(), generated.content(), elapsedMillis,
+                IntStream.range(0, rankedResults.size())
+                        .mapToObj(index -> toRetrievedSource(rankedResults.get(index), index + 1)).toList(),
+                refusalDecision.shouldRefuse(), generated.content(),
+                new RagEvaluationPhaseTiming(retrievalMillis, rerankMillis, generationMillis, totalMillis),
                 tokens.promptTokens(), tokens.completionTokens(), tokens.estimated(),
                 estimateCost(tokens.promptTokens(), tokens.completionTokens())
         );
@@ -94,7 +117,7 @@ public class RagEvaluationProbe {
         return input.add(output).setScale(6, RoundingMode.HALF_UP);
     }
 
-    private List<RagCitationResponse> toCitations(List<com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse> results) {
+    private List<RagCitationResponse> toCitations(List<KnowledgeSearchResultResponse> results) {
         return IntStream.range(0, results.size()).mapToObj(index -> {
             var result = results.get(index);
             return new RagCitationResponse(
@@ -105,10 +128,16 @@ public class RagEvaluationProbe {
     }
 
     private RagEvaluationRetrievedSource toRetrievedSource(
-            com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse result,
+            KnowledgeSearchResultResponse result,
             int rank
     ) {
-        return new RagEvaluationRetrievedSource(result.chunkId(), result.documentId(), rank, result.score());
+        return new RagEvaluationRetrievedSource(
+                result.chunkId(), result.documentId(), rank, result.score(), result.content()
+        );
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return Math.max(0, (System.nanoTime() - startedNanos) / 1_000_000);
     }
 
     private record TokenSnapshot(int promptTokens, int completionTokens, boolean estimated) {

@@ -1,29 +1,37 @@
 package com.agentmind.evaluation.repository;
 
 import com.agentmind.evaluation.model.RagEvaluationCaseResult;
+import com.agentmind.evaluation.model.RagEvaluationExperimentConfig;
 import com.agentmind.evaluation.model.RagEvaluationJob;
 import com.agentmind.evaluation.model.RagEvaluationJobStatus;
 import com.agentmind.evaluation.model.RagEvaluationMetrics;
+import com.agentmind.evaluation.model.RagEvaluationQualityGate;
+import com.agentmind.evaluation.model.RagEvaluationQualityGateResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/** 评估任务 PostgreSQL 适配器。 */
+/** 评估任务 PostgreSQL 适配器，使用状态条件更新保证异步任务并发安全。 */
 @Repository
 @ConditionalOnProperty(prefix = "agentmind.evaluation", name = "store", havingValue = "jdbc")
 public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepository {
 
     private static final String COLUMNS = "id, owner_user_id, workspace_id, dataset_id, dataset_version, status, "
-            + "retrieval_strategy, top_k, prompt_version, model_name, baseline_job_id, metrics::text, "
-            + "case_results::text, failure_reason, created_at, started_at, completed_at";
+            + "retrieval_strategy, top_k, prompt_version, model_name, experiment_config::text, baseline_job_id, "
+            + "retry_of_job_id, total_cases, completed_cases, progress, metrics::text, quality_gate::text, "
+            + "quality_gate_result::text, case_results::text, failure_reason, created_at, started_at, updated_at, "
+            + "completed_at";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -35,31 +43,45 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
 
     @Override
     public RagEvaluationJob save(RagEvaluationJob job) {
-        if (job.id() == null) {
-            return jdbcTemplate.query("""
-                            insert into rag_evaluation_jobs (
-                                owner_user_id, workspace_id, dataset_id, dataset_version, status,
-                                retrieval_strategy, top_k, prompt_version, model_name, baseline_job_id,
-                                metrics, case_results, failure_reason, created_at, started_at, completed_at
-                            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), ?, ?, ?, ?)
-                            returning %s
-                            """.formatted(COLUMNS), this::mapJob,
-                    job.ownerUserId(), job.workspaceId(), job.datasetId(), job.datasetVersion(), job.status().name(),
-                    job.retrievalStrategy(), job.topK(), job.promptVersion(), job.modelName(), job.baselineJobId(),
-                    writeJson(job.metrics()), writeJson(job.caseResults()), safe(job.failureReason()),
-                    job.createdAt(), job.startedAt(), job.completedAt()).stream().findFirst()
-                    .orElseThrow(() -> new IllegalStateException("创建评估任务失败"));
+        if (job.id() != null) {
+            return update(job, "where id = ? and owner_user_id = ? and workspace_id = ?", List.of(
+                    job.id(), job.ownerUserId(), job.workspaceId()
+            )).orElseThrow(() -> new IllegalStateException("更新评估任务失败"));
         }
         return jdbcTemplate.query("""
-                        update rag_evaluation_jobs
-                        set status = ?, baseline_job_id = ?, metrics = cast(? as jsonb),
-                            case_results = cast(? as jsonb), failure_reason = ?, completed_at = ?
-                        where id = ? and owner_user_id = ? and workspace_id = ?
+                        insert into rag_evaluation_jobs (
+                            owner_user_id, workspace_id, dataset_id, dataset_version, status,
+                            retrieval_strategy, top_k, prompt_version, model_name, experiment_config,
+                            baseline_job_id, retry_of_job_id, total_cases, completed_cases, progress,
+                            metrics, quality_gate, quality_gate_result, case_results, failure_reason,
+                            created_at, started_at, updated_at, completed_at
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?,
+                                  cast(? as jsonb), cast(? as jsonb), cast(? as jsonb), cast(? as jsonb), ?, ?, ?, ?, ?)
                         returning %s
                         """.formatted(COLUMNS), this::mapJob,
-                job.status().name(), job.baselineJobId(), writeJson(job.metrics()), writeJson(job.caseResults()),
-                safe(job.failureReason()), job.completedAt(), job.id(), job.ownerUserId(), job.workspaceId())
-                .stream().findFirst().orElseThrow(() -> new IllegalStateException("更新评估任务失败"));
+                job.ownerUserId(), job.workspaceId(), job.datasetId(), job.datasetVersion(), job.status().name(),
+                job.retrievalStrategy(), job.topK(), job.promptVersion(), job.modelName(),
+                writeJson(job.experimentConfig()), job.baselineJobId(), job.retryOfJobId(), job.totalCases(),
+                job.completedCases(), job.progress(), writeJson(job.metrics()), writeJson(job.qualityGate()),
+                writeJson(job.qualityGateResult()), writeJson(safeResults(job.caseResults())), safe(job.failureReason()),
+                job.createdAt(), job.startedAt(), job.updatedAt(), job.completedAt()).stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("创建评估任务失败"));
+    }
+
+    @Override
+    public Optional<RagEvaluationJob> updateIfStatus(
+            RagEvaluationJob job,
+            Set<RagEvaluationJobStatus> expectedStatuses
+    ) {
+        if (expectedStatuses.isEmpty()) {
+            return Optional.empty();
+        }
+        String placeholders = expectedStatuses.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        List<Object> whereParameters = new ArrayList<>(List.of(job.id(), job.ownerUserId(), job.workspaceId()));
+        expectedStatuses.stream().map(Enum::name).forEach(whereParameters::add);
+        return update(job,
+                "where id = ? and owner_user_id = ? and workspace_id = ? and status in (" + placeholders + ")",
+                whereParameters);
     }
 
     @Override
@@ -108,6 +130,31 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
     }
 
     @Override
+    public List<RagEvaluationJob> findSuccessfulByDataset(
+            Long ownerUserId,
+            Long workspaceId,
+            Long datasetId,
+            Integer datasetVersion,
+            int limit
+    ) {
+        if (datasetVersion == null) {
+            return jdbcTemplate.query(
+                    "select " + COLUMNS + " from rag_evaluation_jobs "
+                            + "where owner_user_id = ? and workspace_id = ? and dataset_id = ? "
+                            + "and status = 'SUCCEEDED' order by completed_at desc, id desc limit ?",
+                    this::mapJob, ownerUserId, workspaceId, datasetId, limit
+            );
+        }
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from rag_evaluation_jobs "
+                        + "where owner_user_id = ? and workspace_id = ? and dataset_id = ? "
+                        + "and dataset_version = ? and status = 'SUCCEEDED' "
+                        + "order by completed_at desc, id desc limit ?",
+                this::mapJob, ownerUserId, workspaceId, datasetId, datasetVersion, limit
+        );
+    }
+
+    @Override
     public long countByScope(Long ownerUserId, Long workspaceId, RagEvaluationJobStatus status) {
         Long count;
         if (status == null) {
@@ -125,30 +172,73 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
         return count == null ? 0 : count;
     }
 
+    private Optional<RagEvaluationJob> update(RagEvaluationJob job, String whereClause, List<Object> whereParameters) {
+        List<Object> parameters = new ArrayList<>();
+        parameters.add(job.status().name());
+        parameters.add(job.baselineJobId());
+        parameters.add(job.retryOfJobId());
+        parameters.add(job.completedCases());
+        parameters.add(job.progress());
+        parameters.add(writeJson(job.metrics()));
+        parameters.add(writeJson(job.qualityGateResult()));
+        parameters.add(writeJson(safeResults(job.caseResults())));
+        parameters.add(safe(job.failureReason()));
+        parameters.add(job.startedAt());
+        parameters.add(job.updatedAt());
+        parameters.add(job.completedAt());
+        parameters.addAll(whereParameters);
+        return jdbcTemplate.query("""
+                        update rag_evaluation_jobs
+                        set status = ?, baseline_job_id = ?, retry_of_job_id = ?, completed_cases = ?, progress = ?,
+                            metrics = cast(? as jsonb), quality_gate_result = cast(? as jsonb),
+                            case_results = cast(? as jsonb), failure_reason = ?, started_at = ?, updated_at = ?,
+                            completed_at = ?
+                        %s
+                        returning %s
+                        """.formatted(whereClause, COLUMNS), this::mapJob, parameters.toArray()).stream().findFirst();
+    }
+
     private RagEvaluationJob mapJob(ResultSet resultSet, int rowNumber) throws SQLException {
+        RagEvaluationExperimentConfig experimentConfig = readJson(
+                resultSet.getString("experiment_config"), RagEvaluationExperimentConfig.class
+        );
+        if (experimentConfig == null) {
+            // 兼容尚未执行 Stage 9 增量迁移的历史任务快照。
+            experimentConfig = new RagEvaluationExperimentConfig(
+                    "历史任务-" + resultSet.getLong("id"), "legacy",
+                    com.agentmind.evaluation.model.RagEvaluationRetrievalStrategy.VECTOR,
+                    resultSet.getInt("top_k"), com.agentmind.evaluation.model.RagEvaluationRerankStrategy.NONE,
+                    resultSet.getInt("top_k"), resultSet.getString("prompt_version"), resultSet.getString("model_name")
+            );
+        }
         return new RagEvaluationJob(
-                resultSet.getLong("id"), resultSet.getLong("owner_user_id"),
-                resultSet.getLong("workspace_id"), resultSet.getLong("dataset_id"),
-                resultSet.getInt("dataset_version"),
+                resultSet.getLong("id"), resultSet.getLong("owner_user_id"), resultSet.getLong("workspace_id"),
+                resultSet.getLong("dataset_id"), resultSet.getInt("dataset_version"),
                 RagEvaluationJobStatus.valueOf(resultSet.getString("status")),
                 resultSet.getString("retrieval_strategy"), resultSet.getInt("top_k"),
                 resultSet.getString("prompt_version"), resultSet.getString("model_name"),
-                nullableLong(resultSet, "baseline_job_id"), readMetrics(resultSet.getString("metrics")),
+                experimentConfig,
+                nullableLong(resultSet, "baseline_job_id"), nullableLong(resultSet, "retry_of_job_id"),
+                resultSet.getInt("total_cases"), resultSet.getInt("completed_cases"), resultSet.getInt("progress"),
+                readJson(resultSet.getString("metrics"), RagEvaluationMetrics.class),
+                readJson(resultSet.getString("quality_gate"), RagEvaluationQualityGate.class),
+                readJson(resultSet.getString("quality_gate_result"), RagEvaluationQualityGateResult.class),
                 readResults(resultSet.getString("case_results")), resultSet.getString("failure_reason"),
                 resultSet.getObject("created_at", OffsetDateTime.class),
                 resultSet.getObject("started_at", OffsetDateTime.class),
+                resultSet.getObject("updated_at", OffsetDateTime.class),
                 resultSet.getObject("completed_at", OffsetDateTime.class)
         );
     }
 
-    private RagEvaluationMetrics readMetrics(String json) throws SQLException {
-        if (json == null) {
+    private <T> T readJson(String json, Class<T> type) throws SQLException {
+        if (json == null || json.isBlank()) {
             return null;
         }
         try {
-            return objectMapper.readValue(json, RagEvaluationMetrics.class);
+            return objectMapper.readValue(json, type);
         } catch (JsonProcessingException exception) {
-            throw new SQLException("读取评估聚合指标失败", exception);
+            throw new SQLException("读取评估任务快照失败", exception);
         }
     }
 
@@ -173,6 +263,10 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("序列化评估任务快照失败", exception);
         }
+    }
+
+    private List<RagEvaluationCaseResult> safeResults(List<RagEvaluationCaseResult> results) {
+        return results == null ? List.of() : results;
     }
 
     private Long nullableLong(ResultSet resultSet, String column) throws SQLException {

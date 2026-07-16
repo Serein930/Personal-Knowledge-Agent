@@ -1,8 +1,10 @@
 package com.agentmind.evaluation.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.mock.web.MockMultipartFile;
 
 /**
  * 固定评估集与任务 API 全链路测试。
@@ -73,7 +76,22 @@ class RagEvaluationControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.comparable", equalTo(true)))
                 .andExpect(jsonPath("$.data.baselineJobId", equalTo((int) firstJobId)))
-                .andExpect(jsonPath("$.data.delta.recallAtK", equalTo(0.0)));
+                .andExpect(jsonPath("$.data.delta.recallAtK", equalTo(0.0)))
+                .andExpect(jsonPath("$.data.caseDeltas.length()", equalTo(2)))
+                .andExpect(jsonPath("$.data.caseDeltas[0].ndcgAtK", equalTo(0.0)));
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/trends",
+                                WORKSPACE_ID, datasetId)
+                        .param("version", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.points.length()", equalTo(2)))
+                .andExpect(jsonPath("$.data.points[1].metrics.ndcgAtK", equalTo(100.0)));
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/versions/diff",
+                                WORKSPACE_ID, datasetId)
+                        .param("fromVersion", "1").param("toVersion", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unchanged", equalTo(2)));
 
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/evaluations/dashboard", WORKSPACE_ID))
                 .andExpect(status().isOk())
@@ -81,10 +99,13 @@ class RagEvaluationControllerTests {
                 .andExpect(jsonPath("$.data.totalJobCount", equalTo(2)))
                 .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.recallAtK", equalTo(100.0)))
                 .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.meanReciprocalRank", equalTo(1.0)))
+                .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.ndcgAtK", equalTo(100.0)))
                 .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.citationCoverage", equalTo(100.0)))
                 .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.refusalAccuracy", equalTo(100.0)))
                 .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.totalTokens", greaterThan(0)))
                 .andExpect(jsonPath("$.data.latestSuccessfulJob.metrics.estimatedCostUsd", greaterThan(0.0)));
+
+        verifyJsonAndCsvExchange(datasetId);
 
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/versions",
                                 WORKSPACE_ID + 1, datasetId))
@@ -112,14 +133,25 @@ class RagEvaluationControllerTests {
         MvcResult result = mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/evaluations/jobs", WORKSPACE_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"datasetId": %d, "datasetVersion": %d, "topK": 5}
+                                {
+                                  "datasetId": %d,
+                                  "datasetVersion": %d,
+                                  "topK": 5,
+                                  "experimentName": "固定向量实验",
+                                  "retrievalStrategy": "VECTOR",
+                                  "candidatePoolSize": 10,
+                                  "rerankStrategy": "NONE",
+                                  "qualityGate": {"minimumRecallAtK": 100, "minimumNdcgAtK": 100}
+                                }
                                 """.formatted(datasetId, version)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status", equalTo("SUCCEEDED")))
-                .andExpect(jsonPath("$.data.metrics.caseCount", equalTo(2)))
-                .andExpect(jsonPath("$.data.metrics.refusalAccuracy", equalTo(100.0)))
+                .andExpect(status().isAccepted())
                 .andReturn();
-        JsonNode data = readData(result);
+        JsonNode submitted = readData(result);
+        JsonNode data = awaitTerminal(submitted.path("id").asLong());
+        assertThat(data.path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(data.path("metrics").path("caseCount").asInt()).isEqualTo(2);
+        assertThat(data.path("metrics").path("refusalAccuracy").asDouble()).isEqualTo(100.0);
+        assertThat(data.path("qualityGateResult").path("status").asText()).isEqualTo("PASSED");
         if (expectedBaselineId == null) {
             if (!data.path("baselineJobId").isMissingNode() && !data.path("baselineJobId").isNull()) {
                 throw new AssertionError("首次运行不应关联基线任务");
@@ -128,6 +160,40 @@ class RagEvaluationControllerTests {
             throw new AssertionError("第二次运行未自动关联上一条成功任务");
         }
         return data.path("id").asLong();
+    }
+
+    private JsonNode awaitTerminal(long jobId) throws Exception {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            MvcResult result = mockMvc.perform(get(
+                            "/api/v1/workspaces/{workspaceId}/evaluations/jobs/{jobId}", WORKSPACE_ID, jobId))
+                    .andExpect(status().isOk()).andReturn();
+            JsonNode data = readData(result);
+            if (data.path("terminal").asBoolean()) {
+                return data;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("评估任务未在预期时间内完成");
+    }
+
+    private void verifyJsonAndCsvExchange(long datasetId) throws Exception {
+        for (String format : List.of("JSON", "CSV")) {
+            MvcResult exported = mockMvc.perform(get(
+                            "/api/v1/workspaces/{workspaceId}/evaluations/datasets/{datasetId}/versions/2/export",
+                            WORKSPACE_ID, datasetId).param("format", format))
+                    .andExpect(status().isOk()).andReturn();
+            MockMultipartFile file = new MockMultipartFile(
+                    "file", "evaluation." + format.toLowerCase(),
+                    format.equals("JSON") ? MediaType.APPLICATION_JSON_VALUE : "text/csv",
+                    exported.getResponse().getContentAsByteArray()
+            );
+            long targetWorkspace = WORKSPACE_ID + (format.equals("JSON") ? 10 : 20);
+            mockMvc.perform(multipart(
+                            "/api/v1/workspaces/{workspaceId}/evaluations/datasets/import", targetWorkspace)
+                            .file(file).param("format", format))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.data.cases.length()", equalTo(2)));
+        }
     }
 
     private String datasetVersionJson(String changeNote) {

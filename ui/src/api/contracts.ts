@@ -74,9 +74,15 @@ export interface RagEvaluationMetricsDto {
   caseCount: number;
   recallAtK: number;
   meanReciprocalRank: number;
+  ndcgAtK: number;
   citationCoverage: number;
   refusalAccuracy: number;
   answerKeywordCoverage: number;
+  faithfulness: number;
+  answerRelevance: number;
+  averageRetrievalMillis: number;
+  averageRerankMillis: number;
+  averageGenerationMillis: number;
   averageLatencyMillis: number;
   promptTokens: number;
   completionTokens: number;
@@ -99,11 +105,20 @@ export interface RagEvaluationCaseResultDto {
   firstRelevantRank?: number;
   recallAtK: number;
   reciprocalRank: number;
+  ndcgAtK: number;
   citationCovered: boolean;
   expectedRefusal: boolean;
   actualRefusal: boolean;
   refusalCorrect: boolean;
   answerKeywordCoverage: number;
+  faithfulness: number;
+  answerRelevance: number;
+  phaseTiming?: {
+    retrievalMillis: number;
+    rerankMillis: number;
+    generationMillis: number;
+    totalMillis: number;
+  };
   elapsedMillis: number;
   promptTokens: number;
   completionTokens: number;
@@ -111,7 +126,28 @@ export interface RagEvaluationCaseResultDto {
   estimatedCostUsd: number;
 }
 
-export type RagEvaluationJobStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+export type RagEvaluationJobStatus =
+  | 'PENDING'
+  | 'RUNNING'
+  | 'CANCEL_REQUESTED'
+  | 'CANCELED'
+  | 'SUCCEEDED'
+  | 'FAILED';
+
+export type RagEvaluationRetrievalStrategy = 'VECTOR' | 'HYBRID';
+export type RagEvaluationRerankStrategy = 'NONE' | 'LEXICAL';
+export type RagEvaluationQualityGateStatus = 'NOT_CONFIGURED' | 'PASSED' | 'FAILED';
+
+export interface RagEvaluationExperimentConfigDto {
+  experimentName: string;
+  chunkStrategyVersion: string;
+  retrievalStrategy: RagEvaluationRetrievalStrategy;
+  candidatePoolSize: number;
+  rerankStrategy: RagEvaluationRerankStrategy;
+  topK: number;
+  promptVersion: string;
+  modelName: string;
+}
 
 export interface RagEvaluationJobDto {
   id: number;
@@ -122,12 +158,32 @@ export interface RagEvaluationJobDto {
   topK: number;
   promptVersion: string;
   modelName: string;
+  experimentConfig: RagEvaluationExperimentConfigDto;
   baselineJobId?: number;
+  retryOfJobId?: number;
+  totalCases: number;
+  completedCases: number;
+  progress: number;
+  terminal: boolean;
   metrics?: RagEvaluationMetricsDto;
+  qualityGate?: {
+    minimumRecallAtK?: number;
+    minimumNdcgAtK?: number;
+    minimumFaithfulness?: number;
+    minimumAnswerRelevance?: number;
+    maximumAverageLatencyMillis?: number;
+    maximumTotalTokens?: number;
+    maximumEstimatedCostUsd?: number;
+  };
+  qualityGateResult?: {
+    status: RagEvaluationQualityGateStatus;
+    violations: string[];
+  };
   caseResults: RagEvaluationCaseResultDto[];
   failureReason?: string;
   createdAt: string;
-  startedAt: string;
+  startedAt?: string;
+  updatedAt: string;
   completedAt?: string;
 }
 
@@ -139,13 +195,65 @@ export interface RagEvaluationComparisonDto {
   delta?: {
     recallAtK: number;
     meanReciprocalRank: number;
+    ndcgAtK: number;
     citationCoverage: number;
     refusalAccuracy: number;
     answerKeywordCoverage: number;
+    faithfulness: number;
+    answerRelevance: number;
+    averageRetrievalMillis: number;
+    averageRerankMillis: number;
+    averageGenerationMillis: number;
     averageLatencyMillis: number;
     totalTokens: number;
     estimatedCostUsd: number;
   };
+  caseDeltas: Array<{
+    caseKey: string;
+    recallAtK: number;
+    reciprocalRank: number;
+    ndcgAtK: number;
+    citationCoverageChanged: boolean;
+    refusalCorrectnessChanged: boolean;
+    answerKeywordCoverage: number;
+    faithfulness: number;
+    answerRelevance: number;
+    elapsedMillis: number;
+    totalTokens: number;
+  }>;
+}
+
+export interface RagEvaluationTrendDto {
+  datasetId: number;
+  datasetVersion?: number;
+  points: Array<{
+    jobId: number;
+    datasetVersion: number;
+    experimentName: string;
+    retrievalStrategy: RagEvaluationRetrievalStrategy;
+    rerankStrategy: RagEvaluationRerankStrategy;
+    metrics: RagEvaluationMetricsDto;
+    qualityGateStatus: RagEvaluationQualityGateStatus;
+    completedAt: string;
+  }>;
+}
+
+export type RagEvaluationCaseDiffType = 'ADDED' | 'REMOVED' | 'MODIFIED' | 'UNCHANGED';
+
+export interface RagEvaluationVersionDiffDto {
+  datasetId: number;
+  fromVersion: number;
+  toVersion: number;
+  added: number;
+  removed: number;
+  modified: number;
+  unchanged: number;
+  cases: Array<{
+    caseKey: string;
+    type: RagEvaluationCaseDiffType;
+    before?: RagEvaluationCaseDto;
+    after?: RagEvaluationCaseDto;
+  }>;
 }
 
 export interface RagEvaluationDashboardDto {

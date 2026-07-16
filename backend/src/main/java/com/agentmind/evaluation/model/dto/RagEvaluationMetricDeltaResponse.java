@@ -6,9 +6,15 @@ import java.math.BigDecimal;
 public record RagEvaluationMetricDeltaResponse(
         double recallAtK,
         double meanReciprocalRank,
+        double ndcgAtK,
         double citationCoverage,
         double refusalAccuracy,
         double answerKeywordCoverage,
+        double faithfulness,
+        double answerRelevance,
+        long averageRetrievalMillis,
+        long averageRerankMillis,
+        long averageGenerationMillis,
         long averageLatencyMillis,
         int totalTokens,
         BigDecimal estimatedCostUsd

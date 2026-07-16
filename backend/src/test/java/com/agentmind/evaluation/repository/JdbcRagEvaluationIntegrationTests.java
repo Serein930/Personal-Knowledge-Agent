@@ -133,10 +133,21 @@ class JdbcRagEvaluationIntegrationTests {
                         .content("""
                                 {"datasetId":%d,"datasetVersion":1,"topK":5}
                                 """.formatted(datasetId)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status", equalTo("SUCCEEDED")))
+                .andExpect(status().isAccepted())
                 .andReturn();
-        return data(result).path("id").asLong();
+        long jobId = data(result).path("id").asLong();
+        for (int attempt = 0; attempt < 100; attempt++) {
+            MvcResult current = mockMvc.perform(get(
+                            "/api/v1/workspaces/{workspaceId}/evaluations/jobs/{jobId}", WORKSPACE_ID, jobId))
+                    .andExpect(status().isOk()).andReturn();
+            JsonNode job = data(current);
+            if (job.path("terminal").asBoolean()) {
+                assertThat(job.path("status").asText()).isEqualTo("SUCCEEDED");
+                return jobId;
+            }
+            Thread.sleep(25);
+        }
+        throw new AssertionError("PostgreSQL 评估任务未在预期时间内完成");
     }
 
     private JsonNode data(MvcResult result) throws Exception {
