@@ -3,17 +3,14 @@ package com.agentmind.knowledge.repository;
 import com.agentmind.knowledge.model.KnowledgeVector;
 import com.agentmind.knowledge.model.VectorSearchResult;
 import com.agentmind.knowledge.vector.VectorStore;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -54,93 +51,45 @@ public class PgVectorStore implements VectorStore {
             limit ?
             """;
 
-    private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
     private final int embeddingDimensions;
 
     public PgVectorStore(
-            DataSource dataSource,
+            JdbcTemplate jdbcTemplate,
             @Value("${agentmind.vector-store.embedding-dimensions:128}") int embeddingDimensions
     ) {
-        this.dataSource = dataSource;
+        this.jdbcTemplate = jdbcTemplate;
         this.embeddingDimensions = embeddingDimensions;
     }
 
     @Override
     public void replaceDocumentVectors(Long workspaceId, Long documentId, Collection<KnowledgeVector> vectors) {
-        try (Connection connection = dataSource.getConnection()) {
-            boolean previousAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                deleteDocumentVectors(connection, workspaceId, documentId);
-                insertVectors(connection, vectors);
-                connection.commit();
-            } catch (SQLException exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(previousAutoCommit);
-            }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("替换 pgvector 文档向量失败", exception);
-        }
+        jdbcTemplate.update(DELETE_DOCUMENT_SQL, workspaceId, documentId);
+        jdbcTemplate.batchUpdate(INSERT_VECTOR_SQL, vectors, Math.max(1, vectors.size()), (statement, vector) -> {
+            validateEmbeddingDimensions(vector.embedding());
+            statement.setString(1, vector.id());
+            statement.setLong(2, vector.workspaceId());
+            statement.setLong(3, vector.documentId());
+            statement.setString(4, vector.chunkId());
+            statement.setInt(5, vector.chunkSequence());
+            statement.setString(6, vector.headingPath());
+            statement.setString(7, vector.content());
+            statement.setString(8, PgVectorSqlSupport.toVectorLiteral(vector.embedding()));
+            statement.setObject(9, vector.createdAt());
+        });
     }
 
     @Override
     public void deleteDocumentVectors(Long workspaceId, Long documentId) {
-        try (Connection connection = dataSource.getConnection()) {
-            deleteDocumentVectors(connection, workspaceId, documentId);
-        } catch (SQLException exception) {
-            throw new IllegalStateException("删除 pgvector 文档向量失败", exception);
-        }
+        jdbcTemplate.update(DELETE_DOCUMENT_SQL, workspaceId, documentId);
     }
 
     @Override
     public List<VectorSearchResult> search(Long workspaceId, float[] queryEmbedding, int topK) {
         validateEmbeddingDimensions(queryEmbedding);
         String queryVector = PgVectorSqlSupport.toVectorLiteral(queryEmbedding);
-        try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement(SEARCH_SQL)) {
-            statement.setString(1, queryVector);
-            statement.setLong(2, workspaceId);
-            statement.setString(3, queryVector);
-            statement.setInt(4, topK);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                List<VectorSearchResult> results = new ArrayList<>();
-                while (resultSet.next()) {
-                    results.add(mapSearchResult(resultSet));
-                }
-                return results;
-            }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("检索 pgvector 文档片段失败", exception);
-        }
-    }
-
-    private void deleteDocumentVectors(Connection connection, Long workspaceId, Long documentId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_DOCUMENT_SQL)) {
-            statement.setLong(1, workspaceId);
-            statement.setLong(2, documentId);
-            statement.executeUpdate();
-        }
-    }
-
-    private void insertVectors(Connection connection, Collection<KnowledgeVector> vectors) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(INSERT_VECTOR_SQL)) {
-            for (KnowledgeVector vector : vectors) {
-                validateEmbeddingDimensions(vector.embedding());
-                statement.setString(1, vector.id());
-                statement.setLong(2, vector.workspaceId());
-                statement.setLong(3, vector.documentId());
-                statement.setString(4, vector.chunkId());
-                statement.setInt(5, vector.chunkSequence());
-                statement.setString(6, vector.headingPath());
-                statement.setString(7, vector.content());
-                statement.setString(8, PgVectorSqlSupport.toVectorLiteral(vector.embedding()));
-                statement.setTimestamp(9, Timestamp.from(vector.createdAt().toInstant()));
-                statement.addBatch();
-            }
-            statement.executeBatch();
-        }
+        return jdbcTemplate.query(SEARCH_SQL, (resultSet, rowNumber) -> mapSearchResult(resultSet),
+                queryVector, workspaceId, queryVector, topK);
     }
 
     private VectorSearchResult mapSearchResult(ResultSet resultSet) throws SQLException {

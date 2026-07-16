@@ -310,3 +310,6 @@ com.agentmind
 - Agent 工具调用。
 
 这些内容必须等后续阶段根据核心契约逐步实现。
+# 生产发布收尾进展
+
+已引入 Flyway 统一管理数据库版本；知识索引使用 pgvector 与事务 Outbox 原子写入、OpenSearch 异步批量消费，并具备租约、重试、死信、全量重建、Testcontainers 全链路 CI、Grafana/Prometheus/Tempo 观测和多实例压测脚本。详细操作见 `PRODUCTION_RELEASE_RUNBOOK.md`。

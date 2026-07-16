@@ -1,0 +1,28 @@
+groups:
+  - name: agentmind-production
+    rules:
+      - alert: AgentMindBackendDown
+        expr: up{job="agentmind-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AgentMind 后端已连续两分钟不可达"
+      - alert: KnowledgeIndexDeadLetters
+        expr: agentmind_knowledge_index_outbox_dead > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "知识索引出现死信，需要人工检查并重建"
+      - alert: KnowledgeIndexRetryBurst
+        expr: agentmind_knowledge_index_outbox_retry > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: "知识索引短时间内大量重试"
+      - alert: RagEvaluationRecoveryFailure
+        expr: increase(agentmind_rag_evaluation_lease_renewal_total{result="failed"}[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG 评估任务租约续期失败"

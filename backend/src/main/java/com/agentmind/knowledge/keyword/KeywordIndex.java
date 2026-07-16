@@ -13,6 +13,14 @@ public interface KeywordIndex {
 
     void replaceDocumentChunks(Long workspaceId, Long documentId, List<DocumentChunk> chunks);
 
+    /**
+     * 批量替换多个文档。默认实现保持所有适配器兼容，OpenSearch 适配器会覆盖为真正的批量请求。
+     */
+    default void replaceDocuments(List<KeywordIndexDocument> documents) {
+        documents.forEach(document -> replaceDocumentChunks(
+                document.workspaceId(), document.documentId(), document.chunks()));
+    }
+
     void deleteDocumentChunks(Long workspaceId, Long documentId);
 
     List<KnowledgeSearchResultResponse> search(Long workspaceId, String query, int topK);

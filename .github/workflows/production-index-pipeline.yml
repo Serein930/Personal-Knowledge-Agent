@@ -1,0 +1,37 @@
+name: 生产索引全链路验证
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/production-index-pipeline.yml"
+
+jobs:
+  production-index-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: 调整 OpenSearch 所需内核参数
+        run: sudo sysctl -w vm.max_map_count=262144
+
+      - name: 执行 PostgreSQL 与 OpenSearch 全链路测试
+        working-directory: backend
+        env:
+          AGENTMIND_RUN_PRODUCTION_INTEGRATION: "true"
+        run: mvn -B -Dtest=ProductionKnowledgeIndexPipelineIntegrationTests test
+
+      - name: 执行全部常规测试
+        working-directory: backend
+        run: mvn -B test

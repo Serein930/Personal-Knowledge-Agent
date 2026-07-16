@@ -3,6 +3,8 @@ package com.agentmind.knowledge.keyword;
 import com.agentmind.document.chunk.DocumentChunk;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -10,6 +12,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -26,9 +30,11 @@ public class OpenSearchKeywordIndex implements KeywordIndex {
 
     private final RestClient client;
     private final String indexName;
+    private final ObjectMapper objectMapper;
     private final AtomicBoolean indexReady = new AtomicBoolean();
 
-    public OpenSearchKeywordIndex(OpenSearchKeywordIndexProperties properties) {
+    @Autowired
+    public OpenSearchKeywordIndex(OpenSearchKeywordIndexProperties properties, ObjectMapper objectMapper) {
         RestClient.Builder builder = RestClient.builder().baseUrl(properties.getBaseUrl());
         if (StringUtils.hasText(properties.getUsername())) {
             String credentials = properties.getUsername() + ":" + properties.getPassword();
@@ -37,22 +43,35 @@ public class OpenSearchKeywordIndex implements KeywordIndex {
         }
         this.client = builder.build();
         this.indexName = properties.getIndexName();
+        this.objectMapper = objectMapper;
+    }
+
+    /** 为不启动 Spring 容器的集成测试保留便捷构造方式。 */
+    public OpenSearchKeywordIndex(OpenSearchKeywordIndexProperties properties) {
+        this(properties, new ObjectMapper());
     }
 
     @Override
     public void replaceDocumentChunks(Long workspaceId, Long documentId, List<DocumentChunk> chunks) {
+        replaceDocuments(List.of(new KeywordIndexDocument(workspaceId, documentId, chunks)));
+    }
+
+    @Override
+    public void replaceDocuments(List<KeywordIndexDocument> documents) {
+        if (documents.isEmpty()) {
+            return;
+        }
         ensureIndex();
-        deleteDocumentChunks(workspaceId, documentId);
-        for (DocumentChunk chunk : chunks) {
-            client.put().uri("/{index}/_doc/{id}", indexName, documentKey(workspaceId, chunk.id()))
-                    .body(Map.of(
-                            "workspaceId", workspaceId,
-                            "documentId", documentId,
-                            "chunkId", chunk.id(),
-                            "chunkSequence", chunk.sequence(),
-                            "headingPath", chunk.headingPath(),
-                            "content", chunk.content()
-                    )).retrieve().toBodilessEntity();
+        documents.forEach(document -> deleteDocumentChunks(document.workspaceId(), document.documentId()));
+        String requestBody = bulkRequestBody(documents);
+        if (!requestBody.isBlank()) {
+            JsonNode response = client.post().uri("/_bulk")
+                    .contentType(MediaType.parseMediaType("application/x-ndjson"))
+                    .body(requestBody)
+                    .retrieve().body(JsonNode.class);
+            if (response != null && response.path("errors").asBoolean(false)) {
+                throw new IllegalStateException("OpenSearch 批量索引存在失败条目");
+            }
         }
         client.post().uri("/{index}/_refresh", indexName).retrieve().toBodilessEntity();
     }
@@ -128,5 +147,30 @@ public class OpenSearchKeywordIndex implements KeywordIndex {
 
     private String documentKey(Long workspaceId, String chunkId) {
         return workspaceId + "-" + chunkId;
+    }
+
+    /** 使用 Jackson 生成每一行 JSON，避免正文中的引号或换行破坏批量协议。 */
+    private String bulkRequestBody(List<KeywordIndexDocument> documents) {
+        StringBuilder body = new StringBuilder();
+        try {
+            for (KeywordIndexDocument document : documents) {
+                for (DocumentChunk chunk : document.chunks()) {
+                    body.append(objectMapper.writeValueAsString(Map.of(
+                            "index", Map.of("_index", indexName, "_id",
+                                    documentKey(document.workspaceId(), chunk.id()))))).append('\n');
+                    body.append(objectMapper.writeValueAsString(Map.of(
+                            "workspaceId", document.workspaceId(),
+                            "documentId", document.documentId(),
+                            "chunkId", chunk.id(),
+                            "chunkSequence", chunk.sequence(),
+                            "headingPath", chunk.headingPath(),
+                            "content", chunk.content()
+                    ))).append('\n');
+                }
+            }
+            return body.toString();
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("生成 OpenSearch 批量索引请求失败", exception);
+        }
     }
 }

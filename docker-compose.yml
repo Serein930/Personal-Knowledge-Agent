@@ -12,10 +12,6 @@ services:
       - "${AGENTMIND_POSTGRES_PORT:-5432}:5432"
     volumes:
       - agentmind-postgres-data:/var/lib/postgresql/data
-      - ./backend/src/main/resources/db/schema/knowledge_vector_chunks.sql:/docker-entrypoint-initdb.d/01-knowledge-vector-chunks.sql:ro
-      - ./backend/src/main/resources/db/schema/rag_model_call_observations.sql:/docker-entrypoint-initdb.d/02-rag-model-call-observations.sql:ro
-      - ./backend/src/main/resources/db/schema/agent_write_tools.sql:/docker-entrypoint-initdb.d/03-agent-write-tools.sql:ro
-      - ./backend/src/main/resources/db/schema/rag_evaluations.sql:/docker-entrypoint-initdb.d/04-rag-evaluations.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentmind -d agentmind"]
       interval: 10s
@@ -59,7 +55,47 @@ services:
       retries: 10
       start_period: 30s
 
+  agentmind-prometheus:
+    image: prom/prometheus:v3.4.1
+    container_name: agentmind-prometheus
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+  agentmind-tempo:
+    image: grafana/tempo:2.8.1
+    container_name: agentmind-tempo
+    profiles: ["observability"]
+    command: ["-config.file=/etc/tempo.yml"]
+    ports:
+      - "4318:4318"
+      - "3200:3200"
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo.yml:ro
+
+  agentmind-grafana:
+    image: grafana/grafana:12.0.1
+    container_name: agentmind-grafana
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${AGENTMIND_GRAFANA_PASSWORD:-agentmind_dev_password}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - agentmind-grafana-data:/var/lib/grafana
+    depends_on:
+      - agentmind-prometheus
+      - agentmind-tempo
+
 volumes:
   agentmind-postgres-data:
   agentmind-redis-data:
   agentmind-opensearch-data:
+  agentmind-grafana-data:

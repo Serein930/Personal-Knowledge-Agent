@@ -1,6 +1,11 @@
 spring:
   application:
     name: agentmind-backend
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
   data:
     redis:
       repositories:
@@ -29,7 +34,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
 
 logging:
   level:
@@ -65,6 +70,19 @@ agentmind:
       index-name: ${AGENTMIND_OPENSEARCH_INDEX:agentmind-knowledge-chunks}
       username: ${AGENTMIND_OPENSEARCH_USERNAME:}
       password: ${AGENTMIND_OPENSEARCH_PASSWORD:}
+  knowledge-index:
+    outbox:
+      # 默认关闭以保持内存开发模式零外部依赖；生产双写时必须显式开启。
+      enabled: ${AGENTMIND_KNOWLEDGE_INDEX_OUTBOX_ENABLED:false}
+      instance-id: ${AGENTMIND_INSTANCE_ID:}
+      batch-size: 50
+      lease-duration: 30s
+      base-retry-delay: 2s
+      maximum-retry-delay: 5m
+      maximum-attempts: 8
+      fixed-delay-millis: 1000
+      initial-delay-millis: 3000
+      rebuild-document-batch-size: 100
   rag:
     answer-generator: mock
     prompt-version: rag-chat-v1

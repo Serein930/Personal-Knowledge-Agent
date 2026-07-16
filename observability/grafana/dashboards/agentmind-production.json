@@ -1,0 +1,37 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "后端可用性",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "up{job=\"agentmind-backend\"}", "refId": "A"}],
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "索引消息处理速率",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "rate(agentmind_knowledge_index_outbox_completed_total[5m])", "legendFormat": "成功", "refId": "A"},
+        {"expr": "rate(agentmind_knowledge_index_outbox_failed_total[5m])", "legendFormat": "失败", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP 响应耗时 P95",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le))", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    }
+  ],
+  "schemaVersion": 41,
+  "tags": ["agentmind", "production"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "AgentMind 生产观测",
+  "uid": "agentmind-production",
+  "version": 1
+}

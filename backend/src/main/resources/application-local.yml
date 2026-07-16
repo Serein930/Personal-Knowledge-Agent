@@ -14,5 +14,10 @@ agentmind:
   vector-store:
     type: pgvector
     embedding-dimensions: 128
+  keyword-index:
+    type: ${AGENTMIND_KEYWORD_INDEX_TYPE:memory}
+  knowledge-index:
+    outbox:
+      enabled: ${AGENTMIND_KNOWLEDGE_INDEX_OUTBOX_ENABLED:false}
   evaluation:
     store: jdbc

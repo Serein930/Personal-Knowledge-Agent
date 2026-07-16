@@ -33,7 +33,8 @@ class PgVectorStoreIntegrationTests {
     private static final String PASSWORD = "agentmind_dev_password";
 
     private final PgVectorStore vectorStore = new PgVectorStore(
-            new DriverManagerDataSource(JDBC_URL, USERNAME, PASSWORD),
+            new org.springframework.jdbc.core.JdbcTemplate(
+                    new DriverManagerDataSource(JDBC_URL, USERNAME, PASSWORD)),
             128
     );
 
