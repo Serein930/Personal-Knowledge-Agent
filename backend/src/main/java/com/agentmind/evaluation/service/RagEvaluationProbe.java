@@ -14,14 +14,17 @@ import com.agentmind.evaluation.config.RagEvaluationProperties;
 import com.agentmind.evaluation.model.RagEvaluationExperimentConfig;
 import com.agentmind.evaluation.model.RagEvaluationPhaseTiming;
 import com.agentmind.evaluation.model.RagEvaluationRetrievedSource;
+import com.agentmind.evaluation.model.RagEvaluationRetrievalStrategy;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResponse;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse;
 import com.agentmind.knowledge.service.KnowledgeSearchService;
+import com.agentmind.knowledge.service.HybridKnowledgeSearchService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.springframework.stereotype.Component;
+import com.agentmind.evaluation.observability.RagEvaluationObservability;
 
 /**
  * 单题检索增强生成评估执行器。
@@ -41,6 +44,8 @@ public class RagEvaluationProbe {
     private final ChatTokenCounter tokenCounter;
     private final RagEvaluationProperties evaluationProperties;
     private final RagEvaluationCandidateRanker candidateRanker;
+    private final HybridKnowledgeSearchService hybridSearchService;
+    private final RagEvaluationObservability observability;
 
     public RagEvaluationProbe(
             KnowledgeSearchService searchService,
@@ -49,7 +54,9 @@ public class RagEvaluationProbe {
             AnswerGenerator answerGenerator,
             ChatTokenCounter tokenCounter,
             RagEvaluationProperties evaluationProperties,
-            RagEvaluationCandidateRanker candidateRanker
+            RagEvaluationCandidateRanker candidateRanker,
+            HybridKnowledgeSearchService hybridSearchService,
+            RagEvaluationObservability observability
     ) {
         this.searchService = searchService;
         this.refusalPolicy = refusalPolicy;
@@ -58,6 +65,8 @@ public class RagEvaluationProbe {
         this.tokenCounter = tokenCounter;
         this.evaluationProperties = evaluationProperties;
         this.candidateRanker = candidateRanker;
+        this.hybridSearchService = hybridSearchService;
+        this.observability = observability;
     }
 
     public RagEvaluationProbeResult execute(
@@ -68,13 +77,21 @@ public class RagEvaluationProbe {
     ) {
         long startedNanos = System.nanoTime();
         long retrievalStartedNanos = System.nanoTime();
-        KnowledgeSearchResponse search = searchService.search(
-                workspaceId, question, experimentConfig.candidatePoolSize()
+        List<KnowledgeSearchResultResponse> candidates = observability.observePhase(
+                "retrieval", experimentConfig.retrievalStrategy().name(), () ->
+                        experimentConfig.retrievalStrategy() == RagEvaluationRetrievalStrategy.HYBRID
+                                ? hybridSearchService.search(
+                                        workspaceId, question, experimentConfig.candidatePoolSize()
+                                )
+                                : searchService.search(
+                                        workspaceId, question, experimentConfig.candidatePoolSize()
+                                ).results()
         );
         long retrievalMillis = elapsedMillis(retrievalStartedNanos);
         long rerankStartedNanos = System.nanoTime();
-        List<KnowledgeSearchResultResponse> rankedResults = candidateRanker.rank(
-                question, search.results(), experimentConfig
+        List<KnowledgeSearchResultResponse> rankedResults = observability.observePhase(
+                "rerank", experimentConfig.rerankStrategy().name(),
+                () -> candidateRanker.rank(question, candidates, experimentConfig)
         );
         long rerankMillis = elapsedMillis(rerankStartedNanos);
         long generationStartedNanos = System.nanoTime();
@@ -82,10 +99,13 @@ public class RagEvaluationProbe {
         RagRefusalDecision refusalDecision = refusalPolicy.decide(citations);
         String promptContext = promptTemplate.buildPromptContext(question, citations, List.of());
         String generationPrompt = promptTemplate.buildGenerationPrompt(question, promptContext, refusalDecision);
-        GeneratedAnswer generated = answerGenerator.generate(new AnswerGenerationRequest(
-                workspaceId, ownerUserId, null, null, question, promptTemplate.promptVersion(),
-                promptContext, generationPrompt, citations, refusalDecision
-        ));
+        GeneratedAnswer generated = observability.observePhase(
+                "generation", experimentConfig.modelName(),
+                () -> answerGenerator.generate(new AnswerGenerationRequest(
+                        workspaceId, ownerUserId, null, null, question, promptTemplate.promptVersion(),
+                        promptContext, generationPrompt, citations, refusalDecision
+                ))
+        );
         long generationMillis = elapsedMillis(generationStartedNanos);
         TokenSnapshot tokens = resolveTokens(generated.usage(), generationPrompt, generated.content());
         long totalMillis = elapsedMillis(startedNanos);

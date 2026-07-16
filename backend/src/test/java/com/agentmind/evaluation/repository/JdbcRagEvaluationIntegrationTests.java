@@ -24,6 +24,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import com.agentmind.evaluation.model.RagEvaluationExperimentConfig;
+import com.agentmind.evaluation.model.RagEvaluationJob;
+import com.agentmind.evaluation.model.RagEvaluationJobStatus;
+import com.agentmind.evaluation.model.RagEvaluationRerankStrategy;
+import com.agentmind.evaluation.model.RagEvaluationRetrievalStrategy;
+import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * Stage 9 PostgreSQL 手动集成测试。
@@ -35,6 +42,7 @@ import org.springframework.test.web.servlet.MvcResult;
 @EnabledIfEnvironmentVariable(named = "AGENTMIND_EVALUATION_JDBC_INTEGRATION_TEST", matches = "true")
 @SpringBootTest(properties = {
         "agentmind.evaluation.store=jdbc",
+        "agentmind.evaluation.recovery-enabled=false",
         "agentmind.vector-store.type=memory",
         "spring.datasource.url=${AGENTMIND_POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/agentmind}",
         "spring.datasource.username=${AGENTMIND_POSTGRES_USERNAME:agentmind}",
@@ -104,6 +112,46 @@ class JdbcRagEvaluationIntegrationTests {
                 "select metrics ->> 'refusalAccuracy' from rag_evaluation_jobs where id = ?",
                 String.class, secondJobId
         )).isEqualTo("100.0");
+    }
+
+    @Test
+    void shouldClaimLeaseExclusivelyAndRecoverExpiredOwner() throws Exception {
+        long datasetId = createDataset();
+        Long ownerUserId = jdbcTemplate.queryForObject(
+                "select owner_user_id from rag_evaluation_datasets where id = ?",
+                Long.class,
+                datasetId
+        );
+        OffsetDateTime now = OffsetDateTime.now();
+        RagEvaluationExperimentConfig config = new RagEvaluationExperimentConfig(
+                "PostgreSQL 租约测试", "markdown-aware-v1", RagEvaluationRetrievalStrategy.HYBRID,
+                20, RagEvaluationRerankStrategy.NONE, 5, "rag-chat-v1", "mock-local"
+        );
+        RagEvaluationJob saved = jobRepository.save(new RagEvaluationJob(
+                null, ownerUserId, WORKSPACE_ID, datasetId, 1, RagEvaluationJobStatus.PENDING,
+                "HYBRID", 5, "rag-chat-v1", "mock-local", config,
+                null, null, 1, 0, 0, null, null, null, List.of(), "",
+                0, 0, "", null, null, now, null, now, null
+        ));
+
+        RagEvaluationJob claimed = jobRepository.claim(
+                ownerUserId, WORKSPACE_ID, saved.id(), "jdbc-instance-a", now, now.plusSeconds(30)
+        ).orElseThrow();
+
+        assertThat(jobRepository.claim(
+                ownerUserId, WORKSPACE_ID, saved.id(), "jdbc-instance-b", now, now.plusSeconds(30)
+        )).isEmpty();
+        assertThat(jobRepository.updateIfStatusAndLeaseOwner(
+                claimed.withProgress(0, List.of()),
+                java.util.Set.of(RagEvaluationJobStatus.RUNNING),
+                "jdbc-instance-b",
+                now
+        )).isEmpty();
+
+        RagEvaluationJob recovered = jobRepository.recoverExpiredLeases(now.plusSeconds(31), 10).getFirst();
+        assertThat(recovered.status()).isEqualTo(RagEvaluationJobStatus.PENDING);
+        assertThat(recovered.recoveryCount()).isEqualTo(1);
+        assertThat(recovered.leaseOwner()).isEmpty();
     }
 
     private long createDataset() throws Exception {

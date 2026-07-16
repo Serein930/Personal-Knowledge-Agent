@@ -14,6 +14,7 @@ import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import com.agentmind.knowledge.service.KnowledgeSearchService;
 import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
 import com.agentmind.knowledge.vector.InMemoryVectorStore;
+import com.agentmind.knowledge.keyword.InMemoryBm25KeywordIndex;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +26,9 @@ class RagContextAssemblyServiceTests {
     private final RagModelCallLogger modelCallLogger = new RagModelCallLogger(
             new InMemoryRagModelCallObservationRepository()
     );
-    private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
+    private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(
+            embeddingClient, vectorStore, new InMemoryBm25KeywordIndex()
+    );
     private final ChatMemoryService chatMemoryService = new ChatMemoryService(
             new InMemoryChatMemoryRepository(),
             new ChatMemoryProperties(),

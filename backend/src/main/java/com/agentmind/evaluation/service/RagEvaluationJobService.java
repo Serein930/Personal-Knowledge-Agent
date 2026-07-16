@@ -191,7 +191,8 @@ public class RagEvaluationJobService {
                 null, context.ownerUserId(), context.workspaceId(), version.datasetId(), version.version(),
                 RagEvaluationJobStatus.PENDING, config.retrievalStrategy().name(), config.topK(),
                 config.promptVersion(), config.modelName(), config, baselineJobId, retryOfJobId,
-                version.cases().size(), 0, 0, null, qualityGate, null, List.of(), "", now, null, now, null
+                version.cases().size(), 0, 0, null, qualityGate, null, List.of(), "",
+                0, 0, "", null, null, now, null, now, null
         ));
     }
 
@@ -304,7 +305,8 @@ public class RagEvaluationJobService {
                 job.id(), job.datasetId(), job.datasetVersion(), job.status(), job.retrievalStrategy(), job.topK(),
                 job.promptVersion(), job.modelName(), job.experimentConfig(), job.baselineJobId(), job.retryOfJobId(),
                 job.totalCases(), job.completedCases(), job.progress(), job.terminal(), job.metrics(), job.qualityGate(),
-                job.qualityGateResult(), job.caseResults(), job.failureReason(), job.createdAt(), job.startedAt(),
+                job.qualityGateResult(), job.caseResults(), job.failureReason(),
+                job.attemptCount(), job.recoveryCount(), job.heartbeatAt(), job.createdAt(), job.startedAt(),
                 job.updatedAt(), job.completedAt()
         );
     }

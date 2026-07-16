@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.time.OffsetDateTime;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -36,9 +37,98 @@ public class InMemoryRagEvaluationJobRepository implements RagEvaluationJobRepos
         if (current == null || !expectedStatuses.contains(current.status())) {
             return Optional.empty();
         }
-        RagEvaluationJob saved = copy(job.id(), job);
+        RagEvaluationJob saved = copy(job.id(), preserveActiveLease(current, job));
         jobs.put(saved.id(), saved);
         return Optional.of(saved);
+    }
+
+    @Override
+    public synchronized Optional<RagEvaluationJob> claim(
+            Long ownerUserId,
+            Long workspaceId,
+            Long jobId,
+            String leaseOwner,
+            OffsetDateTime now,
+            OffsetDateTime leaseExpiresAt
+    ) {
+        RagEvaluationJob current = jobs.get(jobId);
+        if (current == null
+                || !current.ownerUserId().equals(ownerUserId)
+                || !current.workspaceId().equals(workspaceId)
+                || current.status() != RagEvaluationJobStatus.PENDING) {
+            return Optional.empty();
+        }
+        RagEvaluationJob claimed = copy(jobId, current.withLease(leaseOwner, now, leaseExpiresAt));
+        jobs.put(jobId, claimed);
+        return Optional.of(claimed);
+    }
+
+    @Override
+    public synchronized boolean renewLease(
+            Long jobId,
+            String leaseOwner,
+            OffsetDateTime now,
+            OffsetDateTime leaseExpiresAt
+    ) {
+        RagEvaluationJob current = jobs.get(jobId);
+        if (current == null
+                || !leaseOwner.equals(current.leaseOwner())
+                || current.leaseExpiresAt() == null
+                || !current.leaseExpiresAt().isAfter(now)
+                || (current.status() != RagEvaluationJobStatus.RUNNING
+                    && current.status() != RagEvaluationJobStatus.CANCEL_REQUESTED)) {
+            return false;
+        }
+        jobs.put(jobId, copy(jobId, current.withRenewedLease(now, leaseExpiresAt)));
+        return true;
+    }
+
+    @Override
+    public synchronized Optional<RagEvaluationJob> updateIfStatusAndLeaseOwner(
+            RagEvaluationJob job,
+            Set<RagEvaluationJobStatus> expectedStatuses,
+            String leaseOwner,
+            OffsetDateTime now
+    ) {
+        RagEvaluationJob current = jobs.get(job.id());
+        if (current == null
+                || !expectedStatuses.contains(current.status())
+                || !leaseOwner.equals(current.leaseOwner())
+                || current.leaseExpiresAt() == null
+                || !current.leaseExpiresAt().isAfter(now)) {
+            return Optional.empty();
+        }
+        RagEvaluationJob saved = copy(job.id(), preserveActiveLease(current, job));
+        jobs.put(saved.id(), saved);
+        return Optional.of(saved);
+    }
+
+    @Override
+    public synchronized List<RagEvaluationJob> recoverExpiredLeases(OffsetDateTime now, int limit) {
+        List<RagEvaluationJob> expired = jobs.values().stream()
+                .filter(job -> (job.status() == RagEvaluationJobStatus.RUNNING
+                        || job.status() == RagEvaluationJobStatus.CANCEL_REQUESTED)
+                        && job.leaseExpiresAt() != null
+                        && !job.leaseExpiresAt().isAfter(now))
+                .sorted(Comparator.comparing(RagEvaluationJob::leaseExpiresAt))
+                .limit(limit)
+                .toList();
+        return expired.stream().map(job -> {
+            RagEvaluationJobStatus next = job.status() == RagEvaluationJobStatus.CANCEL_REQUESTED
+                    ? RagEvaluationJobStatus.CANCELED : RagEvaluationJobStatus.PENDING;
+            RagEvaluationJob recovered = copy(job.id(), job.withRecoveredStatus(next, now));
+            jobs.put(job.id(), recovered);
+            return recovered;
+        }).toList();
+    }
+
+    @Override
+    public List<RagEvaluationJob> findPendingJobs(int limit) {
+        return jobs.values().stream()
+                .filter(job -> job.status() == RagEvaluationJobStatus.PENDING)
+                .sorted(Comparator.comparing(RagEvaluationJob::createdAt).thenComparing(RagEvaluationJob::id))
+                .limit(limit)
+                .toList();
     }
 
     @Override
@@ -115,7 +205,16 @@ public class InMemoryRagEvaluationJobRepository implements RagEvaluationJobRepos
                 job.baselineJobId(), job.retryOfJobId(), job.totalCases(), job.completedCases(), job.progress(),
                 job.metrics(), job.qualityGate(), job.qualityGateResult(),
                 job.caseResults() == null ? List.of() : List.copyOf(job.caseResults()),
-                job.failureReason(), job.createdAt(), job.startedAt(), job.updatedAt(), job.completedAt()
+                job.failureReason(), job.attemptCount(), job.recoveryCount(), job.leaseOwner(),
+                job.leaseExpiresAt(), job.heartbeatAt(), job.createdAt(), job.startedAt(),
+                job.updatedAt(), job.completedAt()
         );
+    }
+
+    private RagEvaluationJob preserveActiveLease(RagEvaluationJob current, RagEvaluationJob update) {
+        if (update.terminal() || current.leaseExpiresAt() == null) {
+            return update;
+        }
+        return update.withRenewedLease(current.heartbeatAt(), current.leaseExpiresAt());
     }
 }

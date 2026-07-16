@@ -2,6 +2,7 @@ package com.agentmind.evaluation.model;
 
 import java.math.BigDecimal;
 import java.util.List;
+import com.agentmind.evaluation.judge.RagEvaluationJudgeEvidence;
 
 /** 单题评估证据，供问题定位和聚合指标复算。 */
 public record RagEvaluationCaseResult(
@@ -26,6 +27,7 @@ public record RagEvaluationCaseResult(
         int promptTokens,
         int completionTokens,
         boolean tokenUsageEstimated,
-        BigDecimal estimatedCostUsd
+        BigDecimal estimatedCostUsd,
+        RagEvaluationJudgeEvidence judgeEvidence
 ) {
 }

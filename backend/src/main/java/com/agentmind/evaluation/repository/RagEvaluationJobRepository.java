@@ -5,6 +5,7 @@ import com.agentmind.evaluation.model.RagEvaluationJobStatus;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.time.OffsetDateTime;
 
 /** 评估任务、聚合指标和逐题证据仓储端口。 */
 public interface RagEvaluationJobRepository {
@@ -21,6 +22,33 @@ public interface RagEvaluationJobRepository {
             RagEvaluationJob job,
             Set<RagEvaluationJobStatus> expectedStatuses
     );
+
+    /** 待执行任务只能被一个实例原子领取。 */
+    Optional<RagEvaluationJob> claim(
+            Long ownerUserId,
+            Long workspaceId,
+            Long jobId,
+            String leaseOwner,
+            OffsetDateTime now,
+            OffsetDateTime leaseExpiresAt
+    );
+
+    /** 只有当前租约持有者可以延长心跳。 */
+    boolean renewLease(Long jobId, String leaseOwner, OffsetDateTime now, OffsetDateTime leaseExpiresAt);
+
+    /** 运行阶段的进度和终态更新必须同时校验状态与租约持有者。 */
+    Optional<RagEvaluationJob> updateIfStatusAndLeaseOwner(
+            RagEvaluationJob job,
+            Set<RagEvaluationJobStatus> expectedStatuses,
+            String leaseOwner,
+            OffsetDateTime now
+    );
+
+    /** 原子恢复一批已过期租约；返回值包含待重新投递和已安全取消的任务。 */
+    List<RagEvaluationJob> recoverExpiredLeases(OffsetDateTime now, int limit);
+
+    /** 扫描尚未被任何实例领取的任务，用于进程在投递前退出后的启动恢复。 */
+    List<RagEvaluationJob> findPendingJobs(int limit);
 
     Optional<RagEvaluationJob> findByScopeAndId(Long ownerUserId, Long workspaceId, Long jobId);
 

@@ -31,7 +31,7 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
             + "retrieval_strategy, top_k, prompt_version, model_name, experiment_config::text, baseline_job_id, "
             + "retry_of_job_id, total_cases, completed_cases, progress, metrics::text, quality_gate::text, "
             + "quality_gate_result::text, case_results::text, failure_reason, created_at, started_at, updated_at, "
-            + "completed_at";
+            + "completed_at, attempt_count, recovery_count, lease_owner, lease_expires_at, heartbeat_at";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -54,9 +54,11 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
                             retrieval_strategy, top_k, prompt_version, model_name, experiment_config,
                             baseline_job_id, retry_of_job_id, total_cases, completed_cases, progress,
                             metrics, quality_gate, quality_gate_result, case_results, failure_reason,
-                            created_at, started_at, updated_at, completed_at
+                            created_at, started_at, updated_at, completed_at, attempt_count, recovery_count,
+                            lease_owner, lease_expires_at, heartbeat_at
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?,
-                                  cast(? as jsonb), cast(? as jsonb), cast(? as jsonb), cast(? as jsonb), ?, ?, ?, ?, ?)
+                                  cast(? as jsonb), cast(? as jsonb), cast(? as jsonb), cast(? as jsonb), ?, ?, ?, ?, ?,
+                                  ?, ?, ?, ?, ?)
                         returning %s
                         """.formatted(COLUMNS), this::mapJob,
                 job.ownerUserId(), job.workspaceId(), job.datasetId(), job.datasetVersion(), job.status().name(),
@@ -64,7 +66,8 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
                 writeJson(job.experimentConfig()), job.baselineJobId(), job.retryOfJobId(), job.totalCases(),
                 job.completedCases(), job.progress(), writeJson(job.metrics()), writeJson(job.qualityGate()),
                 writeJson(job.qualityGateResult()), writeJson(safeResults(job.caseResults())), safe(job.failureReason()),
-                job.createdAt(), job.startedAt(), job.updatedAt(), job.completedAt()).stream().findFirst()
+                job.createdAt(), job.startedAt(), job.updatedAt(), job.completedAt(), job.attemptCount(),
+                job.recoveryCount(), safe(job.leaseOwner()), job.leaseExpiresAt(), job.heartbeatAt()).stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("创建评估任务失败"));
     }
 
@@ -82,6 +85,92 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
         return update(job,
                 "where id = ? and owner_user_id = ? and workspace_id = ? and status in (" + placeholders + ")",
                 whereParameters);
+    }
+
+    @Override
+    public Optional<RagEvaluationJob> claim(
+            Long ownerUserId,
+            Long workspaceId,
+            Long jobId,
+            String leaseOwner,
+            OffsetDateTime now,
+            OffsetDateTime leaseExpiresAt
+    ) {
+        return jdbcTemplate.query("""
+                        update rag_evaluation_jobs
+                        set status = 'RUNNING', lease_owner = ?, lease_expires_at = ?, heartbeat_at = ?,
+                            attempt_count = attempt_count + 1, started_at = coalesce(started_at, ?), updated_at = ?
+                        where id = ? and owner_user_id = ? and workspace_id = ? and status = 'PENDING'
+                        returning %s
+                        """.formatted(COLUMNS), this::mapJob, leaseOwner, leaseExpiresAt, now, now, now,
+                jobId, ownerUserId, workspaceId).stream().findFirst();
+    }
+
+    @Override
+    public boolean renewLease(Long jobId, String leaseOwner, OffsetDateTime now, OffsetDateTime leaseExpiresAt) {
+        return jdbcTemplate.update("""
+                        update rag_evaluation_jobs
+                        set heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
+                        where id = ? and lease_owner = ? and status in ('RUNNING', 'CANCEL_REQUESTED')
+                          and lease_expires_at > ?
+                        """, now, leaseExpiresAt, now, jobId, leaseOwner, now) == 1;
+    }
+
+    @Override
+    public Optional<RagEvaluationJob> updateIfStatusAndLeaseOwner(
+            RagEvaluationJob job,
+            Set<RagEvaluationJobStatus> expectedStatuses,
+            String leaseOwner,
+            OffsetDateTime now
+    ) {
+        if (expectedStatuses.isEmpty()) {
+            return Optional.empty();
+        }
+        String placeholders = expectedStatuses.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        List<Object> parameters = new ArrayList<>(List.of(
+                job.id(), job.ownerUserId(), job.workspaceId(), leaseOwner, now
+        ));
+        expectedStatuses.stream().map(Enum::name).forEach(parameters::add);
+        return update(job,
+                "where id = ? and owner_user_id = ? and workspace_id = ? and lease_owner = ? "
+                        + "and lease_expires_at > ? and status in (" + placeholders + ")",
+                parameters);
+    }
+
+    @Override
+    public List<RagEvaluationJob> recoverExpiredLeases(OffsetDateTime now, int limit) {
+        return jdbcTemplate.query("""
+                with expired as (
+                    select id
+                    from rag_evaluation_jobs
+                    where status in ('RUNNING', 'CANCEL_REQUESTED')
+                      and lease_expires_at is not null
+                      and lease_expires_at <= ?
+                    order by lease_expires_at, id
+                    for update skip locked
+                    limit ?
+                )
+                update rag_evaluation_jobs job
+                set status = case when job.status = 'CANCEL_REQUESTED' then 'CANCELED' else 'PENDING' end,
+                    recovery_count = recovery_count + 1,
+                    lease_owner = '', lease_expires_at = null, updated_at = ?,
+                    completed_at = case when job.status = 'CANCEL_REQUESTED' then ? else completed_at end,
+                    failure_reason = case when job.status = 'CANCEL_REQUESTED'
+                        then '取消请求期间执行实例失联，任务已安全取消' else failure_reason end
+                from expired
+                where job.id = expired.id
+                returning job.*
+                """, this::mapJob, now, limit, now, now);
+    }
+
+    @Override
+    public List<RagEvaluationJob> findPendingJobs(int limit) {
+        return jdbcTemplate.query(
+                "select " + COLUMNS + " from rag_evaluation_jobs "
+                        + "where status = 'PENDING' order by created_at, id limit ?",
+                this::mapJob,
+                limit
+        );
     }
 
     @Override
@@ -186,13 +275,19 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
         parameters.add(job.startedAt());
         parameters.add(job.updatedAt());
         parameters.add(job.completedAt());
+        parameters.add(job.attemptCount());
+        parameters.add(job.recoveryCount());
+        parameters.add(job.terminal());
+        parameters.add(job.terminal());
         parameters.addAll(whereParameters);
         return jdbcTemplate.query("""
                         update rag_evaluation_jobs
                         set status = ?, baseline_job_id = ?, retry_of_job_id = ?, completed_cases = ?, progress = ?,
                             metrics = cast(? as jsonb), quality_gate_result = cast(? as jsonb),
                             case_results = cast(? as jsonb), failure_reason = ?, started_at = ?, updated_at = ?,
-                            completed_at = ?
+                            completed_at = ?, attempt_count = ?, recovery_count = ?,
+                            lease_owner = case when ? then '' else lease_owner end,
+                            lease_expires_at = case when ? then null else lease_expires_at end
                         %s
                         returning %s
                         """.formatted(whereClause, COLUMNS), this::mapJob, parameters.toArray()).stream().findFirst();
@@ -224,6 +319,10 @@ public class JdbcRagEvaluationJobRepository implements RagEvaluationJobRepositor
                 readJson(resultSet.getString("quality_gate"), RagEvaluationQualityGate.class),
                 readJson(resultSet.getString("quality_gate_result"), RagEvaluationQualityGateResult.class),
                 readResults(resultSet.getString("case_results")), resultSet.getString("failure_reason"),
+                resultSet.getInt("attempt_count"), resultSet.getInt("recovery_count"),
+                resultSet.getString("lease_owner"),
+                resultSet.getObject("lease_expires_at", OffsetDateTime.class),
+                resultSet.getObject("heartbeat_at", OffsetDateTime.class),
                 resultSet.getObject("created_at", OffsetDateTime.class),
                 resultSet.getObject("started_at", OffsetDateTime.class),
                 resultSet.getObject("updated_at", OffsetDateTime.class),

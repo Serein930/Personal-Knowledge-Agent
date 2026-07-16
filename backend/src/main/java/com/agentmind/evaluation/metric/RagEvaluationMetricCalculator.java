@@ -5,6 +5,9 @@ import com.agentmind.evaluation.model.RagEvaluationCaseResult;
 import com.agentmind.evaluation.model.RagEvaluationMetrics;
 import com.agentmind.evaluation.model.RagEvaluationRetrievedSource;
 import com.agentmind.evaluation.service.RagEvaluationProbeResult;
+import com.agentmind.evaluation.judge.RagEvaluationAnswerJudge;
+import com.agentmind.evaluation.judge.RagEvaluationJudgeRequest;
+import com.agentmind.evaluation.observability.RagEvaluationObservability;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashSet;
@@ -22,10 +25,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class RagEvaluationMetricCalculator {
 
-    private final RagEvaluationTextSimilarity textSimilarity;
+    private final RagEvaluationAnswerJudge answerJudge;
+    private final RagEvaluationObservability observability;
 
-    public RagEvaluationMetricCalculator(RagEvaluationTextSimilarity textSimilarity) {
-        this.textSimilarity = textSimilarity;
+    public RagEvaluationMetricCalculator(
+            RagEvaluationAnswerJudge answerJudge,
+            RagEvaluationObservability observability
+    ) {
+        this.answerJudge = answerJudge;
+        this.observability = observability;
     }
 
     public RagEvaluationCaseResult calculateCase(RagEvaluationCase evaluationCase, RagEvaluationProbeResult probe) {
@@ -61,16 +69,21 @@ public class RagEvaluationMetricCalculator {
         String sourceContent = probe.retrievedSources().stream()
                 .map(RagEvaluationRetrievedSource::content).filter(value -> value != null && !value.isBlank())
                 .collect(java.util.stream.Collectors.joining("\n"));
-        double faithfulness = round(textSimilarity.similarity(probe.answer(), sourceContent) * 100.0);
-        double answerRelevance = round(textSimilarity.similarity(evaluationCase.question(), probe.answer()) * 100.0);
+        var judgement = observability.observePhase("judge", "configured", () -> answerJudge.judge(
+                new RagEvaluationJudgeRequest(
+                        evaluationCase.question(), probe.answer(), sourceContent,
+                        evaluationCase.expectedAnswerKeywords()
+                )
+        ));
         return new RagEvaluationCaseResult(
                 evaluationCase.caseKey(), evaluationCase.question(), probe.retrievedSources(), matchedCount,
                 expectedCount, firstRelevantRank, round(recall), round(reciprocalRank), ndcgAtK, citationCovered,
                 evaluationCase.expectedRefusal(), probe.refused(),
                 evaluationCase.expectedRefusal() == probe.refused(), keywordCoverage,
-                faithfulness, answerRelevance, probe.phaseTiming(), probe.phaseTiming().totalMillis(),
+                judgement.faithfulness(), judgement.answerRelevance(),
+                probe.phaseTiming(), probe.phaseTiming().totalMillis(),
                 probe.promptTokens(), probe.completionTokens(),
-                probe.tokenUsageEstimated(), probe.estimatedCostUsd()
+                probe.tokenUsageEstimated(), probe.estimatedCostUsd(), judgement.evidence()
         );
     }
 

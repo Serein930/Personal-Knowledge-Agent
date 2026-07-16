@@ -32,6 +32,11 @@ public record RagEvaluationJob(
         RagEvaluationQualityGateResult qualityGateResult,
         List<RagEvaluationCaseResult> caseResults,
         String failureReason,
+        int attemptCount,
+        int recoveryCount,
+        String leaseOwner,
+        OffsetDateTime leaseExpiresAt,
+        OffsetDateTime heartbeatAt,
         OffsetDateTime createdAt,
         OffsetDateTime startedAt,
         OffsetDateTime updatedAt,
@@ -56,13 +61,15 @@ public record RagEvaluationJob(
     ) {
         OffsetDateTime now = OffsetDateTime.now();
         return copy(nextStatus, completedCases, progress, metrics, qualityGateResult, caseResults,
-                nextFailureReason, nextStartedAt, now, nextCompletedAt);
+                nextFailureReason, attemptCount, recoveryCount, leaseOwner, leaseExpiresAt, heartbeatAt,
+                nextStartedAt, now, nextCompletedAt);
     }
 
     public RagEvaluationJob withProgress(int nextCompletedCases, List<RagEvaluationCaseResult> nextResults) {
         int nextProgress = totalCases == 0 ? 100 : Math.min(100, nextCompletedCases * 100 / totalCases);
         return copy(status, nextCompletedCases, nextProgress, metrics, qualityGateResult, nextResults,
-                failureReason, startedAt, OffsetDateTime.now(), completedAt);
+                failureReason, attemptCount, recoveryCount, leaseOwner, leaseExpiresAt, heartbeatAt,
+                startedAt, OffsetDateTime.now(), completedAt);
     }
 
     public RagEvaluationJob withTerminalResult(
@@ -75,7 +82,31 @@ public record RagEvaluationJob(
         OffsetDateTime now = OffsetDateTime.now();
         int finalProgress = terminalStatus == RagEvaluationJobStatus.SUCCEEDED ? 100 : progress;
         return copy(terminalStatus, nextResults.size(), finalProgress, nextMetrics, nextQualityGateResult,
-                nextResults, nextFailureReason, startedAt, now, now);
+                nextResults, nextFailureReason, attemptCount, recoveryCount, "", null, heartbeatAt,
+                startedAt, now, now);
+    }
+
+    /** 创建当前实例成功取得租约后的任务快照。 */
+    public RagEvaluationJob withLease(String nextLeaseOwner, OffsetDateTime now, OffsetDateTime nextLeaseExpiresAt) {
+        return copy(RagEvaluationJobStatus.RUNNING, completedCases, progress, metrics, qualityGateResult, caseResults,
+                failureReason, attemptCount + 1, recoveryCount, nextLeaseOwner, nextLeaseExpiresAt, now,
+                startedAt == null ? now : startedAt, now, completedAt);
+    }
+
+    /** 心跳只延长租约，不改变业务进度。 */
+    public RagEvaluationJob withRenewedLease(OffsetDateTime now, OffsetDateTime nextLeaseExpiresAt) {
+        return copy(status, completedCases, progress, metrics, qualityGateResult, caseResults,
+                failureReason, attemptCount, recoveryCount, leaseOwner, nextLeaseExpiresAt, now,
+                startedAt, now, completedAt);
+    }
+
+    /** 失联任务恢复时保留已完成题目，使新实例可以断点续跑。 */
+    public RagEvaluationJob withRecoveredStatus(RagEvaluationJobStatus nextStatus, OffsetDateTime now) {
+        OffsetDateTime terminalAt = nextStatus == RagEvaluationJobStatus.CANCELED ? now : completedAt;
+        String reason = nextStatus == RagEvaluationJobStatus.CANCELED ? "取消请求期间执行实例失联，任务已安全取消" : failureReason;
+        return copy(nextStatus, completedCases, progress, metrics, qualityGateResult, caseResults,
+                reason, attemptCount, recoveryCount + 1, "", null, heartbeatAt,
+                startedAt, now, terminalAt);
     }
 
     private RagEvaluationJob copy(
@@ -86,6 +117,11 @@ public record RagEvaluationJob(
             RagEvaluationQualityGateResult nextQualityGateResult,
             List<RagEvaluationCaseResult> nextResults,
             String nextFailureReason,
+            int nextAttemptCount,
+            int nextRecoveryCount,
+            String nextLeaseOwner,
+            OffsetDateTime nextLeaseExpiresAt,
+            OffsetDateTime nextHeartbeatAt,
             OffsetDateTime nextStartedAt,
             OffsetDateTime nextUpdatedAt,
             OffsetDateTime nextCompletedAt
@@ -95,7 +131,8 @@ public record RagEvaluationJob(
                 retrievalStrategy, topK, promptVersion, modelName, experimentConfig,
                 baselineJobId, retryOfJobId, totalCases, nextCompletedCases, nextProgress,
                 nextMetrics, qualityGate, nextQualityGateResult, List.copyOf(nextResults),
-                nextFailureReason, createdAt, nextStartedAt, nextUpdatedAt, nextCompletedAt
+                nextFailureReason, nextAttemptCount, nextRecoveryCount, nextLeaseOwner,
+                nextLeaseExpiresAt, nextHeartbeatAt, createdAt, nextStartedAt, nextUpdatedAt, nextCompletedAt
         );
     }
 }

@@ -27,6 +27,7 @@ import com.agentmind.ingestion.web.UrlSafetyValidator;
 import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
 import com.agentmind.knowledge.vector.InMemoryVectorStore;
+import com.agentmind.knowledge.keyword.InMemoryBm25KeywordIndex;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -58,7 +59,7 @@ class DocumentApplicationServiceTests {
                     new HtmlTextExtractor()
             )),
             new MarkdownAwareTextChunker(),
-            new KnowledgeIndexingService(embeddingClient, vectorStore)
+            new KnowledgeIndexingService(embeddingClient, vectorStore, new InMemoryBm25KeywordIndex())
     );
 
     @Test

@@ -124,6 +124,13 @@ export interface RagEvaluationCaseResultDto {
   completionTokens: number;
   tokenUsageEstimated: boolean;
   estimatedCostUsd: number;
+  judgeEvidence?: {
+    judgeType: 'deterministic' | 'spring-ai';
+    modelName: string;
+    promptVersion: string;
+    rationale: string;
+    fallbackUsed: boolean;
+  };
 }
 
 export type RagEvaluationJobStatus =
@@ -181,6 +188,9 @@ export interface RagEvaluationJobDto {
   };
   caseResults: RagEvaluationCaseResultDto[];
   failureReason?: string;
+  attemptCount: number;
+  recoveryCount: number;
+  heartbeatAt?: string;
   createdAt: string;
   startedAt?: string;
   updatedAt: string;

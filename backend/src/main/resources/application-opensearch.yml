@@ -1,0 +1,9 @@
+spring:
+  config:
+    activate:
+      on-profile: opensearch
+
+# 与 local 组合启用时，文档摄取会同时写入 pgvector 和 OpenSearch，混合评估使用原生 BM25。
+agentmind:
+  keyword-index:
+    type: opensearch

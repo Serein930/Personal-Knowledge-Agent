@@ -6,6 +6,7 @@ import com.agentmind.document.chunk.DocumentChunk;
 import com.agentmind.knowledge.model.dto.KnowledgeSearchResponse;
 import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
 import com.agentmind.knowledge.vector.InMemoryVectorStore;
+import com.agentmind.knowledge.keyword.InMemoryBm25KeywordIndex;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +17,9 @@ class KnowledgeSearchServiceTests {
 
     private final DeterministicEmbeddingClient embeddingClient = new DeterministicEmbeddingClient();
     private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
-    private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(embeddingClient, vectorStore);
+    private final KnowledgeIndexingService indexingService = new KnowledgeIndexingService(
+            embeddingClient, vectorStore, new InMemoryBm25KeywordIndex()
+    );
     private final KnowledgeSearchService searchService = new KnowledgeSearchService(embeddingClient, vectorStore);
 
     @Test

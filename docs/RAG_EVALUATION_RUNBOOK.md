@@ -102,12 +102,13 @@ GET http://localhost:8081/api/v1/workspaces/1/evaluations/datasets/{datasetId}/v
 基线差值是“当前减基线”。当前实现记录 Recall@K、MRR、NDCG@K、引用覆盖率、拒答准确率、
 答案关键词覆盖率、忠实度、答案相关性、检索/重排/生成耗时、Token 和成本。
 
-忠实度和答案相关性当前使用中英文分词后的确定性文本相似度，是离线可重复的近似指标，
-不能替代人工判断或大模型裁判。它们的意义是先稳定发现明显回退，后续可平滑替换为模型裁判端口。
+忠实度和答案相关性通过 `RagEvaluationAnswerJudge` 裁判端口计算。默认 `deterministic` 使用中英文
+词项相似度，适合无费用的可重复回归；显式切换为 `spring-ai` 后使用真实模型结构化评分。逐题结果的
+`judgeEvidence` 会记录裁判类型、模型、提示词版本、理由和降级标记，不能把确定性近似分误认为人工结论。
 
-当前 `HYBRID` 策略在向量召回的候选池内按“向量分数 70% + 词法相似度 30%”融合，
-`LEXICAL` 再对候选进行确定性词法重排。它还不是独立 BM25 倒排召回，因此无法补回完全未进入
-向量候选池的文档；现阶段通过冻结候选池大小保证实验可重复，后续接入 OpenSearch 后再升级为双路召回。
+`HYBRID` 现在执行独立向量召回和 BM25 关键词召回，再使用 RRF 按名次融合；它不直接混加余弦分与
+BM25 原始分。默认内存关键词索引用于测试，`opensearch` 配置使用 OpenSearch 原生 BM25，能够补回
+完全未进入向量候选池但关键词精确命中的文档。`LEXICAL` 只负责融合后的可选重排。
 
 ## 五、JSON/CSV 导入导出
 
@@ -150,6 +151,11 @@ mvn spring-boot:run "-Dspring-boot.run.profiles=local"
 
 此时 `agentmind.evaluation.store=jdbc`，评估集、版本、任务、聚合指标和逐题证据会写入 PostgreSQL。
 
+任务领取采用 PostgreSQL 条件更新租约。运行实例按固定间隔续租；租约过期后，维护器使用
+`FOR UPDATE SKIP LOCKED` 批量恢复任务。运行中任务保留已完成逐题结果并断点续跑，取消中的任务
+直接收敛为已取消；启动时也会重新投递尚未领取的待执行任务。响应中的 `attemptCount`、
+`recoveryCount` 和 `heartbeatAt` 可用于确认恢复是否发生。
+
 ## 八、自动测试
 
 ```powershell
@@ -165,6 +171,9 @@ mvn "-Dtest=RagEvaluationMetricCalculatorTests,RagEvaluationControllerTests" tes
 $env:AGENTMIND_EVALUATION_JDBC_INTEGRATION_TEST = "true"
 mvn "-Dtest=JdbcRagEvaluationIntegrationTests" test
 ```
+
+真实 OpenSearch BM25 集成测试默认跳过，显式运行方法见
+[Stage 9 生产化联调手册](./STAGE9_PRODUCTION_RUNBOOK.md)。
 
 ## 九、CI 质量门禁
 

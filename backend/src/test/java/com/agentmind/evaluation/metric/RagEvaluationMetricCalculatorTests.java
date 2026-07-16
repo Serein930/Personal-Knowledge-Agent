@@ -11,12 +11,20 @@ import com.agentmind.evaluation.service.RagEvaluationProbeResult;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import com.agentmind.evaluation.config.RagEvaluationProperties;
+import com.agentmind.evaluation.judge.DeterministicRagEvaluationAnswerJudge;
+import com.agentmind.evaluation.observability.RagEvaluationObservability;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 
 /** 固定评估指标的分母、排名和成本聚合测试。 */
 class RagEvaluationMetricCalculatorTests {
 
     private final RagEvaluationMetricCalculator calculator = new RagEvaluationMetricCalculator(
-            new RagEvaluationTextSimilarity()
+            new DeterministicRagEvaluationAnswerJudge(
+                    new RagEvaluationTextSimilarity(), new RagEvaluationProperties()
+            ),
+            new RagEvaluationObservability(ObservationRegistry.NOOP, new SimpleMeterRegistry())
     );
 
     @Test

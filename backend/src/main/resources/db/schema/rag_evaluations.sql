@@ -61,6 +61,11 @@ create table if not exists rag_evaluation_jobs (
     quality_gate_result jsonb,
     case_results jsonb not null default '[]'::jsonb check (jsonb_typeof(case_results) = 'array'),
     failure_reason varchar(1000) not null default '',
+    attempt_count integer not null default 0 check (attempt_count >= 0),
+    recovery_count integer not null default 0 check (recovery_count >= 0),
+    lease_owner varchar(200) not null default '',
+    lease_expires_at timestamptz,
+    heartbeat_at timestamptz,
     created_at timestamptz not null,
     started_at timestamptz,
     updated_at timestamptz not null,
@@ -90,6 +95,11 @@ alter table rag_evaluation_jobs add column if not exists progress integer not nu
 alter table rag_evaluation_jobs add column if not exists quality_gate jsonb;
 alter table rag_evaluation_jobs add column if not exists quality_gate_result jsonb;
 alter table rag_evaluation_jobs add column if not exists updated_at timestamptz;
+alter table rag_evaluation_jobs add column if not exists attempt_count integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists recovery_count integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists lease_owner varchar(200) not null default '';
+alter table rag_evaluation_jobs add column if not exists lease_expires_at timestamptz;
+alter table rag_evaluation_jobs add column if not exists heartbeat_at timestamptz;
 update rag_evaluation_jobs
 set total_cases = jsonb_array_length(case_results),
     completed_cases = jsonb_array_length(case_results),
@@ -127,3 +137,8 @@ create index if not exists idx_rag_evaluation_job_baseline_lookup
     on rag_evaluation_jobs (
         owner_user_id, workspace_id, dataset_id, dataset_version, status, completed_at desc, id desc
     );
+
+-- 维护器只扫描持有过期租约的活跃任务，该部分索引显著减少多实例恢复时的锁范围。
+create index if not exists idx_rag_evaluation_job_expired_lease
+    on rag_evaluation_jobs (lease_expires_at, id)
+    where status in ('RUNNING', 'CANCEL_REQUESTED') and lease_expires_at is not null;

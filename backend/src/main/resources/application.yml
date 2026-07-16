@@ -19,10 +19,17 @@ server:
   port: 8081
 
 management:
+  tracing:
+    enabled: ${AGENTMIND_TRACING_ENABLED:false}
+    sampling:
+      probability: ${AGENTMIND_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${AGENTMIND_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
 
 logging:
   level:
@@ -51,6 +58,13 @@ agentmind:
   vector-store:
     type: memory
     embedding-dimensions: 128
+  keyword-index:
+    type: memory
+    opensearch:
+      base-url: ${AGENTMIND_OPENSEARCH_URL:http://localhost:9200}
+      index-name: ${AGENTMIND_OPENSEARCH_INDEX:agentmind-knowledge-chunks}
+      username: ${AGENTMIND_OPENSEARCH_USERNAME:}
+      password: ${AGENTMIND_OPENSEARCH_PASSWORD:}
   rag:
     answer-generator: mock
     prompt-version: rag-chat-v1
@@ -72,6 +86,18 @@ agentmind:
     executor-max-pool-size: 4
     executor-queue-capacity: 100
     maximum-import-bytes: 5242880
+    lease-duration: 30s
+    heartbeat-interval: 10s
+    recovery-fixed-delay-millis: 15000
+    recovery-initial-delay-millis: 5000
+    recovery-batch-size: 50
+    recovery-enabled: true
+    rrf-rank-constant: 60
+    judge-prompt-version: rag-judge-v1
+    judge-model-name: ${AGENTMIND_EVALUATION_JUDGE_MODEL:deterministic-local}
+    judge-failure-fallback-enabled: true
+    judge:
+      type: deterministic
     # 单价单位为美元/百万令牌；本地默认零成本，真实模型联调时通过环境配置覆盖。
     input-cost-per-million-tokens: ${AGENTMIND_EVALUATION_INPUT_COST:0}
     output-cost-per-million-tokens: ${AGENTMIND_EVALUATION_OUTPUT_COST:0}

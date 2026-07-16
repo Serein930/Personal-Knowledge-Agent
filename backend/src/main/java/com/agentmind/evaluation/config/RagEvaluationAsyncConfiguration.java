@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /** 为评估任务提供与 Web 请求线程隔离的有界执行器。 */
 @Configuration
@@ -23,5 +24,19 @@ public class RagEvaluationAsyncConfiguration {
         executor.setAwaitTerminationSeconds(30);
         executor.initialize();
         return executor;
+    }
+
+    /**
+     * 心跳使用独立调度线程，避免评估执行线程被模型调用占满时无法续租。
+     */
+    @Bean("ragEvaluationHeartbeatScheduler")
+    public ThreadPoolTaskScheduler ragEvaluationHeartbeatScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("rag-evaluation-heartbeat-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(5);
+        scheduler.initialize();
+        return scheduler;
     }
 }
