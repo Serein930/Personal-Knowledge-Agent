@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,8 +36,8 @@ public class DailyStudyPlanController {
     @PostMapping
     public ApiResponse<DailyStudyPlanResponse> save(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody SaveDailyStudyPlanRequest request
     ) {
         return ApiResponse.success(planService.save(
@@ -48,8 +48,8 @@ public class DailyStudyPlanController {
     @GetMapping
     public ApiResponse<DailyStudyPlanResponse> get(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
         return ApiResponse.success(planService.get(

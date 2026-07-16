@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 /**
  * 知识笔记应用服务。
  *
- * <p>创建动作由已确认的写工具调用；查询动作仍会校验当前演示用户和知识空间边界。</p>
+ * <p>创建动作由已确认的写工具调用；查询动作仍会校验当前认证用户和知识空间边界。</p>
  */
 @Service
 public class KnowledgeNoteApplicationService {

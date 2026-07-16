@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,8 +39,8 @@ public class StudyReviewSessionController {
     @PostMapping
     public ApiResponse<StudyReviewSessionResponse> create(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody CreateReviewSessionRequest request
     ) {
         return ApiResponse.success(sessionService.create(
@@ -51,8 +51,8 @@ public class StudyReviewSessionController {
     @GetMapping
     public ApiResponse<PageResponse<StudyReviewSessionResponse>> list(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
     ) {
@@ -65,8 +65,8 @@ public class StudyReviewSessionController {
     public ApiResponse<StudyReviewSessionResponse> get(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习会话编号必须为正数") Long sessionId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(sessionService.get(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null), sessionId
@@ -78,8 +78,8 @@ public class StudyReviewSessionController {
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习会话编号必须为正数") Long sessionId,
             @PathVariable @Positive(message = "复习卡片编号必须为正数") Long flashcardId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody SubmitFlashcardReviewRequest request
     ) {
         return ApiResponse.success(sessionService.submitReview(
@@ -94,7 +94,7 @@ public class StudyReviewSessionController {
     public ApiResponse<StudyReviewSessionResponse> pause(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long sessionId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(sessionService.pause(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null), sessionId
@@ -105,7 +105,7 @@ public class StudyReviewSessionController {
     public ApiResponse<StudyReviewSessionResponse> resume(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long sessionId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(sessionService.resume(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null), sessionId
@@ -116,7 +116,7 @@ public class StudyReviewSessionController {
     public ApiResponse<StudyReviewSessionResponse> abandon(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long sessionId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(sessionService.abandon(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null), sessionId

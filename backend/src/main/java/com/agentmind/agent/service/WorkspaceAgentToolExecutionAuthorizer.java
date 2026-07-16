@@ -4,24 +4,27 @@ import com.agentmind.agent.tool.model.AgentToolExecutionContext;
 import com.agentmind.chat.memory.repository.ChatMemoryRepository;
 import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.exception.ErrorCode;
+import com.agentmind.workspace.service.WorkspaceAccessService;
 import org.springframework.stereotype.Service;
 
 /**
- * 未接入登录系统前的演示权限校验实现。
+ * 基于真实知识空间成员关系的工具执行权限校验器。
  *
- * <p>当前项目尚未具备真实用户和知识空间成员持久化关系，因此只允许演示用户编号 1 调用工具。
- * 对会话上下文仍强制使用“知识空间编号 + 会话编号”联合查询，避免跨知识空间会话被工具使用。
- * 接入 Spring Security 与成员表后，只替换本类即可。</p>
+ * <p>除知识空间成员身份外，会话和消息仍使用联合归属查询，防止合法成员把其他空间的
+ * 会话编号拼接到当前请求中。写工具的角色和确认权限继续由具体工具流程复核。</p>
  */
 @Service
-public class DemoAgentToolExecutionAuthorizer implements AgentToolExecutionAuthorizer {
-
-    public static final long DEMO_USER_ID = 1L;
+public class WorkspaceAgentToolExecutionAuthorizer implements AgentToolExecutionAuthorizer {
 
     private final ChatMemoryRepository chatMemoryRepository;
+    private final WorkspaceAccessService workspaceAccessService;
 
-    public DemoAgentToolExecutionAuthorizer(ChatMemoryRepository chatMemoryRepository) {
+    public WorkspaceAgentToolExecutionAuthorizer(
+            ChatMemoryRepository chatMemoryRepository,
+            WorkspaceAccessService workspaceAccessService
+    ) {
         this.chatMemoryRepository = chatMemoryRepository;
+        this.workspaceAccessService = workspaceAccessService;
     }
 
     @Override
@@ -32,27 +35,20 @@ public class DemoAgentToolExecutionAuthorizer implements AgentToolExecutionAutho
         if (context.workspaceId() == null || context.workspaceId() <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "知识空间编号必须为正数");
         }
-        if (context.ownerUserId() != DEMO_USER_ID) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "当前演示环境不允许该用户调用智能体工具");
-        }
+        workspaceAccessService.requireReadable(context.ownerUserId(), context.workspaceId());
         if (context.conversationId() != null) {
             chatMemoryRepository.findConversationByWorkspaceIdAndId(context.workspaceId(), context.conversationId())
                     .orElseThrow(() -> new BusinessException(
-                            ErrorCode.RESOURCE_NOT_FOUND,
-                            "会话不存在或无权访问"
-                    ));
+                            ErrorCode.RESOURCE_NOT_FOUND, "会话不存在或无权访问"));
         }
         if (context.messageId() != null) {
             if (context.conversationId() == null) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "校验消息归属时必须同时提供会话编号");
             }
             chatMemoryRepository.findMessageByWorkspaceIdAndConversationIdAndId(
-                            context.workspaceId(), context.conversationId(), context.messageId()
-                    )
+                            context.workspaceId(), context.conversationId(), context.messageId())
                     .orElseThrow(() -> new BusinessException(
-                            ErrorCode.RESOURCE_NOT_FOUND,
-                            "消息不存在或无权访问"
-                    ));
+                            ErrorCode.RESOURCE_NOT_FOUND, "消息不存在或无权访问"));
         }
     }
 }

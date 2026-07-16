@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -114,7 +115,7 @@ class AgentToolControllerTests {
                 .andExpect(jsonPath("$.code", equalTo("BAD_REQUEST")));
 
         mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/agent/tool-calls", 1L)
-                        .header("X-Demo-User-Id", "2")
+                        .with(jwt().jwt(token -> token.subject("2").claim("uid", 2L)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"toolName":"knowledge.search","arguments":{"query":"Java"}}

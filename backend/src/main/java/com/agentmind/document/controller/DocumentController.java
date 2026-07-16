@@ -2,6 +2,7 @@ package com.agentmind.document.controller;
 
 import com.agentmind.common.response.ApiResponse;
 import com.agentmind.common.response.PageResponse;
+import com.agentmind.common.security.CurrentUserId;
 import com.agentmind.document.model.DocumentSourceType;
 import com.agentmind.document.model.IngestionStatus;
 import com.agentmind.document.model.dto.DocumentChunkResponse;
@@ -43,24 +44,29 @@ public class DocumentController {
 
     @PostMapping("/files")
     public ApiResponse<FileDocumentUploadResponse> uploadFile(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) List<String> tags
     ) {
-        return ApiResponse.success(documentApplicationService.createFileUploadTask(workspaceId, file, title, tags));
+        return ApiResponse.success(documentApplicationService.createFileUploadTask(
+                ownerUserId, workspaceId, file, title, tags));
     }
 
     @PostMapping("/web-pages")
     public ApiResponse<WebPageCaptureResponse> captureWebPage(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @Valid @RequestBody WebPageCaptureRequest request
     ) {
-        return ApiResponse.success(documentApplicationService.createWebPageCaptureTask(workspaceId, request));
+        return ApiResponse.success(documentApplicationService.createWebPageCaptureTask(
+                ownerUserId, workspaceId, request));
     }
 
     @GetMapping
     public ApiResponse<PageResponse<DocumentSummaryResponse>> listDocuments(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页数量必须大于 0")
@@ -71,6 +77,7 @@ public class DocumentController {
             @RequestParam(required = false) String tag
     ) {
         return ApiResponse.success(documentApplicationService.listDocuments(
+                ownerUserId,
                 workspaceId,
                 page,
                 pageSize,
@@ -83,9 +90,10 @@ public class DocumentController {
 
     @GetMapping("/{documentId}/chunks")
     public ApiResponse<List<DocumentChunkResponse>> listDocumentChunks(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "文档ID必须为正数") Long documentId
     ) {
-        return ApiResponse.success(documentApplicationService.listDocumentChunks(workspaceId, documentId));
+        return ApiResponse.success(documentApplicationService.listDocumentChunks(ownerUserId, workspaceId, documentId));
     }
 }

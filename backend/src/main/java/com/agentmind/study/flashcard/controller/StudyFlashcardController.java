@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,8 +55,8 @@ public class StudyFlashcardController {
     @GetMapping
     public ApiResponse<PageResponse<StudyFlashcardResponse>> list(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于0") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页数量必须大于0")
             @Max(value = 100, message = "每页数量不能大于100") int pageSize
@@ -72,8 +72,8 @@ public class StudyFlashcardController {
     @GetMapping("/due")
     public ApiResponse<PageResponse<StudyFlashcardResponse>> listDue(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于0") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页数量必须大于0")
             @Max(value = 100, message = "每页数量不能大于100") int pageSize
@@ -90,8 +90,8 @@ public class StudyFlashcardController {
     public ApiResponse<SubmittedFlashcardReviewResponse> submitReview(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习卡片编号必须为正数") Long flashcardId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody SubmitFlashcardReviewRequest request
     ) {
         return ApiResponse.success(reviewApplicationService.submit(
@@ -106,8 +106,8 @@ public class StudyFlashcardController {
     public ApiResponse<PageResponse<StudyFlashcardReviewResponse>> listReviews(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习卡片编号必须为正数") Long flashcardId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于0") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页数量必须大于0")
             @Max(value = 100, message = "每页数量不能大于100") int pageSize
@@ -124,8 +124,8 @@ public class StudyFlashcardController {
     public ApiResponse<StudyFlashcardResponse> suspend(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习卡片编号必须为正数") Long flashcardId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody ManageFlashcardRequest request
     ) {
         return ApiResponse.success(flashcardApplicationService.suspend(
@@ -140,8 +140,8 @@ public class StudyFlashcardController {
     public ApiResponse<StudyFlashcardResponse> resume(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习卡片编号必须为正数") Long flashcardId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody ManageFlashcardRequest request
     ) {
         return ApiResponse.success(flashcardApplicationService.resume(
@@ -156,8 +156,8 @@ public class StudyFlashcardController {
     public ApiResponse<StudyFlashcardResponse> reschedule(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "复习卡片编号必须为正数") Long flashcardId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody RescheduleFlashcardRequest request
     ) {
         return ApiResponse.success(flashcardApplicationService.reschedule(
@@ -171,8 +171,8 @@ public class StudyFlashcardController {
     @GetMapping("/statistics")
     public ApiResponse<StudyReviewStatisticsResponse> statistics(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(statisticsService.summarize(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null)

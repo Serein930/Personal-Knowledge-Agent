@@ -52,7 +52,7 @@ class StudyPersonalizationControllerTests {
         long workspaceId = 47_001L;
         MvcResult initial = mockMvc.perform(get(
                             "/api/v1/workspaces/{workspaceId}/study/fsrs/profile", workspaceId
-                        ).header("X-Demo-User-Id", ownerUserId))
+                        ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.version", equalTo(0)))
                 .andReturn();
@@ -64,19 +64,17 @@ class StudyPersonalizationControllerTests {
         String updateBody = updateNode.toString();
 
         mockMvc.perform(put("/api/v1/workspaces/{workspaceId}/study/fsrs/profile", workspaceId)
-                        .header("X-Demo-User-Id", ownerUserId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.version", equalTo(1)))
                 .andExpect(jsonPath("$.data.source", equalTo("MANUAL")));
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study/fsrs/profile/versions", workspaceId)
-                        .header("X-Demo-User-Id", ownerUserId))
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total", equalTo(2)))
                 .andExpect(jsonPath("$.data.records[0].version", equalTo(1)));
         mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/study/fsrs/profile/rollback", workspaceId)
-                        .header("X-Demo-User-Id", ownerUserId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"targetVersion\":0,\"expectedCurrentVersion\":1}"))
                 .andExpect(status().isOk())
@@ -104,7 +102,6 @@ class StudyPersonalizationControllerTests {
         MvcResult planResult = mockMvc.perform(post(
                             "/api/v1/workspaces/{workspaceId}/study-plans/daily", workspaceId
                         )
-                        .header("X-Demo-User-Id", ownerUserId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"planDate\":\"" + planDate + "\",\"dailyReviewTarget\":10}"))
                 .andExpect(status().isOk())
@@ -120,7 +117,6 @@ class StudyPersonalizationControllerTests {
                             "/api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/complete",
                             workspaceId, completeTaskId
                         )
-                        .header("X-Demo-User-Id", ownerUserId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedVersion\":0,\"comment\":\"已线下完成\"}"))
                 .andExpect(status().isOk())
@@ -130,7 +126,6 @@ class StudyPersonalizationControllerTests {
                             "/api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/feedback",
                             workspaceId, completeTaskId
                         )
-                        .header("X-Demo-User-Id", ownerUserId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedVersion\":1,\"score\":4,\"comment\":\"难度合适\"}"))
                 .andExpect(status().isOk())
@@ -141,7 +136,6 @@ class StudyPersonalizationControllerTests {
                             "/api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/reschedule",
                             workspaceId, rescheduleTaskId
                         )
-                        .header("X-Demo-User-Id", ownerUserId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedVersion\":0,\"targetDate\":\"" + newDate + "\"}"))
                 .andExpect(status().isOk())
@@ -150,21 +144,21 @@ class StudyPersonalizationControllerTests {
         mockMvc.perform(get(
                             "/api/v1/workspaces/{workspaceId}/study-tasks/{taskId}/events",
                             workspaceId, completeTaskId
-                        ).header("X-Demo-User-Id", ownerUserId))
+                        ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()", equalTo(2)));
 
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study/learning-profile", workspaceId)
-                        .header("X-Demo-User-Id", ownerUserId))
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].topic", equalTo("并发编程")))
                 .andExpect(jsonPath("$.data[0].level", equalTo("WEAK")));
         mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/study/conversation-summaries", workspaceId)
-                        .header("X-Demo-User-Id", ownerUserId))
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].weakTopics[0]", equalTo("并发编程")));
         mockMvc.perform(post("/api/v1/workspaces/{workspaceId}/study/maintenance/run", workspaceId)
-                        .header("X-Demo-User-Id", ownerUserId))
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.running", equalTo(false)))
                 .andExpect(jsonPath("$.data.processedScopes", equalTo(1)));

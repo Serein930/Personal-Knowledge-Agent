@@ -30,7 +30,7 @@ jobs:
         working-directory: backend
         env:
           AGENTMIND_RUN_PRODUCTION_INTEGRATION: "true"
-        run: mvn -B -Dtest=ProductionKnowledgeIndexPipelineIntegrationTests test
+        run: mvn -B -Dtest=ProductionKnowledgeIndexPipelineIntegrationTests,IdentityPersistenceIntegrationTests test
 
       - name: 执行全部常规测试
         working-directory: backend

@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -71,8 +71,8 @@ public class RagEvaluationController {
     @PostMapping("/datasets")
     public ApiResponse<RagEvaluationDatasetVersionResponse> createDataset(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody CreateRagEvaluationDatasetRequest request
     ) {
         return ApiResponse.success(datasetService.create(context(ownerUserId, workspaceId), request));
@@ -81,8 +81,8 @@ public class RagEvaluationController {
     @GetMapping("/datasets")
     public ApiResponse<PageResponse<RagEvaluationDatasetResponse>> listDatasets(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于1") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "分页大小不能小于1")
             @Max(value = 100, message = "分页大小不能超过100") int pageSize
@@ -94,8 +94,8 @@ public class RagEvaluationController {
     public ApiResponse<RagEvaluationDatasetVersionResponse> createVersion(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody CreateRagEvaluationDatasetVersionRequest request
     ) {
         return ApiResponse.success(datasetService.createVersion(
@@ -107,8 +107,8 @@ public class RagEvaluationController {
     public ApiResponse<List<RagEvaluationDatasetVersionResponse>> listVersions(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(datasetService.listVersions(context(ownerUserId, workspaceId), datasetId));
     }
@@ -118,8 +118,8 @@ public class RagEvaluationController {
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
             @PathVariable @Positive(message = "评估集版本必须为正数") int version,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(datasetService.getVersion(
                 context(ownerUserId, workspaceId), datasetId, version
@@ -129,8 +129,8 @@ public class RagEvaluationController {
     @PostMapping(value = "/datasets/import", consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<RagEvaluationDatasetVersionResponse>> importDataset(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam RagEvaluationExchangeFormat format,
             @RequestParam MultipartFile file
     ) throws IOException {
@@ -144,8 +144,8 @@ public class RagEvaluationController {
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
             @PathVariable @Positive(message = "评估集版本必须为正数") int version,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "JSON") RagEvaluationExchangeFormat format
     ) {
         RagEvaluationExportFile file = exchangeService.exportDataset(
@@ -163,8 +163,8 @@ public class RagEvaluationController {
     public ApiResponse<RagEvaluationTrendResponse> trend(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(required = false) @Positive(message = "评估集版本必须为正数") Integer version,
             @RequestParam(defaultValue = "30") @Min(value = 1, message = "趋势点数量不能小于1")
             @Max(value = 200, message = "趋势点数量不能超过200") int limit
@@ -178,8 +178,8 @@ public class RagEvaluationController {
     public ApiResponse<RagEvaluationVersionDiffResponse> versionDiff(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估集编号必须为正数") Long datasetId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam @Positive(message = "起始版本必须为正数") int fromVersion,
             @RequestParam @Positive(message = "目标版本必须为正数") int toVersion
     ) {
@@ -191,8 +191,8 @@ public class RagEvaluationController {
     @PostMapping("/jobs")
     public ResponseEntity<ApiResponse<RagEvaluationJobResponse>> startJob(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody StartRagEvaluationJobRequest request
     ) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
@@ -203,8 +203,8 @@ public class RagEvaluationController {
     public ApiResponse<RagEvaluationJobResponse> cancelJob(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估任务编号必须为正数") Long jobId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(jobService.cancel(context(ownerUserId, workspaceId), jobId));
     }
@@ -213,8 +213,8 @@ public class RagEvaluationController {
     public ResponseEntity<ApiResponse<RagEvaluationJobResponse>> retryJob(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估任务编号必须为正数") Long jobId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ApiResponse.success(jobService.retry(context(ownerUserId, workspaceId), jobId)));
@@ -223,8 +223,8 @@ public class RagEvaluationController {
     @GetMapping("/jobs")
     public ApiResponse<PageResponse<RagEvaluationJobResponse>> listJobs(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于1") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "分页大小不能小于1")
             @Max(value = 100, message = "分页大小不能超过100") int pageSize
@@ -236,8 +236,8 @@ public class RagEvaluationController {
     public ApiResponse<RagEvaluationJobResponse> getJob(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估任务编号必须为正数") Long jobId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(jobService.get(context(ownerUserId, workspaceId), jobId));
     }
@@ -246,8 +246,8 @@ public class RagEvaluationController {
     public ApiResponse<RagEvaluationComparisonResponse> comparison(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "评估任务编号必须为正数") Long jobId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(required = false) @Positive(message = "基线任务编号必须为正数") Long baselineJobId
     ) {
         return ApiResponse.success(jobService.compare(
@@ -258,8 +258,8 @@ public class RagEvaluationController {
     @GetMapping("/dashboard")
     public ApiResponse<RagEvaluationDashboardResponse> dashboard(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(jobService.dashboard(context(ownerUserId, workspaceId)));
     }

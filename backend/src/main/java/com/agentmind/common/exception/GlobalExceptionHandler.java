@@ -63,6 +63,7 @@ public class GlobalExceptionHandler {
 
     private HttpStatus resolveHttpStatus(ErrorCode errorCode) {
         return switch (errorCode) {
+            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case RESOURCE_CONFLICT -> HttpStatus.CONFLICT;

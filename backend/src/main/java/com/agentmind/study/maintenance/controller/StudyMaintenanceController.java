@@ -9,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,7 +28,7 @@ public class StudyMaintenanceController {
     @PostMapping("/run")
     public ApiResponse<StudyMaintenanceStatusResponse> run(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(service.runNow(context(ownerUserId, workspaceId)));
     }
@@ -36,7 +36,7 @@ public class StudyMaintenanceController {
     @GetMapping("/status")
     public ApiResponse<StudyMaintenanceStatusResponse> status(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(service.status(context(ownerUserId, workspaceId)));
     }

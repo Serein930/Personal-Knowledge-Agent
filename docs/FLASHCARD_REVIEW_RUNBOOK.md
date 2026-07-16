@@ -79,7 +79,7 @@ mvn spring-boot:run
 ```powershell
 Invoke-RestMethod -Method Get `
   -Uri "http://localhost:8080/api/v1/workspaces/1/flashcards/due?page=1&pageSize=20" `
-  -Headers @{"X-Demo-User-Id"="1"}
+  -Headers @{"Authorization"="Bearer $env:AGENTMIND_ACCESS_TOKEN"}
 ```
 
 提交评分时将 `{flashcardId}` 替换为实际卡片编号：
@@ -89,7 +89,7 @@ $body = @{requestId="manual-review-001"; score=5} | ConvertTo-Json
 Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8080/api/v1/workspaces/1/flashcards/{flashcardId}/reviews" `
   -ContentType "application/json" `
-  -Headers @{"X-Demo-User-Id"="1"} `
+  -Headers @{"Authorization"="Bearer $env:AGENTMIND_ACCESS_TOKEN"} `
   -Body $body
 ```
 
@@ -98,7 +98,7 @@ Invoke-RestMethod -Method Post `
 ```powershell
 Invoke-RestMethod -Method Get `
   -Uri "http://localhost:8080/api/v1/workspaces/1/flashcards/{flashcardId}/reviews?page=1&pageSize=20" `
-  -Headers @{"X-Demo-User-Id"="1"}
+  -Headers @{"Authorization"="Bearer $env:AGENTMIND_ACCESS_TOKEN"}
 ```
 
 ## 自动测试

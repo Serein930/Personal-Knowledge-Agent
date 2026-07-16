@@ -337,7 +337,7 @@ POST /api/v1/workspaces/{workspaceId}/agent/tool-calls
 当前演示环境可选请求头：
 
 ```text
-X-Demo-User-Id: 1
+Authorization: Bearer <访问令牌>
 ```
 
 请求示例：

@@ -8,6 +8,11 @@ spring:
     password: agentmind_dev_password
 
 agentmind:
+  security:
+    mode: ${AGENTMIND_SECURITY_MODE:disabled}
+  core:
+    persistence:
+      store: ${AGENTMIND_CORE_PERSISTENCE_STORE:memory}
   agent:
     persistence:
       store: jdbc

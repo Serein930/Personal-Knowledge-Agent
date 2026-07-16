@@ -4,7 +4,7 @@ import { check, sleep } from "k6";
 // 将 BASE_URL 指向多实例负载均衡入口，即可验证实例间租约竞争与接口稳定性。
 const baseUrl = __ENV.BASE_URL || "http://localhost:8081";
 const workspaceId = __ENV.WORKSPACE_ID || "1";
-const userId = __ENV.USER_ID || "1";
+const accessToken = __ENV.ACCESS_TOKEN || "";
 
 export const options = {
   vus: Number(__ENV.VUS || 20),
@@ -16,7 +16,7 @@ export const options = {
 };
 
 export default function () {
-  const headers = { "X-Demo-User-Id": userId };
+  const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
   const response = http.post(
     `${baseUrl}/api/v1/workspaces/${workspaceId}/knowledge/index-operations/outbox/process-once`,
     null,

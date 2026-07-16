@@ -15,7 +15,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,7 +46,7 @@ public class KnowledgeIndexOperationsController {
     @GetMapping("/outbox")
     public ApiResponse<KnowledgeIndexOutboxStatistics> statistics(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         authorize(ownerUserId, workspaceId);
         return ApiResponse.success(repository.statistics(workspaceId));
@@ -55,7 +55,7 @@ public class KnowledgeIndexOperationsController {
     @PostMapping("/outbox/process-once")
     public ApiResponse<Map<String, Integer>> processOnce(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         authorize(ownerUserId, workspaceId);
         return ApiResponse.success(Map.of("claimed", worker.processOnce(workspaceId)));
@@ -64,7 +64,7 @@ public class KnowledgeIndexOperationsController {
     @PostMapping("/rebuild")
     public ApiResponse<KnowledgeIndexRebuildResult> rebuild(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         authorize(ownerUserId, workspaceId);
         return ApiResponse.success(rebuildService.rebuild(workspaceId));

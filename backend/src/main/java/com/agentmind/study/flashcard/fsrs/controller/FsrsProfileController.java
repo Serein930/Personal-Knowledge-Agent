@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,8 +46,8 @@ public class FsrsProfileController {
     @GetMapping("/profile")
     public ApiResponse<FsrsUserProfileResponse> getProfile(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(profileService.get(context(ownerUserId, workspaceId)));
     }
@@ -55,8 +55,8 @@ public class FsrsProfileController {
     @PutMapping("/profile")
     public ApiResponse<FsrsUserProfileResponse> updateProfile(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody UpdateFsrsUserProfileRequest request
     ) {
         return ApiResponse.success(profileService.update(context(ownerUserId, workspaceId), request));
@@ -65,8 +65,8 @@ public class FsrsProfileController {
     @PostMapping("/optimization-jobs")
     public ApiResponse<FsrsOptimizationJobResponse> startOptimization(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestBody StartFsrsOptimizationRequest request
     ) {
         return ApiResponse.success(optimizationService.start(context(ownerUserId, workspaceId), request));
@@ -75,8 +75,8 @@ public class FsrsProfileController {
     @GetMapping("/profile/versions")
     public ApiResponse<PageResponse<FsrsProfileVersionResponse>> listProfileVersions(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
     ) {
@@ -88,8 +88,8 @@ public class FsrsProfileController {
     @PostMapping("/profile/rollback")
     public ApiResponse<FsrsUserProfileResponse> rollbackProfile(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody RollbackFsrsProfileRequest request
     ) {
         return ApiResponse.success(profileService.rollback(context(ownerUserId, workspaceId), request));
@@ -98,8 +98,8 @@ public class FsrsProfileController {
     @GetMapping("/optimization-jobs")
     public ApiResponse<PageResponse<FsrsOptimizationJobResponse>> listOptimizationJobs(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
     ) {

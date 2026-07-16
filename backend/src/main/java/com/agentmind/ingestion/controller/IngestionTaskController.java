@@ -1,6 +1,7 @@
 package com.agentmind.ingestion.controller;
 
 import com.agentmind.common.response.ApiResponse;
+import com.agentmind.common.security.CurrentUserId;
 import com.agentmind.document.service.DocumentApplicationService;
 import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
 import jakarta.validation.constraints.Positive;
@@ -26,9 +27,10 @@ public class IngestionTaskController {
 
     @GetMapping("/{taskId}")
     public ApiResponse<IngestionTaskResponse> getTask(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间ID必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "任务ID必须为正数") Long taskId
     ) {
-        return ApiResponse.success(documentApplicationService.getTask(workspaceId, taskId));
+        return ApiResponse.success(documentApplicationService.getTask(ownerUserId, workspaceId, taskId));
     }
 }

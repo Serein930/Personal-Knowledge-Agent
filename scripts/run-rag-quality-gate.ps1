@@ -7,7 +7,7 @@ param(
     [long]$DatasetId,
     [Parameter(Mandatory = $true)]
     [int]$DatasetVersion,
-    [long]$OwnerUserId = 1,
+    [string]$AccessToken = $env:AGENTMIND_ACCESS_TOKEN,
     [int]$TopK = 5,
     [int]$CandidatePoolSize = 20,
     [ValidateSet("VECTOR", "HYBRID")]
@@ -25,7 +25,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $BaseUrl.TrimEnd('/')
-$headers = @{ "X-Demo-User-Id" = $OwnerUserId.ToString() }
+$headers = @{}
+if (-not [string]::IsNullOrWhiteSpace($AccessToken)) {
+    $headers["Authorization"] = "Bearer $AccessToken"
+}
 $jobUri = "$root/v1/workspaces/$WorkspaceId/evaluations/jobs"
 $request = @{
     datasetId = $DatasetId

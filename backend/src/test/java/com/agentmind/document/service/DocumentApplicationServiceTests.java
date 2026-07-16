@@ -15,6 +15,7 @@ import com.agentmind.document.model.dto.DocumentSummaryResponse;
 import com.agentmind.document.model.dto.FileDocumentUploadResponse;
 import com.agentmind.document.model.dto.WebPageCaptureRequest;
 import com.agentmind.document.model.dto.WebPageCaptureResponse;
+import com.agentmind.document.repository.InMemoryDocumentMetadataRepository;
 import com.agentmind.document.parser.DocumentTextExtractionService;
 import com.agentmind.document.parser.HtmlTextExtractor;
 import com.agentmind.document.parser.MarkdownTextExtractor;
@@ -28,6 +29,8 @@ import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
 import com.agentmind.knowledge.vector.InMemoryVectorStore;
 import com.agentmind.knowledge.keyword.InMemoryBm25KeywordIndex;
+import com.agentmind.workspace.repository.InMemoryKnowledgeWorkspaceRepository;
+import com.agentmind.workspace.service.WorkspaceAccessService;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -48,6 +51,8 @@ class DocumentApplicationServiceTests {
     private final InMemoryObjectStorageService objectStorageService = new InMemoryObjectStorageService();
     private final DeterministicEmbeddingClient embeddingClient = new DeterministicEmbeddingClient();
     private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
+    private final InMemoryKnowledgeWorkspaceRepository workspaceRepository =
+            new InMemoryKnowledgeWorkspaceRepository();
     private final DocumentApplicationService service = new DocumentApplicationService(
             new FileUploadValidator(20_971_520L),
             objectStorageService,
@@ -59,7 +64,10 @@ class DocumentApplicationServiceTests {
                     new HtmlTextExtractor()
             )),
             new MarkdownAwareTextChunker(),
-            new KnowledgeIndexingService(embeddingClient, vectorStore, new InMemoryBm25KeywordIndex())
+            new KnowledgeIndexingService(embeddingClient, vectorStore, new InMemoryBm25KeywordIndex()),
+            new InMemoryDocumentMetadataRepository(),
+            workspaceRepository,
+            new WorkspaceAccessService(workspaceRepository)
     );
 
     @Test

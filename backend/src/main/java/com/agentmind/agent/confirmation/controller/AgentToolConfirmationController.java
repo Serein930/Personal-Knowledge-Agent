@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,8 +38,8 @@ public class AgentToolConfirmationController {
     @PostMapping
     public ApiResponse<CreatedAgentToolConfirmationResponse> create(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody CreateAgentToolConfirmationRequest request
     ) {
         return ApiResponse.success(confirmationService.create(
@@ -54,8 +54,8 @@ public class AgentToolConfirmationController {
     public ApiResponse<AgentToolConfirmationResponse> get(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "确认单编号必须为正数") Long confirmationId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId
     ) {
         return ApiResponse.success(confirmationService.get(ownerUserId, workspaceId, confirmationId));
     }
@@ -64,8 +64,8 @@ public class AgentToolConfirmationController {
     public ApiResponse<DecidedAgentToolConfirmationResponse> confirm(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "确认单编号必须为正数") Long confirmationId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody AgentToolConfirmationTokenRequest request
     ) {
         return ApiResponse.success(confirmationService.confirm(
@@ -77,8 +77,8 @@ public class AgentToolConfirmationController {
     public ApiResponse<DecidedAgentToolConfirmationResponse> reject(
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "确认单编号必须为正数") Long confirmationId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1")
-            @Positive(message = "演示用户编号必须为正数") Long ownerUserId,
+            @CurrentUserId
+            @Positive(message = "当前用户编号必须为正数") Long ownerUserId,
             @Valid @RequestBody AgentToolConfirmationTokenRequest request
     ) {
         return ApiResponse.success(confirmationService.reject(

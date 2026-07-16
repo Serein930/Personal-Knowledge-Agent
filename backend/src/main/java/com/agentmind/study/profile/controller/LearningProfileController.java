@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,7 +29,7 @@ public class LearningProfileController {
     @GetMapping
     public ApiResponse<List<LearningTopicProfileResponse>> get(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(service.get(context(ownerUserId, workspaceId)));
     }
@@ -37,7 +37,7 @@ public class LearningProfileController {
     @PostMapping("/refresh")
     public ApiResponse<List<LearningTopicProfileResponse>> refresh(
             @PathVariable @Positive Long workspaceId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(service.refresh(context(ownerUserId, workspaceId)));
     }

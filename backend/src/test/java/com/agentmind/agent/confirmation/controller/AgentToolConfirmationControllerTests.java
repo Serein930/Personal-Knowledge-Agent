@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -135,7 +136,7 @@ class AgentToolConfirmationControllerTests {
                             workspaceId,
                             fixture.id()
                         )
-                        .header("X-Demo-User-Id", "2"))
+                        .with(jwt().jwt(token -> token.subject("2").claim("uid", 2L))))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(post(

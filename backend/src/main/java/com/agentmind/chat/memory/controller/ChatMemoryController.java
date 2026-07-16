@@ -7,6 +7,8 @@ import com.agentmind.chat.memory.service.ChatConversationManagementService;
 import com.agentmind.chat.memory.service.ChatMemoryQueryService;
 import com.agentmind.common.response.ApiResponse;
 import com.agentmind.common.response.PageResponse;
+import com.agentmind.common.security.CurrentUserId;
+import com.agentmind.workspace.service.WorkspaceAccessService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -34,28 +36,34 @@ public class ChatMemoryController {
 
     private final ChatMemoryQueryService queryService;
     private final ChatConversationManagementService managementService;
+    private final WorkspaceAccessService workspaceAccessService;
 
     public ChatMemoryController(
             ChatMemoryQueryService queryService,
-            ChatConversationManagementService managementService
+            ChatConversationManagementService managementService,
+            WorkspaceAccessService workspaceAccessService
     ) {
         this.queryService = queryService;
         this.managementService = managementService;
+        this.workspaceAccessService = workspaceAccessService;
     }
 
     @GetMapping
     public ApiResponse<PageResponse<ChatConversationResponse>> listConversations(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0")
             @Max(value = 10_000, message = "页码不能大于 10000") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页数量必须大于 0")
             @Max(value = 100, message = "每页数量不能大于 100") int pageSize
     ) {
+        workspaceAccessService.requireReadable(ownerUserId, workspaceId);
         return ApiResponse.success(queryService.listConversations(workspaceId, page, pageSize));
     }
 
     @GetMapping("/{conversationId}/messages")
     public ApiResponse<PageResponse<ChatMessageResponse>> listMessages(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "会话编号必须为正数") Long conversationId,
             @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0")
@@ -63,6 +71,7 @@ public class ChatMemoryController {
             @RequestParam(defaultValue = "50") @Min(value = 1, message = "每页数量必须大于 0")
             @Max(value = 100, message = "每页数量不能大于 100") int pageSize
     ) {
+        workspaceAccessService.requireReadable(ownerUserId, workspaceId);
         return ApiResponse.success(queryService.listMessages(
                 workspaceId,
                 conversationId,
@@ -73,26 +82,32 @@ public class ChatMemoryController {
 
     @PatchMapping("/{conversationId}")
     public ApiResponse<ChatConversationResponse> renameConversation(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "会话编号必须为正数") Long conversationId,
             @Valid @RequestBody RenameChatConversationRequest request
     ) {
+        workspaceAccessService.requireWritable(ownerUserId, workspaceId);
         return ApiResponse.success(managementService.rename(workspaceId, conversationId, request.title()));
     }
 
     @PostMapping("/{conversationId}/archive")
     public ApiResponse<ChatConversationResponse> archiveConversation(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "会话编号必须为正数") Long conversationId
     ) {
+        workspaceAccessService.requireWritable(ownerUserId, workspaceId);
         return ApiResponse.success(managementService.archive(workspaceId, conversationId));
     }
 
     @DeleteMapping("/{conversationId}")
     public ApiResponse<Void> deleteConversation(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @PathVariable @Positive(message = "会话编号必须为正数") Long conversationId
     ) {
+        workspaceAccessService.requireWritable(ownerUserId, workspaceId);
         managementService.delete(workspaceId, conversationId);
         return ApiResponse.success("会话已删除", null);
     }

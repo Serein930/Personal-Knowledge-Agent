@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,7 +36,7 @@ public class DailyStudyTaskController {
     public ApiResponse<DailyStudyTaskResponse> complete(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long taskId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId,
+            @CurrentUserId @Positive Long ownerUserId,
             @Valid @RequestBody UpdateDailyStudyTaskRequest request
     ) {
         return ApiResponse.success(service.complete(context(ownerUserId, workspaceId), taskId, request));
@@ -46,7 +46,7 @@ public class DailyStudyTaskController {
     public ApiResponse<DailyStudyTaskResponse> skip(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long taskId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId,
+            @CurrentUserId @Positive Long ownerUserId,
             @Valid @RequestBody UpdateDailyStudyTaskRequest request
     ) {
         return ApiResponse.success(service.skip(context(ownerUserId, workspaceId), taskId, request));
@@ -56,7 +56,7 @@ public class DailyStudyTaskController {
     public ApiResponse<DailyStudyTaskResponse> reschedule(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long taskId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId,
+            @CurrentUserId @Positive Long ownerUserId,
             @Valid @RequestBody RescheduleDailyStudyTaskRequest request
     ) {
         return ApiResponse.success(service.reschedule(context(ownerUserId, workspaceId), taskId, request));
@@ -66,7 +66,7 @@ public class DailyStudyTaskController {
     public ApiResponse<DailyStudyTaskResponse> feedback(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long taskId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId,
+            @CurrentUserId @Positive Long ownerUserId,
             @Valid @RequestBody SubmitDailyStudyTaskFeedbackRequest request
     ) {
         return ApiResponse.success(service.feedback(context(ownerUserId, workspaceId), taskId, request));
@@ -76,7 +76,7 @@ public class DailyStudyTaskController {
     public ApiResponse<List<DailyStudyTaskEventResponse>> events(
             @PathVariable @Positive Long workspaceId,
             @PathVariable @Positive Long taskId,
-            @RequestHeader(name = "X-Demo-User-Id", defaultValue = "1") @Positive Long ownerUserId
+            @CurrentUserId @Positive Long ownerUserId
     ) {
         return ApiResponse.success(service.listEvents(context(ownerUserId, workspaceId), taskId));
     }

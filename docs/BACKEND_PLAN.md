@@ -2,6 +2,8 @@
 
 本文档用于规划 Personal Knowledge Agent 后端的阶段性建设。后端开发必须遵守 `AGENTS.md` 中定义的项目定位、架构原则、安全规范和阶段路线。
 
+> 生产验收进展：已完成 JWT/OIDC 资源服务器、当前用户统一解析、用户与知识空间成员 PostgreSQL 持久化、文档元数据持久化及 MinIO 可切换适配器。操作说明见 `SECURITY_AND_CORE_PERSISTENCE_RUNBOOK.md`。
+
 ## 后端定位
 
 后端是 Personal Knowledge Agent 的核心业务和 Agent 编排层，负责用户与知识空间隔离、文档与网页摄取、异步任务、知识检索、RAG 问答、Agent 工具调用、学习系统和评估观测。

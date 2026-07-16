@@ -8,7 +8,9 @@ import com.agentmind.common.storage.StoredObject;
 import com.agentmind.document.chunk.DocumentChunk;
 import com.agentmind.document.chunk.TextChunker;
 import com.agentmind.document.model.DocumentSourceType;
+import com.agentmind.document.model.DocumentMetadata;
 import com.agentmind.document.model.IngestionStatus;
+import com.agentmind.document.repository.DocumentMetadataRepository;
 import com.agentmind.document.model.dto.DocumentChunkResponse;
 import com.agentmind.document.model.dto.DocumentSummaryResponse;
 import com.agentmind.document.model.dto.FileDocumentUploadResponse;
@@ -23,6 +25,8 @@ import com.agentmind.ingestion.web.HtmlFetchResult;
 import com.agentmind.ingestion.web.HtmlFetchService;
 import com.agentmind.ingestion.web.UrlSafetyValidator;
 import com.agentmind.knowledge.service.KnowledgeIndexingService;
+import com.agentmind.workspace.repository.KnowledgeWorkspaceRepository;
+import com.agentmind.workspace.service.WorkspaceAccessService;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -32,10 +36,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,7 +48,8 @@ import org.springframework.web.multipart.MultipartFile;
  * 文档摄取用例的应用服务。
  *
  * <p>该服务让控制层保持轻量，并负责当前用例流程：校验入参、保存原始内容、提取文本、切分片段，
- * 更新任务和文档状态。当前阶段仍使用内存存储，但解析器和切分器边界已经贴近后续数据库与向量库流程。</p>
+ * 更新任务和文档状态。文档元数据可按配置写入 PostgreSQL，摄取任务与解析片段暂时保留内存实现，
+ * 后续可以在不改变控制层契约的情况下继续迁移。</p>
  */
 @Service
 public class DocumentApplicationService {
@@ -59,12 +64,14 @@ public class DocumentApplicationService {
     private final DocumentTextExtractionService textExtractionService;
     private final TextChunker textChunker;
     private final KnowledgeIndexingService knowledgeIndexingService;
-    private final AtomicLong documentIdGenerator = new AtomicLong(100);
     private final AtomicLong taskIdGenerator = new AtomicLong(1000);
-    private final Map<Long, DocumentSummaryResponse> documents = new ConcurrentHashMap<>();
     private final Map<Long, IngestionTaskResponse> tasks = new ConcurrentHashMap<>();
     private final Map<Long, List<DocumentChunk>> chunksByDocumentId = new ConcurrentHashMap<>();
+    private final DocumentMetadataRepository documentRepository;
+    private final KnowledgeWorkspaceRepository workspaceRepository;
+    private final WorkspaceAccessService workspaceAccessService;
 
+    @Autowired
     public DocumentApplicationService(
             FileUploadValidator fileUploadValidator,
             ObjectStorageService objectStorageService,
@@ -72,7 +79,10 @@ public class DocumentApplicationService {
             HtmlFetchService htmlFetchService,
             DocumentTextExtractionService textExtractionService,
             TextChunker textChunker,
-            KnowledgeIndexingService knowledgeIndexingService
+            KnowledgeIndexingService knowledgeIndexingService,
+            DocumentMetadataRepository documentRepository,
+            KnowledgeWorkspaceRepository workspaceRepository,
+            WorkspaceAccessService workspaceAccessService
     ) {
         this.fileUploadValidator = fileUploadValidator;
         this.objectStorageService = objectStorageService;
@@ -81,6 +91,9 @@ public class DocumentApplicationService {
         this.textExtractionService = textExtractionService;
         this.textChunker = textChunker;
         this.knowledgeIndexingService = knowledgeIndexingService;
+        this.documentRepository = documentRepository;
+        this.workspaceRepository = workspaceRepository;
+        this.workspaceAccessService = workspaceAccessService;
         seedMockDocuments();
     }
 
@@ -96,17 +109,28 @@ public class DocumentApplicationService {
             String title,
             List<String> tags
     ) {
+        return createFileUploadTask(1L, workspaceId, file, title, tags);
+    }
+
+    public FileDocumentUploadResponse createFileUploadTask(
+            Long ownerUserId,
+            Long workspaceId,
+            MultipartFile file,
+            String title,
+            List<String> tags
+    ) {
         validateWorkspaceId(workspaceId);
+        workspaceAccessService.requireWritable(ownerUserId, workspaceId);
         FileValidationResult validation = fileUploadValidator.validate(file);
 
-        Long documentId = documentIdGenerator.incrementAndGet();
         Long taskId = taskIdGenerator.incrementAndGet();
         OffsetDateTime createdAt = OffsetDateTime.now();
         String displayTitle = resolveDocumentTitle(title, validation.safeFilename());
         List<String> normalizedTags = normalizeTags(tags);
+        DocumentMetadata metadata = documentRepository.create(ownerUserId, workspaceId, displayTitle,
+                validation.sourceType(), null, validation.safeFilename(), normalizedTags);
+        Long documentId = metadata.id();
 
-        putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizedTags,
-                IngestionStatus.RUNNING, 0, createdAt);
         putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.RUNNING,
                 20, validation.safeFilename(), null, createdAt);
 
@@ -125,8 +149,8 @@ public class DocumentApplicationService {
             chunksByDocumentId.put(documentId, generatedChunks);
             knowledgeIndexingService.indexChunks(workspaceId, documentId, generatedChunks);
 
-            putDocument(documentId, displayTitle, validation.sourceType(), workspaceId, normalizedTags,
-                    IngestionStatus.SUCCEEDED, generatedChunks.size(), OffsetDateTime.now());
+            documentRepository.markSucceeded(documentId, storedObject.storageKey(), validation.contentType(),
+                    validation.size(), generatedChunks.size());
             putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.SUCCEEDED,
                     100, storedObject.storageKey(), null, createdAt);
             return new FileDocumentUploadResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
@@ -145,17 +169,26 @@ public class DocumentApplicationService {
      * 文本提取和切分策略分别测试。</p>
      */
     public WebPageCaptureResponse createWebPageCaptureTask(Long workspaceId, WebPageCaptureRequest request) {
+        return createWebPageCaptureTask(1L, workspaceId, request);
+    }
+
+    public WebPageCaptureResponse createWebPageCaptureTask(
+            Long ownerUserId,
+            Long workspaceId,
+            WebPageCaptureRequest request
+    ) {
         validateWorkspaceId(workspaceId);
+        workspaceAccessService.requireWritable(ownerUserId, workspaceId);
         URI uri = urlSafetyValidator.validatePublicHttpUrl(request.url());
 
-        Long documentId = documentIdGenerator.incrementAndGet();
         Long taskId = taskIdGenerator.incrementAndGet();
         OffsetDateTime createdAt = OffsetDateTime.now();
         String displayTitle = StringUtils.hasText(request.title()) ? request.title().trim() : uri.getHost();
         List<String> normalizedTags = normalizeTags(request.tags());
+        DocumentMetadata metadata = documentRepository.create(ownerUserId, workspaceId, displayTitle,
+                DocumentSourceType.WEB_PAGE, uri.toString(), null, normalizedTags);
+        Long documentId = metadata.id();
 
-        putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
-                IngestionStatus.RUNNING, 0, createdAt);
         putTask(taskId, documentId, IngestionTaskType.WEB_PAGE_CAPTURE, IngestionTaskStatus.RUNNING,
                 20, uri.toString(), null, createdAt);
 
@@ -175,8 +208,8 @@ public class DocumentApplicationService {
             chunksByDocumentId.put(documentId, generatedChunks);
             knowledgeIndexingService.indexChunks(workspaceId, documentId, generatedChunks);
 
-            putDocument(documentId, displayTitle, DocumentSourceType.WEB_PAGE, workspaceId, normalizedTags,
-                    IngestionStatus.SUCCEEDED, generatedChunks.size(), OffsetDateTime.now());
+            documentRepository.markSucceeded(documentId, storedObject.storageKey(), html.contentType(),
+                    htmlBytes.length, generatedChunks.size());
             putTask(taskId, documentId, IngestionTaskType.WEB_PAGE_CAPTURE, IngestionTaskStatus.SUCCEEDED,
                     100, storedObject.storageKey(), null, createdAt);
             return new WebPageCaptureResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
@@ -205,12 +238,29 @@ public class DocumentApplicationService {
             IngestionStatus status,
             String tag
     ) {
+        return listDocuments(1L, workspaceId, page, pageSize, keyword, sourceType, status, tag);
+    }
+
+    public PageResponse<DocumentSummaryResponse> listDocuments(
+            Long ownerUserId,
+            Long workspaceId,
+            int page,
+            int pageSize,
+            String keyword,
+            DocumentSourceType sourceType,
+            IngestionStatus status,
+            String tag
+    ) {
         validateWorkspaceId(workspaceId);
+        workspaceAccessService.requireReadable(ownerUserId, workspaceId);
         int safePage = Math.max(page, 1);
         int safePageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
 
-        List<DocumentSummaryResponse> filtered = documents.values().stream()
-                .filter(document -> Objects.equals(document.workspaceId(), workspaceId))
+        String workspaceName = workspaceRepository.findById(workspaceId)
+                .map(com.agentmind.workspace.model.KnowledgeWorkspace::getName)
+                .orElse("未知知识空间");
+        List<DocumentSummaryResponse> filtered = documentRepository.findAllByWorkspaceId(workspaceId).stream()
+                .map(document -> toSummaryResponse(document, workspaceName))
                 .filter(document -> matchesKeyword(document, keyword))
                 .filter(document -> sourceType == null || document.sourceType() == sourceType)
                 .filter(document -> status == null || document.ingestionStatus() == status)
@@ -224,9 +274,13 @@ public class DocumentApplicationService {
     }
 
     public List<DocumentChunkResponse> listDocumentChunks(Long workspaceId, Long documentId) {
+        return listDocumentChunks(1L, workspaceId, documentId);
+    }
+
+    public List<DocumentChunkResponse> listDocumentChunks(Long ownerUserId, Long workspaceId, Long documentId) {
         validateWorkspaceId(workspaceId);
-        DocumentSummaryResponse document = documents.get(documentId);
-        if (document == null || !Objects.equals(document.workspaceId(), workspaceId)) {
+        workspaceAccessService.requireReadable(ownerUserId, workspaceId);
+        if (documentRepository.findByWorkspaceIdAndId(workspaceId, documentId).isEmpty()) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文档不存在");
         }
         return chunksByDocumentId.getOrDefault(documentId, List.of()).stream()
@@ -235,12 +289,17 @@ public class DocumentApplicationService {
     }
 
     public IngestionTaskResponse getTask(Long workspaceId, Long taskId) {
+        return getTask(1L, workspaceId, taskId);
+    }
+
+    public IngestionTaskResponse getTask(Long ownerUserId, Long workspaceId, Long taskId) {
         validateWorkspaceId(workspaceId);
+        workspaceAccessService.requireReadable(ownerUserId, workspaceId);
         if (taskId == null || taskId <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "任务ID必须为正数");
         }
         IngestionTaskResponse task = tasks.get(taskId);
-        if (task == null || !Objects.equals(resolveTaskWorkspaceId(task), workspaceId)) {
+        if (task == null || !workspaceId.equals(resolveTaskWorkspaceId(task))) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "摄取任务不存在");
         }
         return task;
@@ -258,17 +317,9 @@ public class DocumentApplicationService {
 
     private void seedMockDocuments() {
         OffsetDateTime now = OffsetDateTime.now();
-        documents.put(1L, new DocumentSummaryResponse(
-                1L,
-                "Java concurrency notes",
-                DocumentSourceType.MARKDOWN,
-                1L,
-                DEFAULT_WORKSPACE_NAME,
-                List.of("Java", "Concurrency", "Thread Pool"),
-                IngestionStatus.SUCCEEDED,
-                2,
-                now.minusDays(1)
-        ));
+        if (documentRepository.findByWorkspaceIdAndId(1L, 1L).isEmpty()) {
+            return;
+        }
         chunksByDocumentId.put(1L, List.of(
                 new DocumentChunk("1-0", 1L, 0, "Thread Pool Basics",
                         "Thread pools reuse worker threads and reduce task creation overhead.", 0, 72),
@@ -276,17 +327,6 @@ public class DocumentApplicationService {
                         "Core size, max size and queue policy should match workload characteristics.", 73, 146)
         ));
         knowledgeIndexingService.indexChunks(1L, 1L, chunksByDocumentId.get(1L));
-        documents.put(2L, new DocumentSummaryResponse(
-                2L,
-                "Spring AI reference excerpt",
-                DocumentSourceType.WEB_PAGE,
-                1L,
-                "Agent Engineering",
-                List.of("Spring AI", "RAG", "Tool Calling"),
-                IngestionStatus.RUNNING,
-                0,
-                now
-        ));
         tasks.put(1L, new IngestionTaskResponse(
                 1L,
                 2L,
@@ -330,29 +370,6 @@ public class DocumentApplicationService {
         return "workspace-" + workspaceId + "/" + category;
     }
 
-    private void putDocument(
-            Long documentId,
-            String title,
-            DocumentSourceType sourceType,
-            Long workspaceId,
-            List<String> tags,
-            IngestionStatus ingestionStatus,
-            int chunkCount,
-            OffsetDateTime updatedAt
-    ) {
-        documents.put(documentId, new DocumentSummaryResponse(
-                documentId,
-                title,
-                sourceType,
-                workspaceId,
-                DEFAULT_WORKSPACE_NAME,
-                tags,
-                ingestionStatus,
-                chunkCount,
-                updatedAt
-        ));
-    }
-
     private void putTask(
             Long taskId,
             Long documentId,
@@ -389,7 +406,7 @@ public class DocumentApplicationService {
     ) {
         chunksByDocumentId.remove(documentId);
         knowledgeIndexingService.deleteDocumentIndex(workspaceId, documentId);
-        putDocument(documentId, title, sourceType, workspaceId, tags, IngestionStatus.FAILED, 0, OffsetDateTime.now());
+        documentRepository.markFailed(documentId);
         putTask(taskId, documentId, taskType, IngestionTaskStatus.FAILED, 100, source, errorMessage, OffsetDateTime.now());
     }
 
@@ -415,7 +432,12 @@ public class DocumentApplicationService {
     }
 
     private Long resolveTaskWorkspaceId(IngestionTaskResponse task) {
-        DocumentSummaryResponse document = documents.get(task.documentId());
-        return document == null ? null : document.workspaceId();
+        return documentRepository.findById(task.documentId()).map(DocumentMetadata::workspaceId).orElse(null);
+    }
+
+    private DocumentSummaryResponse toSummaryResponse(DocumentMetadata document, String workspaceName) {
+        return new DocumentSummaryResponse(document.id(), document.title(), document.sourceType(),
+                document.workspaceId(), workspaceName, document.tags(), document.ingestionStatus(),
+                document.chunkCount(), document.updatedAt());
     }
 }

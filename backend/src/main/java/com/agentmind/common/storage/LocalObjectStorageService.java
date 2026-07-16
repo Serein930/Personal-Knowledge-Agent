@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -14,9 +15,10 @@ import org.springframework.util.StringUtils;
  * 本地磁盘对象存储实现。
  *
  * <p>该适配器用于开发阶段和接口联调，会把上传文件与抓取到的网页快照存放在版本控制忽略的
- * 本地存储目录下。后续对象存储适配器只需要实现同一个接口，不需要改文档摄取流程。</p>
+ * 本地存储目录下。正式环境可切换到 MinIO 适配器，不需要修改文档摄取流程。</p>
  */
 @Service
+@ConditionalOnProperty(prefix = "agentmind.storage", name = "type", havingValue = "local", matchIfMissing = true)
 public class LocalObjectStorageService implements ObjectStorageService {
 
     private final Path rootPath;
