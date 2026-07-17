@@ -1,0 +1,103 @@
+name: 最终生产验收归档
+
+on:
+  workflow_dispatch:
+    inputs:
+      acceptance_run_id:
+        description: 成功的“发布候选全链路验收”运行编号
+        required: true
+        type: string
+      production_release_run_id:
+        description: 成功的“正式版本发布”运行编号
+        required: true
+        type: string
+      production_deployment_run_id:
+        description: 成功的“独立生产集群部署”运行编号
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: agentmind-final-production-acceptance
+  cancel-in-progress: false
+
+jobs:
+  archive_final_acceptance:
+    name: 交叉校验真实指标、正式版本和生产部署证据
+    runs-on: ubuntu-latest
+    environment: production-approval
+    timeout-minutes: 15
+    steps:
+      - name: 检出最终验收提交
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 验证运行编号和受保护环境
+        shell: pwsh
+        env:
+          APPROVAL_GUARD: ${{ secrets.FINAL_RELEASE_APPROVAL_GUARD }}
+          ACCEPTANCE_RUN_ID: ${{ inputs.acceptance_run_id }}
+          PRODUCTION_RELEASE_RUN_ID: ${{ inputs.production_release_run_id }}
+          PRODUCTION_DEPLOYMENT_RUN_ID: ${{ inputs.production_deployment_run_id }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:APPROVAL_GUARD)) {
+            throw "production-approval Environment 缺少最终审批守卫秘密"
+          }
+          foreach ($name in @("ACCEPTANCE_RUN_ID", "PRODUCTION_RELEASE_RUN_ID", "PRODUCTION_DEPLOYMENT_RUN_ID")) {
+            if ([Environment]::GetEnvironmentVariable($name) -notmatch '^[1-9][0-9]*$') {
+              throw "工作流运行编号必须是正整数：$name"
+            }
+          }
+
+      - name: 下载冻结发布候选和原始指标证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: production-acceptance-*
+          path: .final-production-input/acceptance
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.acceptance_run_id }}
+
+      - name: 下载正式版本发布证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: production-release-v*
+          path: .final-production-input/release
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.production_release_run_id }}
+
+      - name: 下载生产部署和两阶段冒烟证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: production-deployment-*
+          path: .final-production-input/deployment
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.production_deployment_run_id }}
+
+      - name: 固化最终生产验收记录
+        shell: pwsh
+        env:
+          ACCEPTANCE_RUN_ID: ${{ inputs.acceptance_run_id }}
+          PRODUCTION_RELEASE_RUN_ID: ${{ inputs.production_release_run_id }}
+          PRODUCTION_DEPLOYMENT_RUN_ID: ${{ inputs.production_deployment_run_id }}
+        run: >-
+          ./scripts/complete-final-production-acceptance.ps1
+          -ProductionAcceptanceDirectory .final-production-input/acceptance
+          -ProductionReleaseDirectory .final-production-input/release
+          -ProductionDeploymentDirectory .final-production-input/deployment
+          -GitCommit $env:GITHUB_SHA
+          -AcceptanceWorkflowRunId $env:ACCEPTANCE_RUN_ID
+          -ProductionReleaseWorkflowRunId $env:PRODUCTION_RELEASE_RUN_ID
+          -ProductionDeploymentWorkflowRunId $env:PRODUCTION_DEPLOYMENT_RUN_ID
+
+      - name: 保存最终生产验收记录
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: final-production-acceptance-${{ github.sha }}-${{ github.run_id }}
+          path: .final-production-acceptance/final-production-acceptance.json
+          if-no-files-found: error
+          retention-days: 365

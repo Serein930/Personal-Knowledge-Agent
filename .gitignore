@@ -42,6 +42,8 @@ tmp/
 .production-release/
 .production-deployment-input/
 .production-deployment-evidence/
+.final-production-input/
+.final-production-acceptance/
 performance-summary.json
 deploy/.secret-versions.env
 deploy/.secret-versions.env.pending

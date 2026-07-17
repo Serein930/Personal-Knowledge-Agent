@@ -366,3 +366,7 @@ com.agentmind
 # 生产 Runner 与部署环境引导进展
 
 已增加 `agentmind-production` 专用 Runner 安全注册脚本、`production-deployment` Environment 声明式配置脚本和无秘密模板。生产部署工作流在下载正式制品前执行零变更就绪检查，验证 PowerShell、Git、Docker、Swarm 管理面、加密覆盖网络、服务副本与滚动回滚策略，并保存独立就绪报告。注册令牌和 Environment 秘密只允许从当前进程注入，任何真实写操作均要求显式确认。真实 Runner 注册、Environment 创建和完整发布链路仍需在仓库外准备生产资源后由维护者执行。
+
+# 最终生产验收证据闭环进展
+
+已增加受 `production-approval` Environment 保护的最终生产验收归档工作流。该工作流从指定的发布候选验收、正式版本发布和生产部署运行下载原始制品，重新校验六类 staging 证据哈希，并要求冻结候选、GitHub Release、摘要镜像、生产部署及两阶段冒烟绑定同一提交。最终记录直接从 k6、故障注入和灾备原始报告提取 P95、P99、请求吞吐、RPO、RTO 和实例恢复时间，同时保存全部来源文件哈希。真实外部运行完成前，该能力只能视为证据校验代码就绪，不能视为生产验收已经通过。

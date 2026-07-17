@@ -194,3 +194,30 @@ Vault Agent 渲染、Docker Secret 版本化轮换、10% 灰度部署、外部 k
 冻结清单会保存每份原始 JSON 的 SHA-256。晋级脚本会再次计算哈希、检查清单时效、当前提交和灰度服务镜像；任何报告被修改、缺失、过期或来自
 其他版本时都会拒绝更新稳定组。完整 Runner、Vault、restic 和 GitHub Environment 配置见
 `PRODUCTION_ACCEPTANCE_EVIDENCE_RUNBOOK.md`。
+
+## 九、最终生产验收归档
+
+真实生产部署完成后，在 GitHub Actions 手工运行“最终生产验收归档”，填写以下三个成功运行编号：
+
+- “发布候选全链路验收”运行编号。
+- “正式版本发布”运行编号。
+- “独立生产集群部署”运行编号。
+
+该工作流进入受保护的 `production-approval` Environment，并从指定运行下载原始产物。它不会重新部署服务，
+只执行最终交叉校验：
+
+- 六类 staging 证据必须与冻结清单的 SHA-256 一致。
+- 冻结候选、正式版本和生产部署必须绑定同一提交和不可变镜像。
+- 生产部署不得发生回滚，生产 Runner 就绪报告必须通过。
+- 灰度和稳定组冒烟必须分别通过。
+- RPO、RTO、检索与 RAG 的 P95/P99、请求吞吐和故障恢复时间必须来自原始报告。
+
+成功后生成 `final-production-acceptance.json`，保存三次运行编号、真实指标和全部来源哈希，作为最终发布验收记录。
+
+本地可运行纯证据边界测试：
+
+```powershell
+./scripts/tests/final-production-acceptance-tests.ps1
+```
+
+本地测试使用固定数据，不代表真实生产指标。只有 GitHub 受保护环境下载的真实产物能够用于最终验收。
