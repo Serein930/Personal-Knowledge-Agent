@@ -38,6 +38,8 @@ tmp/
 .staging-e2e-evidence/
 .final-release-input/
 .final-release-approval/
+.production-release-input/
+.production-release/
 performance-summary.json
 deploy/.secret-versions.env
 deploy/.secret-versions.env.pending
