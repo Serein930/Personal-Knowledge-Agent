@@ -382,3 +382,9 @@ com.agentmind
 已增加独立 `local-ai` profile，并在 `production` profile 中强制启用 Spring AI 回答生成器和真实 ChatModel，防止生产环境沿用公共 Mock 默认值。模型名称、温度和安全降级开关均支持外部配置；生产模型审计切换到 JDBC 持久化。
 
 同步回答和 SSE 完成结果现在都会保留供应商 Token 元数据。模型失败时，原始异常只进入日志和审计，面向客户端的降级回答与拒答原因不再携带供应商内部细节。无密钥自动跳过的真实 API 测试、启动方式和人工联调步骤见 `SPRING_AI_RAG_RUNBOOK.md`。
+
+# PDF 与 Word 文档解析进展
+
+已接入 PDFBox 3.0.8 和 Apache Tika 3.3.1：PDF 使用独立解析器提取标题与文本层正文，DOC/DOCX 由 Tika 根据文件签名选择 POI 解析器。解析链路增加 PDF 页数、解压后字符数、空文本、扫描件、损坏和加密文档保护，失败时文档与任务统一进入 `FAILED`，不再产生零 chunk 的成功记录。
+
+自动化测试在内存中生成真实 PDF、DOCX 和 Word 兼容 DOC 内容，并贯穿对象保存、文本提取、chunk 切分、确定性 Embedding 与向量检索。支持范围、配置和人工联调步骤见 `DOCUMENT_PARSING_RUNBOOK.md`。

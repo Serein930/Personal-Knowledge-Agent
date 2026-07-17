@@ -15,8 +15,8 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 文件进入摄取流程前的上传校验器。
  *
- * <p>当前阶段只聚焦空文件、大小、文件名和扩展名校验。内容嗅探、病毒扫描、便携式文档 页数限制和压缩包限制
- * 后续可以继续加在这里，不需要改变控制层契约。</p>
+ * <p>该层负责空文件、大小、文件名和扩展名校验；PDF 页数、Office 解包规模和真实格式识别
+ * 由后续解析器完成。病毒扫描仍可继续加在这里，不需要改变控制层契约。</p>
  */
 @Component
 public class FileUploadValidator {

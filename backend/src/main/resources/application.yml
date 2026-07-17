@@ -198,3 +198,7 @@ agentmind:
     max-upload-size-bytes: 20971520
     web-fetch-timeout-seconds: 8
     web-fetch-max-bytes: 1048576
+    parsing:
+      # 限制复杂文档的解析规模，防止超大页数或解压后文本耗尽服务内存。
+      max-pdf-pages: ${AGENTMIND_PARSING_MAX_PDF_PAGES:500}
+      max-extracted-characters: ${AGENTMIND_PARSING_MAX_CHARACTERS:2000000}

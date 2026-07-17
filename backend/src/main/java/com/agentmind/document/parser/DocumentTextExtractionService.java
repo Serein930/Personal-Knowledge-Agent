@@ -3,12 +3,13 @@ package com.agentmind.document.parser;
 import com.agentmind.document.model.DocumentSourceType;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * 根据文档来源类型选择文本解析器。
  *
- * <p>暂不支持解析的格式会返回空文本，而不是让整个上传流程失败。这样当前阶段可以先保存
- * 便携式文档和办公文档原始文件，同时清楚标记解析能力还需要后续补齐。</p>
+ * <p>服务只负责选择解析策略并校验统一结果。不存在解析器或正文为空时必须明确失败，
+ * 禁止把零片段文档标记为摄取成功。</p>
  */
 @Service
 public class DocumentTextExtractionService {
@@ -20,10 +21,18 @@ public class DocumentTextExtractionService {
     }
 
     public ExtractedDocumentText extract(DocumentSourceType sourceType, String sourceName, byte[] content) {
-        return extractors.stream()
+        if (sourceType == null || content == null || content.length == 0) {
+            throw new DocumentTextExtractionException("文档类型或内容不能为空");
+        }
+        ExtractedDocumentText extracted = extractors.stream()
                 .filter(extractor -> extractor.supports(sourceType, sourceName))
                 .findFirst()
                 .map(extractor -> extractor.extract(content, sourceName))
-                .orElseGet(() -> new ExtractedDocumentText(sourceName, ""));
+                .orElseThrow(() -> new DocumentTextExtractionException(
+                        "当前没有可处理该文件类型的文本解析器：" + sourceType));
+        if (extracted == null || !StringUtils.hasText(extracted.text())) {
+            throw new DocumentTextExtractionException("文档未提取到可索引文本");
+        }
+        return extracted;
     }
 }

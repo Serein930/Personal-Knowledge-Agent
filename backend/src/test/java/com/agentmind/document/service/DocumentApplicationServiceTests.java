@@ -2,6 +2,9 @@ package com.agentmind.document.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.agentmind.document.testfixture.DocumentBinaryTestFixtures.docx;
+import static com.agentmind.document.testfixture.DocumentBinaryTestFixtures.pdf;
+import static com.agentmind.document.testfixture.DocumentBinaryTestFixtures.wordCompatibleDoc;
 
 import com.agentmind.common.exception.BusinessException;
 import com.agentmind.common.response.PageResponse;
@@ -20,6 +23,9 @@ import com.agentmind.document.parser.DocumentTextExtractionService;
 import com.agentmind.document.parser.HtmlTextExtractor;
 import com.agentmind.document.parser.MarkdownTextExtractor;
 import com.agentmind.document.parser.PlainTextExtractor;
+import com.agentmind.document.parser.DocumentParsingProperties;
+import com.agentmind.document.parser.PdfTextExtractor;
+import com.agentmind.document.parser.WordTextExtractor;
 import com.agentmind.ingestion.model.IngestionTaskStatus;
 import com.agentmind.ingestion.model.dto.IngestionTaskResponse;
 import com.agentmind.ingestion.web.HtmlFetchResult;
@@ -53,6 +59,7 @@ class DocumentApplicationServiceTests {
     private final InMemoryVectorStore vectorStore = new InMemoryVectorStore();
     private final InMemoryKnowledgeWorkspaceRepository workspaceRepository =
             new InMemoryKnowledgeWorkspaceRepository();
+    private final DocumentParsingProperties parsingProperties = parsingProperties();
     private final DocumentApplicationService service = new DocumentApplicationService(
             new FileUploadValidator(20_971_520L),
             objectStorageService,
@@ -61,7 +68,9 @@ class DocumentApplicationServiceTests {
             new DocumentTextExtractionService(List.of(
                     new MarkdownTextExtractor(),
                     new PlainTextExtractor(),
-                    new HtmlTextExtractor()
+                    new HtmlTextExtractor(),
+                    new PdfTextExtractor(parsingProperties),
+                    new WordTextExtractor(parsingProperties)
             )),
             new MarkdownAwareTextChunker(),
             new KnowledgeIndexingService(embeddingClient, vectorStore, new InMemoryBm25KeywordIndex()),
@@ -105,6 +114,92 @@ class DocumentApplicationServiceTests {
         assertThat(vectorStore.search(1L, embeddingClient.embed("thread pool overhead"), 3))
                 .isNotEmpty();
         assertThat(objectStorageService.storeCount).isEqualTo(1);
+    }
+
+    @Test
+    void createFileUploadTaskShouldIndexPdfTextEndToEnd() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "executor-guide.pdf",
+                "application/pdf",
+                pdf("Executor Guide", List.of(
+                        "Bounded queues prevent unbounded task accumulation.",
+                        "Rejection policies protect an overloaded service."
+                ))
+        );
+
+        FileDocumentUploadResponse response = service.createFileUploadTask(
+                1L, file, null, List.of("PDF", "Concurrency"));
+        List<DocumentChunkResponse> chunks = service.listDocumentChunks(1L, response.documentId());
+
+        assertThat(response.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
+        assertThat(chunks).isNotEmpty();
+        assertThat(chunks).extracting(DocumentChunkResponse::content)
+                .anyMatch(content -> content.contains("Bounded queues"));
+        assertThat(vectorStore.search(1L, embeddingClient.embed("bounded task queues"), 10))
+                .anyMatch(result -> result.documentId().equals(response.documentId()));
+    }
+
+    @Test
+    void createFileUploadTaskShouldIndexDocxTextEndToEnd() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "rag-guide.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                docx("RAG Guide", List.of(
+                        "Hybrid retrieval combines semantic and keyword recall.",
+                        "Reranking improves the final context order."
+                ))
+        );
+
+        FileDocumentUploadResponse response = service.createFileUploadTask(
+                1L, file, null, List.of("Word", "RAG"));
+        List<DocumentChunkResponse> chunks = service.listDocumentChunks(1L, response.documentId());
+
+        assertThat(response.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
+        assertThat(chunks).extracting(DocumentChunkResponse::content)
+                .anyMatch(content -> content.contains("Hybrid retrieval"));
+        assertThat(vectorStore.search(1L, embeddingClient.embed("hybrid semantic keyword retrieval"), 10))
+                .anyMatch(result -> result.documentId().equals(response.documentId()));
+    }
+
+    @Test
+    void createFileUploadTaskShouldIndexLegacyDocCompatibleTextEndToEnd() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "legacy-notes.doc",
+                "application/msword",
+                wordCompatibleDoc("Legacy Word notes describe JVM memory regions.")
+        );
+
+        FileDocumentUploadResponse response = service.createFileUploadTask(
+                1L, file, null, List.of("Word", "JVM"));
+
+        assertThat(response.status()).isEqualTo(IngestionTaskStatus.SUCCEEDED);
+        assertThat(service.listDocumentChunks(1L, response.documentId()))
+                .extracting(DocumentChunkResponse::content)
+                .anyMatch(content -> content.contains("JVM memory regions"));
+    }
+
+    @Test
+    void createFileUploadTaskShouldMarkCorruptedPdfAsFailed() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "broken.pdf",
+                "application/pdf",
+                "not a pdf".getBytes(StandardCharsets.UTF_8)
+        );
+
+        assertThatThrownBy(() -> service.createFileUploadTask(1L, file, null, List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("PDF 文件损坏");
+
+        IngestionTaskResponse failedTask = service.getTask(1L, 1001L);
+        assertThat(failedTask.status()).isEqualTo(IngestionTaskStatus.FAILED);
+        assertThat(failedTask.errorMessage()).contains("PDF 文件损坏");
+        assertThat(service.listDocuments(
+                1L, 1, 20, "broken.pdf", DocumentSourceType.PDF, IngestionStatus.FAILED, null
+        ).records()).hasSize(1);
     }
 
     @Test
@@ -194,6 +289,13 @@ class DocumentApplicationServiceTests {
             return new StoredObject(storageKey, Path.of("mock-storage").resolve(originalName), originalName, contentType,
                     bytes.length);
         }
+    }
+
+    private static DocumentParsingProperties parsingProperties() {
+        DocumentParsingProperties properties = new DocumentParsingProperties();
+        properties.setMaxPdfPages(20);
+        properties.setMaxExtractedCharacters(100_000);
+        return properties;
     }
 
     private static class StaticHtmlFetchService implements HtmlFetchService {

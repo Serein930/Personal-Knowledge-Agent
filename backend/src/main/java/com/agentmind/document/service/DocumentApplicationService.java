@@ -17,6 +17,7 @@ import com.agentmind.document.model.dto.FileDocumentUploadResponse;
 import com.agentmind.document.model.dto.WebPageCaptureRequest;
 import com.agentmind.document.model.dto.WebPageCaptureResponse;
 import com.agentmind.document.parser.DocumentTextExtractionService;
+import com.agentmind.document.parser.DocumentTextExtractionException;
 import com.agentmind.document.parser.ExtractedDocumentText;
 import com.agentmind.ingestion.model.IngestionTaskStatus;
 import com.agentmind.ingestion.model.IngestionTaskType;
@@ -154,6 +155,11 @@ public class DocumentApplicationService {
             putTask(taskId, documentId, IngestionTaskType.FILE_UPLOAD, IngestionTaskStatus.SUCCEEDED,
                     100, storedObject.storageKey(), null, createdAt);
             return new FileDocumentUploadResponse(documentId, taskId, IngestionTaskStatus.SUCCEEDED);
+        } catch (DocumentTextExtractionException exception) {
+            markTaskFailed(documentId, taskId, displayTitle, validation.sourceType(), workspaceId,
+                    normalizedTags, IngestionTaskType.FILE_UPLOAD, validation.safeFilename(),
+                    exception.getMessage());
+            throw new BusinessException(ErrorCode.BAD_REQUEST, exception.getMessage());
         } catch (IOException exception) {
             markTaskFailed(documentId, taskId, displayTitle, validation.sourceType(), workspaceId,
                     normalizedTags, IngestionTaskType.FILE_UPLOAD, validation.safeFilename(),
