@@ -23,6 +23,10 @@
 
 灾备 Runner 不能连接生产数据库，也不能与预发布主集群共享持久卷。它只允许访问专用的可丢弃 Docker Compose 环境和只读备份仓库。
 
+工作流现在会在任何秘密轮换和灰度变更前并行执行双 Runner 零变更就绪检查。主 Runner 必须通过工具链、Swarm 管理面、加密覆盖网络和服务副本检查；
+灾备 Runner 必须通过管理面隔离、Compose 配置和 restic 异地仓库只读访问检查。任一角色失败时，后续变更任务不会启动。完整部署步骤见
+`STAGING_ENVIRONMENT_DEPLOYMENT_RUNBOOK.md`。
+
 ## 三、GitHub Environment 配置
 
 为 `staging` Environment 启用必要审核人、禁止自审并限制允许部署的分支或标签。配置以下变量：

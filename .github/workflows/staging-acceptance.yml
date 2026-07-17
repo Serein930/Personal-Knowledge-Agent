@@ -32,8 +32,83 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  primary_runner_readiness:
+    name: 主验收 Runner 零变更就绪检查
+    runs-on: [self-hosted, agentmind-staging]
+    environment: staging
+    timeout-minutes: 10
+    env:
+      AGENTMIND_ENVIRONMENT: staging
+    steps:
+      - name: 检出就绪检查脚本
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 验证主集群工具、Vault、加密网络和服务拓扑
+        shell: pwsh
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          VAULT_AGENT_CONFIG: ${{ vars.STAGING_VAULT_AGENT_CONFIG }}
+          VAULT_RENDERED_DIRECTORY: ${{ vars.STAGING_VAULT_RENDERED_DIRECTORY }}
+        run: >-
+          ./scripts/test-staging-runner-readiness.ps1
+          -Role primary
+          -BaseUrl $env:STAGING_BASE_URL
+          -VaultAgentConfig $env:VAULT_AGENT_CONFIG
+          -VaultRenderedDirectory $env:VAULT_RENDERED_DIRECTORY
+
+      - name: 保存主 Runner 就绪报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-primary-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .staging-readiness-reports/primary-runner-readiness.json
+          if-no-files-found: error
+          retention-days: 90
+
+  disaster_recovery_runner_readiness:
+    name: 灾备 Runner 隔离与异地仓库就绪检查
+    runs-on: [self-hosted, agentmind-staging-dr]
+    environment: staging
+    timeout-minutes: 10
+    env:
+      AGENTMIND_ENVIRONMENT: staging
+      AWS_ACCESS_KEY_ID: ${{ secrets.STAGING_BACKUP_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.STAGING_BACKUP_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.STAGING_BACKUP_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: ${{ vars.STAGING_BACKUP_REGION }}
+    steps:
+      - name: 检出就绪检查脚本
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 验证灾备隔离、恢复配置和异地仓库只读访问
+        shell: pwsh
+        env:
+          DR_VAULT_AGENT_CONFIG: ${{ vars.STAGING_DR_VAULT_AGENT_CONFIG }}
+          DR_VAULT_RENDERED_DIRECTORY: ${{ vars.STAGING_DR_VAULT_RENDERED_DIRECTORY }}
+          RESTIC_REPOSITORY: ${{ vars.STAGING_RESTIC_REPOSITORY }}
+          RESTIC_PASSWORD_FILE: ${{ vars.STAGING_RESTIC_PASSWORD_FILE }}
+          DR_COMPOSE_FILE: ${{ vars.STAGING_DR_COMPOSE_FILE }}
+        run: >-
+          ./scripts/test-staging-runner-readiness.ps1
+          -Role disaster-recovery
+          -VaultAgentConfig $env:DR_VAULT_AGENT_CONFIG
+          -VaultRenderedDirectory $env:DR_VAULT_RENDERED_DIRECTORY
+          -DisasterRecoveryComposeFile $env:DR_COMPOSE_FILE
+          -ResticRepository $env:RESTIC_REPOSITORY
+          -ResticPasswordFile $env:RESTIC_PASSWORD_FILE
+
+      - name: 保存灾备 Runner 就绪报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-dr-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .staging-readiness-reports/disaster-recovery-runner-readiness.json
+          if-no-files-found: error
+          retention-days: 90
+
   preflight_canary:
     name: 预检、秘密轮换与灰度部署
+    needs: [primary_runner_readiness, disaster_recovery_runner_readiness]
     runs-on: [self-hosted, agentmind-staging]
     environment: staging
     timeout-minutes: 30
@@ -309,10 +384,12 @@ jobs:
 
   abort_on_failure:
     name: 验收失败时撤销灰度
-    needs: [preflight_canary, capacity, fault_injection, disaster_recovery, freeze_promote]
+    needs: [primary_runner_readiness, disaster_recovery_runner_readiness, preflight_canary, capacity, fault_injection, disaster_recovery, freeze_promote]
     if: >-
       ${{
         always() &&
+        needs.primary_runner_readiness.result == 'success' &&
+        needs.disaster_recovery_runner_readiness.result == 'success' &&
         (needs.preflight_canary.result != 'success' ||
          needs.capacity.result != 'success' ||
          needs.fault_injection.result != 'success' ||

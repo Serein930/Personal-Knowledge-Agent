@@ -334,3 +334,7 @@ com.agentmind
 已补齐固定 Maven 3.9.11 且校验分发包摘要的 Maven Wrapper，并建立基于 Playwright 的第一条前后端真实业务闭环：自动启动隔离的 Spring Boot 与 Vite 服务，上传固定 Markdown 资料，验证文档摄取与知识库展示，再通过 SSE 完成带引用来源的 RAG 问答。该用例已接入独立 GitHub Actions 工作流，详细操作见 `FULL_STACK_E2E_RUNBOOK.md`。
 
 真实 RPO、RTO、P95、P99、最大吞吐及故障恢复结论仍必须由受保护预发布环境执行现有生产证据工作流后生成；在这些证据全部通过前，不冻结发布候选版本。
+
+# 受保护预发布环境就绪门禁进展
+
+已为主验收 Runner 和独立灾备 Runner 增加零变更就绪检查，并将两者设为 `staging-acceptance.yml` 中 Vault 轮换和灰度部署的共同前置条件。检查覆盖 PowerShell、Docker、Vault、Cosign、restic、Swarm 管理面、加密覆盖网络、服务副本、灾备隔离、Compose 配置和异地仓库只读访问；就绪报告不会混入六类发布证据。另提供不含秘密的 OIDC、PostgreSQL、Redis、MinIO、OpenSearch 和 OTLP 配置模板，完整部署说明见 `STAGING_ENVIRONMENT_DEPLOYMENT_RUNBOOK.md`。
