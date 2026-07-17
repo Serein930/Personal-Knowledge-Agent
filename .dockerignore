@@ -3,6 +3,7 @@
 .idea
 .m2
 .agents
+.env*
 ui/node_modules
 ui/dist
 backend/target
@@ -12,3 +13,8 @@ logs
 docs
 observability
 scripts
+deploy
+.agentmind-backups
+.disaster-recovery-reports
+.fault-injection-reports
+performance-summary.json

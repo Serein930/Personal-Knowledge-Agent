@@ -1,0 +1,92 @@
+name: 预发布容量与故障验收
+
+on:
+  workflow_dispatch:
+    inputs:
+      virtual_users:
+        description: k6 并发用户数
+        required: true
+        default: "30"
+        type: string
+      duration:
+        description: 稳态压测时长
+        required: true
+        default: "5m"
+        type: string
+      run_fault_injection:
+        description: 是否在自托管预发布节点执行单实例故障注入
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  capacity-gate:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - name: 检出容量脚本
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 配置 k6
+        uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1.2.1
+
+      - name: 验证预发布变量和令牌
+        env:
+          BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          ACCESS_TOKEN: ${{ secrets.STAGING_ACCESS_TOKEN }}
+          WORKSPACE_ID: ${{ vars.STAGING_WORKSPACE_ID }}
+        run: |
+          test -n "$BASE_URL"
+          test -n "$ACCESS_TOKEN"
+          test -n "$WORKSPACE_ID"
+
+      - name: 执行正式规格容量门禁
+        env:
+          BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          ACCESS_TOKEN: ${{ secrets.STAGING_ACCESS_TOKEN }}
+          WORKSPACE_ID: ${{ vars.STAGING_WORKSPACE_ID }}
+          VUS: ${{ inputs.virtual_users }}
+          DURATION: ${{ inputs.duration }}
+          RAMP_UP: 1m
+        run: k6 run scripts/production-capacity-test.js
+
+      - name: 保存原始容量报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-capacity-${{ github.run_id }}
+          path: performance-summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+  fault-injection:
+    if: inputs.run_fault_injection == true
+    runs-on: [self-hosted, agentmind-staging]
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: 检出故障注入脚本
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 执行单实例故障和自动恢复验证
+        shell: pwsh
+        env:
+          AGENTMIND_ENVIRONMENT: staging
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+        run: >-
+          ./scripts/run-fault-injection.ps1
+          -BaseUrl $env:STAGING_BASE_URL
+          -ConfirmStagingFaultInjection
+
+      - name: 保存故障注入报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-fault-${{ github.run_id }}
+          path: .fault-injection-reports/*.json
+          if-no-files-found: error
+          retention-days: 30

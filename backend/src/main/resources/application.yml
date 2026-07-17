@@ -68,6 +68,11 @@ agentmind:
       store: ${AGENTMIND_CORE_PERSISTENCE_STORE:memory}
   web:
     allowed-origin: ${AGENTMIND_ALLOWED_ORIGIN:http://localhost:5173}
+    trusted-proxy:
+      # 开发环境默认关闭；生产环境由内部网关网段显式开启。
+      enabled: ${AGENTMIND_TRUSTED_PROXY_ENABLED:false}
+      require-https: ${AGENTMIND_TRUSTED_PROXY_REQUIRE_HTTPS:true}
+      cidrs: ${AGENTMIND_TRUSTED_PROXY_CIDRS:}
   agent:
     persistence:
       store: memory

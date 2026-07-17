@@ -22,7 +22,8 @@ spring:
 
 server:
   shutdown: graceful
-  forward-headers-strategy: framework
+  # 转发头由自定义可信代理过滤器校验，禁止框架在校验前直接采用客户端头部。
+  forward-headers-strategy: none
   tomcat:
     connection-timeout: 10s
 
@@ -58,8 +59,13 @@ agentmind:
   rate-limit:
     mode: redis
     fail-open: false
+    client-ip-header: X-Forwarded-For
   web:
     allowed-origin: ${AGENTMIND_ALLOWED_ORIGIN}
+    trusted-proxy:
+      enabled: true
+      require-https: true
+      cidrs: ${AGENTMIND_TRUSTED_PROXY_CIDRS}
   storage:
     type: minio
     minio:

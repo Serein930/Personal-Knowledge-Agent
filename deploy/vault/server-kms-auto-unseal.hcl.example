@@ -1,0 +1,11 @@
+# 本文件只展示 Vault 服务端自动解封边界，不包含云凭据或真实密钥编号。
+# AWS 凭据必须来自实例角色，VAULT_AWSKMS_SEAL_KEY_ID 等参数由部署环境注入。
+seal "awskms" {
+  region = "ap-southeast-1"
+}
+
+# Vault 数据和审计日志必须位于加密持久盘，且审计日志发送到独立安全域。
+storage "raft" {
+  path = "/vault/data"
+  node_id = "replace-at-deploy-time"
+}

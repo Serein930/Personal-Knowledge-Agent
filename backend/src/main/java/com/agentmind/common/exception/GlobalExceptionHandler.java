@@ -66,6 +66,7 @@ public class GlobalExceptionHandler {
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
             case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
+            case UNTRUSTED_PROXY -> HttpStatus.BAD_REQUEST;
             case DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case RESOURCE_CONFLICT -> HttpStatus.CONFLICT;

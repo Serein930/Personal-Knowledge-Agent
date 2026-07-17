@@ -53,6 +53,7 @@ class RagStreamingToolCallControllerTests {
                 .andExpect(request().asyncStarted())
                 .andReturn();
 
+        awaitStreamEvent(started, "event:complete", 5_000L);
         MvcResult completed = mockMvc.perform(asyncDispatch(started))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("event:delta")))
@@ -63,6 +64,21 @@ class RagStreamingToolCallControllerTests {
 
         String stream = completed.getResponse().getContentAsString();
         assertThatEventOrder(stream, "event:delta", "event:tool_call", "event:complete");
+    }
+
+    private void awaitStreamEvent(MvcResult result, String expectedEvent, long timeoutMillis)
+            throws InterruptedException, java.io.UnsupportedEncodingException {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        while (System.nanoTime() < deadline) {
+            if (result.getResponse().getContentAsString().contains(expectedEvent)) {
+                return;
+            }
+            // SseEmitter 在独立线程写响应，轮询只用于消除 asyncDispatch 抢先执行的测试竞态。
+            Thread.sleep(10L);
+        }
+        org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
+                .as("等待流式事件超时")
+                .contains(expectedEvent);
     }
 
     private void assertThatEventOrder(String stream, String first, String second, String third) {

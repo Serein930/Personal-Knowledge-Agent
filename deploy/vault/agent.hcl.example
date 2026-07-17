@@ -1,0 +1,72 @@
+# Vault Agent 只负责认证并把秘密渲染到内存盘或受限目录；渲染完成后退出，由发布系统执行版本化轮换。
+exit_after_auth = true
+pid_file = "/tmp/vault-agent.pid"
+
+vault {
+  address = "https://vault.example.com:8200"
+}
+
+auto_auth {
+  method "approle" {
+    mount_path = "auth/approle"
+    config = {
+      role_id_file_path = "/vault/bootstrap/role_id"
+      secret_id_file_path = "/vault/bootstrap/secret_id"
+      remove_secret_id_file_after_reading = true
+    }
+  }
+}
+
+template_config {
+  exit_on_retry_failure = true
+  static_secret_render_interval = "5m"
+}
+
+template {
+  destination = "/vault/rendered/spring.datasource.password"
+  perms = "0640"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/production\" }}{{ .Data.data.database_password }}{{ end }}"
+}
+
+template {
+  destination = "/vault/rendered/spring.data.redis.password"
+  perms = "0640"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/production\" }}{{ .Data.data.redis_password }}{{ end }}"
+}
+
+template {
+  destination = "/vault/rendered/agentmind.storage.minio.access-key"
+  perms = "0640"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/production\" }}{{ .Data.data.minio_access_key }}{{ end }}"
+}
+
+template {
+  destination = "/vault/rendered/agentmind.storage.minio.secret-key"
+  perms = "0640"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/production\" }}{{ .Data.data.minio_secret_key }}{{ end }}"
+}
+
+template {
+  destination = "/vault/rendered/agentmind.keyword-index.opensearch.password"
+  perms = "0640"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/production\" }}{{ .Data.data.opensearch_password }}{{ end }}"
+}
+
+template {
+  destination = "/vault/rendered/agentmind_tls_certificate.pem"
+  perms = "0640"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/tls\" }}{{ .Data.data.certificate }}{{ end }}"
+}
+
+template {
+  destination = "/vault/rendered/agentmind_tls_private_key.pem"
+  perms = "0600"
+  error_on_missing_key = true
+  contents = "{{ with secret \"secret/data/agentmind/tls\" }}{{ .Data.data.private_key }}{{ end }}"
+}

@@ -1,0 +1,76 @@
+﻿param(
+    [Parameter(Mandatory = $true)]
+    [string]$RenderedSecretDirectory,
+    [string]$StackName = "agentmind",
+    [string]$VersionFile = "$PSScriptRoot/.secret-versions.env"
+)
+
+$ErrorActionPreference = "Stop"
+$resolvedDirectory = (Resolve-Path -Path $RenderedSecretDirectory).Path
+$version = Get-Date -Format "yyyyMMddHHmmss"
+
+# 文件名是应用属性名或网关证书名，值只在 docker secret create 的标准输入中短暂出现。
+$definitions = @(
+    [pscustomobject]@{ File = "spring.datasource.password"; Base = "agentmind_database_password"; Environment = "AGENTMIND_DATABASE_PASSWORD_SECRET_NAME"; Target = "spring.datasource.password"; Services = @("agentmind-backend-canary", "agentmind-backend") },
+    [pscustomobject]@{ File = "spring.data.redis.password"; Base = "agentmind_redis_password"; Environment = "AGENTMIND_REDIS_PASSWORD_SECRET_NAME"; Target = "spring.data.redis.password"; Services = @("agentmind-backend-canary", "agentmind-backend") },
+    [pscustomobject]@{ File = "agentmind.storage.minio.access-key"; Base = "agentmind_minio_access_key"; Environment = "AGENTMIND_MINIO_ACCESS_KEY_SECRET_NAME"; Target = "agentmind.storage.minio.access-key"; Services = @("agentmind-backend-canary", "agentmind-backend") },
+    [pscustomobject]@{ File = "agentmind.storage.minio.secret-key"; Base = "agentmind_minio_secret_key"; Environment = "AGENTMIND_MINIO_SECRET_KEY_SECRET_NAME"; Target = "agentmind.storage.minio.secret-key"; Services = @("agentmind-backend-canary", "agentmind-backend") },
+    [pscustomobject]@{ File = "agentmind.keyword-index.opensearch.password"; Base = "agentmind_opensearch_password"; Environment = "AGENTMIND_OPENSEARCH_PASSWORD_SECRET_NAME"; Target = "agentmind.keyword-index.opensearch.password"; Services = @("agentmind-backend-canary", "agentmind-backend") },
+    [pscustomobject]@{ File = "agentmind_tls_certificate.pem"; Base = "agentmind_tls_certificate"; Environment = "AGENTMIND_TLS_CERTIFICATE_SECRET_NAME"; Target = "agentmind_tls_certificate.pem"; Services = @("agentmind-gateway") },
+    [pscustomobject]@{ File = "agentmind_tls_private_key.pem"; Base = "agentmind_tls_private_key"; Environment = "AGENTMIND_TLS_PRIVATE_KEY_SECRET_NAME"; Target = "agentmind_tls_private_key.pem"; Services = @("agentmind-gateway") }
+)
+
+function Assert-DockerCommand([string]$Message) {
+    if ($LASTEXITCODE -ne 0) {
+        throw $Message
+    }
+}
+
+function Get-ServiceSecretName([string]$ServiceName, [string]$Target) {
+    $json = docker service inspect $ServiceName --format '{{json .Spec.TaskTemplate.ContainerSpec.Secrets}}'
+    Assert-DockerCommand "读取服务 $ServiceName 的秘密配置失败"
+    if ([string]::IsNullOrWhiteSpace($json) -or $json -eq "null") {
+        return $null
+    }
+    $references = $json | ConvertFrom-Json
+    $reference = $references | Where-Object { $_.File.Name -eq $Target } | Select-Object -First 1
+    return $reference.SecretName
+}
+
+$created = @{}
+foreach ($definition in $definitions) {
+    $path = Join-Path $resolvedDirectory $definition.File
+    if (-not (Test-Path $path) -or (Get-Item $path).Length -eq 0) {
+        throw "轮换输入文件不存在或为空：$($definition.File)"
+    }
+    $newName = "$($definition.Base)_$version"
+    docker secret create $newName $path | Out-Null
+    Assert-DockerCommand "创建版本化秘密 $newName 失败"
+    $created[$definition.Environment] = $newName
+}
+
+$pendingVersionFile = "$VersionFile.pending"
+# pending 文件不包含秘密值；若发布中断，运维人员可据此识别已经创建的新版本。
+$created.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" } |
+    Set-Content -Path $pendingVersionFile -Encoding UTF8
+
+foreach ($shortServiceName in @("agentmind-backend-canary", "agentmind-backend", "agentmind-gateway")) {
+    $serviceName = "$StackName`_$shortServiceName"
+    $serviceDefinitions = $definitions | Where-Object { $_.Services -contains $shortServiceName }
+    $arguments = @("service", "update", "--detach=false")
+    foreach ($definition in $serviceDefinitions) {
+        $oldName = Get-ServiceSecretName $serviceName $definition.Target
+        if (-not [string]::IsNullOrWhiteSpace($oldName)) {
+            $arguments += @("--secret-rm", $oldName)
+        }
+        $newName = $created[$definition.Environment]
+        $arguments += @("--secret-add", "source=$newName,target=$($definition.Target)")
+    }
+    $arguments += $serviceName
+    & docker @arguments | Out-Host
+    Assert-DockerCommand "服务 $serviceName 批量轮换秘密失败；请保留 $pendingVersionFile 并检查服务规格"
+}
+
+# 只有三个服务全部收敛后才把 pending 清单晋级为当前版本文件。
+Move-Item -Path $pendingVersionFile -Destination $VersionFile -Force
+Write-Host "秘密轮换完成。旧版本仍保留用于回滚，验证稳定后再按变更单人工清理。"

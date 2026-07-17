@@ -4,6 +4,10 @@
 
 > 生产验收第二阶段已补充 Redis 分布式限流、外部秘密、备份恢复、容器滚动发布、k6 基线及真实依赖测试入口，详见 `PRODUCTION_ACCEPTANCE_RUNBOOK.md`。
 
+> 生产验收最终阶段已补充 TLS 网关、可信代理、Vault/KMS 轮换入口、异地加密备份、RPO/RTO 演练、
+> SBOM/漏洞扫描/镜像签名门禁、灰度发布、k6 和故障注入流程，详见 `PRODUCTION_FINAL_ACCEPTANCE_RUNBOOK.md`。
+> 真实环境证据必须在受保护的预发布环境执行后写入容量与灾备报告。
+
 > 生产验收进展：已完成 JWT/OIDC 资源服务器、当前用户统一解析、用户与知识空间成员 PostgreSQL 持久化、文档元数据持久化及 MinIO 可切换适配器。操作说明见 `SECURITY_AND_CORE_PERSISTENCE_RUNBOOK.md`。
 
 ## 后端定位

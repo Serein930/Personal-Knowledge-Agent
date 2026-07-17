@@ -1,6 +1,7 @@
 # 基础镜像允许由企业镜像仓库覆盖，默认仍使用社区官方镜像名称。
-ARG MAVEN_IMAGE=maven:3.9.9-eclipse-temurin-21-alpine
-ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-alpine
+# 默认基础镜像固定到已验收摘要，防止同名标签在扫描和发布之间发生漂移。
+ARG MAVEN_IMAGE=maven:3.9.9-eclipse-temurin-21-alpine@sha256:5a8b906c4faa11d33f6c74758f67db8eac25441e14b0729f6d50ff78992be58a
+ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-alpine@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c
 
 # 构建阶段只负责解析依赖并生成可执行 Spring Boot 包。
 FROM ${MAVEN_IMAGE} AS builder

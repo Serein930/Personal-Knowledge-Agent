@@ -30,6 +30,11 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         requireValue(violations, "agentmind.core.persistence.store", "jdbc");
         requireValue(violations, "agentmind.rate-limit.mode", "redis");
         requireValue(violations, "agentmind.rate-limit.fail-open", "false");
+        requireValue(violations, "agentmind.rate-limit.client-ip-header", "X-Forwarded-For");
+        requireValue(violations, "agentmind.web.trusted-proxy.enabled", "true");
+        requireValue(violations, "agentmind.web.trusted-proxy.require-https", "true");
+        requireText(violations, "agentmind.web.trusted-proxy.cidrs");
+        requireValue(violations, "server.forward-headers-strategy", "none");
         requireValue(violations, "agentmind.storage.type", "minio");
         requireValue(violations, "agentmind.vector-store.type", "pgvector");
         requireValue(violations, "agentmind.keyword-index.type", "opensearch");

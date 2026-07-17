@@ -47,20 +47,25 @@ docker push registry.example.com/agentmind/backend:0.1.0
 
 ```powershell
 docker build `
-  --build-arg MAVEN_IMAGE=registry.example.com/base/maven:3.9.9-eclipse-temurin-21-alpine `
-  --build-arg RUNTIME_IMAGE=registry.example.com/base/eclipse-temurin:21-jre-alpine `
+  --build-arg MAVEN_IMAGE=registry.example.com/base/maven:3.9.9-eclipse-temurin-21-alpine@sha256:企业镜像摘要 `
+  --build-arg RUNTIME_IMAGE=registry.example.com/base/eclipse-temurin:21-jre-alpine@sha256:企业镜像摘要 `
   -t registry.example.com/agentmind/backend:0.1.0 .
 ```
 
 ## 四、滚动发布和回滚
+
+> 最终生产拓扑已经改为 TLS 网关、稳定组和 10% 灰度组，以下基础说明由
+> `PRODUCTION_FINAL_ACCEPTANCE_RUNBOOK.md` 中的发布步骤补充并覆盖。
 
 Docker Swarm 使用两个副本、`start-first` 更新顺序和入口路由网格。新实例通过就绪探针后才停止旧实例，
 30 秒监控窗口内失败会自动回滚。首次部署前创建外部网络和秘密：
 
 ```powershell
 docker swarm init
-docker network create --driver overlay agentmind-production
-./deploy/create-swarm-secrets.ps1
+docker network create --driver overlay --opt encrypted agentmind-production
+./deploy/create-swarm-secrets.ps1 `
+  -TlsCertificatePath "D:/secure/tls/fullchain.pem" `
+  -TlsPrivateKeyPath "D:/secure/tls/private.key"
 ./deploy/deploy-release.ps1 -Image "registry.example.com/agentmind/backend:0.1.0"
 ```
 
@@ -68,7 +73,7 @@ docker network create --driver overlay agentmind-production
 
 ```powershell
 docker service ps agentmind_agentmind-backend --no-trunc
-Invoke-RestMethod http://localhost:8081/actuator/health/readiness
+Invoke-RestMethod https://knowledge.example.com/actuator/health/readiness
 ```
 
 手工回滚：

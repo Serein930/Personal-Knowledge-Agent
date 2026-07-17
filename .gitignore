@@ -29,6 +29,14 @@ logs/
 tmp/
 .agentmind-storage/
 .agentmind-backups/
+.disaster-recovery-reports/
+.fault-injection-reports/
+performance-summary.json
+deploy/.secret-versions.env
+deploy/.secret-versions.env.pending
+deploy/vault/rendered/
+*.pem
+*.key
 
 # TypeScript build cache
 *.tsbuildinfo

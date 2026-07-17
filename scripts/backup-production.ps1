@@ -4,6 +4,7 @@
     [string]$DatabaseName = "agentmind",
     [string]$DatabaseUser = "agentmind",
     [string]$MinioBucket = "agentmind",
+    [string]$EnvironmentName = "production",
     [string]$OpenSearchSnapshotVolume = "agentmind_agentmind-opensearch-snapshots"
 )
 
@@ -58,6 +59,8 @@ Assert-LastCommand "OpenSearch 快照仓库归档失败"
 
 $files = Get-ChildItem -Path $backupDirectory -Recurse -File | Where-Object { $_.Name -ne "manifest.json" }
 $manifest = [ordered]@{
+    formatVersion = 2
+    environment = $EnvironmentName
     createdAt = (Get-Date).ToString("o")
     database = $DatabaseName
     minioBucket = $MinioBucket

@@ -1,4 +1,9 @@
-﻿param()
+﻿param(
+    [Parameter(Mandatory = $true)]
+    [string]$TlsCertificatePath,
+    [Parameter(Mandatory = $true)]
+    [string]$TlsPrivateKeyPath
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -22,5 +27,26 @@ foreach ($entry in $requiredSecrets.GetEnumerator()) {
         continue
     }
     $value | docker secret create $entry.Key - | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "创建秘密 $($entry.Key) 失败"
+    }
     Write-Host "已创建秘密 $($entry.Key)"
+}
+
+$tlsSecrets = [ordered]@{
+    "agentmind_tls_certificate" = $TlsCertificatePath
+    "agentmind_tls_private_key" = $TlsPrivateKeyPath
+}
+foreach ($entry in $tlsSecrets.GetEnumerator()) {
+    $resolvedPath = (Resolve-Path -Path $entry.Value).Path
+    $existing = docker secret ls --filter "name=$($entry.Key)" --format "{{.Name}}"
+    if ($existing -eq $entry.Key) {
+        Write-Host "TLS 秘密 $($entry.Key) 已存在，保持原值；证书轮换请使用版本化轮换脚本。"
+        continue
+    }
+    docker secret create $entry.Key $resolvedPath | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "创建 TLS 秘密 $($entry.Key) 失败"
+    }
+    Write-Host "已创建 TLS 秘密 $($entry.Key)"
 }

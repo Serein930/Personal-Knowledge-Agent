@@ -1,0 +1,165 @@
+name: 生产镜像供应链门禁
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 测试和扫描通过后是否发布镜像
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+  security-events: write
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: 检出不可变发布源码
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 配置 Java 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: 执行全部常规测试
+        working-directory: backend
+        run: mvn -B test
+
+      - name: 调整 OpenSearch 测试所需内核参数
+        run: sudo sysctl -w vm.max_map_count=262144
+
+      - name: 执行真实生产依赖与 OIDC 测试
+        working-directory: backend
+        env:
+          AGENTMIND_RUN_PRODUCTION_INTEGRATION: "true"
+          AGENTMIND_RUN_OIDC_INTEGRATION: "true"
+        run: >-
+          mvn -B
+          -Dtest=ProductionKnowledgeIndexPipelineIntegrationTests,IdentityPersistenceIntegrationTests,OidcJwtDecoderIntegrationTests
+          test
+
+      - name: 计算小写镜像名称
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/backend" >> "$GITHUB_OUTPUT"
+
+      - name: 生成发布标签和 OCI 元数据
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=tag
+
+      - name: 配置 Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: 构建本地门禁镜像
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          push: false
+          tags: agentmind-backend:release-gate
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 生成 CycloneDX 软件物料清单
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: agentmind-backend:release-gate
+          format: cyclonedx-json
+          output-file: agentmind-backend-sbom.cdx.json
+          upload-artifact: false
+
+      - name: 扫描高危和严重镜像漏洞
+        id: trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: agentmind-backend:release-gate
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+
+      - name: 上传漏洞扫描结果
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: 保存 SBOM 和扫描报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-image-security-${{ github.sha }}
+          path: |
+            agentmind-backend-sbom.cdx.json
+            trivy-results.sarif
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 登录 GitHub 容器仓库
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish == true
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 推送通过门禁的镜像
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish == true
+        id: publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+
+      - name: 安装 Cosign
+        if: steps.publish.outcome == 'success'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: 使用 GitHub OIDC 无密钥签名
+        if: steps.publish.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: 生成构建来源证明
+        if: steps.publish.outcome == 'success'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
+      - name: 生成 SBOM 证明
+        if: steps.publish.outcome == 'success'
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          sbom-path: agentmind-backend-sbom.cdx.json
+          push-to-registry: true
