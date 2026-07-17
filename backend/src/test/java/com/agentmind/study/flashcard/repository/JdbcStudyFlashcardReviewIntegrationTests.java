@@ -8,7 +8,6 @@ import com.agentmind.study.flashcard.model.StudyFlashcardStatus;
 import com.agentmind.study.flashcard.model.dto.SubmitFlashcardReviewRequest;
 import com.agentmind.study.flashcard.model.dto.SubmittedFlashcardReviewResponse;
 import com.agentmind.study.flashcard.service.StudyFlashcardReviewApplicationService;
-import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,17 +17,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 
 /**
  * 复习卡片 PostgreSQL 并发与幂等手动集成测试。
@@ -58,21 +54,15 @@ class JdbcStudyFlashcardReviewIntegrationTests {
     private StudyFlashcardReviewRepository reviewRepository;
 
     @Autowired
-    private DataSource dataSource;
+    private Flyway flyway;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
-    void setUpSchema() throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            ResourceDatabasePopulator populator = new ResourceDatabasePopulator(
-                    new ClassPathResource("db/schema/agent_write_tools.sql")
-            );
-            // 保留 PostgreSQL DO $$ 匿名块，由数据库一次性完成脚本解析。
-            populator.setSeparator(ScriptUtils.EOF_STATEMENT_SEPARATOR);
-            populator.populate(connection);
-        }
+    void setUpSchema() {
+        // 复习模块和 Agent 写工具共享迁移，测试不得再单独执行历史建表脚本。
+        flyway.migrate();
         jdbcTemplate.update("delete from daily_study_task_events");
         jdbcTemplate.update("delete from daily_study_task_cards");
         jdbcTemplate.update("delete from daily_study_tasks");

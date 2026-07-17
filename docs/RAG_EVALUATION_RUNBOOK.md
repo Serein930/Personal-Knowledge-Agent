@@ -135,12 +135,13 @@ $env:AGENTMIND_EVALUATION_OUTPUT_COST = "10.00"
 
 ## 七、PostgreSQL 模式
 
-首次创建数据库容器时，`docker-compose.yml` 会自动执行 `rag_evaluations.sql`。已有数据卷需要手工执行新增脚本：
+首次创建数据库或升级已有数据卷时，均由 Flyway 自动应用评估表迁移：
 
-```powershell
-Get-Content -Raw .\backend\src\main\resources\db\schema\rag_evaluations.sql |
-  docker compose exec -T agentmind-postgres psql -U agentmind -d agentmind
+```text
+backend/src/main/resources/db/migration/V7__reconcile_rag_evaluation_schema.sql
 ```
+
+禁止绕过 `flyway_schema_history` 手工执行旧脚本，否则会导致环境之间的迁移状态不一致。
 
 使用 `local` 配置启动后端：
 

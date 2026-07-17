@@ -97,13 +97,13 @@ cd D:\Program\AgentMind
 docker compose up -d agentmind-postgres
 ```
 
-新建数据卷时，容器会自动执行：
+新建数据库和已有数据库升级都由 Flyway 执行：
 
 ```text
-backend/src/main/resources/db/schema/rag_model_call_observations.sql
+backend/src/main/resources/db/migration/V5__reconcile_rag_model_call_observations.sql
 ```
 
-如果数据库容器已经存在旧数据卷，初始化脚本不会再次执行，需要手动运行该脚本。
+禁止手工执行 `db/schema` 下的旧基线脚本。Flyway 会根据 `flyway_schema_history` 自动判断是否需要升级。
 
 确认表结构存在后，使用本地配置并切换观测仓库：
 

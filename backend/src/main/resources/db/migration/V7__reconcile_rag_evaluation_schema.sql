@@ -1,0 +1,146 @@
+-- 将早期 V1 Java 基线中的 RAG 评估表固化为可审计的 SQL 迁移。
+-- 该迁移同时承担旧数据库结构归并，保证任务租约和实验配置字段完整。
+-- Stage 9：固定检索增强生成评估集、不可变版本与任务结果。
+-- JSONB 保存评估题目和逐题证据快照，关系字段负责知识空间隔离、版本唯一性和基线追溯。
+
+create table if not exists rag_evaluation_datasets (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    name varchar(120) not null,
+    description varchar(1000) not null default '',
+    latest_version integer not null default 0 check (latest_version >= 0),
+    created_at timestamptz not null,
+    updated_at timestamptz not null,
+    unique (id, owner_user_id, workspace_id)
+);
+
+create unique index if not exists uk_rag_evaluation_dataset_scope_name
+    on rag_evaluation_datasets (owner_user_id, workspace_id, lower(name));
+
+create index if not exists idx_rag_evaluation_dataset_scope_updated
+    on rag_evaluation_datasets (owner_user_id, workspace_id, updated_at desc, id desc);
+
+create table if not exists rag_evaluation_dataset_versions (
+    id bigserial primary key,
+    dataset_id bigint not null,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    version integer not null check (version > 0),
+    change_note varchar(500) not null default '',
+    cases jsonb not null check (jsonb_typeof(cases) = 'array'),
+    created_at timestamptz not null,
+    unique (dataset_id, version),
+    unique (dataset_id, version, owner_user_id, workspace_id),
+    constraint fk_rag_evaluation_version_dataset_scope
+        foreign key (dataset_id, owner_user_id, workspace_id)
+        references rag_evaluation_datasets (id, owner_user_id, workspace_id)
+        on delete cascade
+);
+
+create index if not exists idx_rag_evaluation_version_scope
+    on rag_evaluation_dataset_versions (owner_user_id, workspace_id, dataset_id, version desc);
+
+create table if not exists rag_evaluation_jobs (
+    id bigserial primary key,
+    owner_user_id bigint not null,
+    workspace_id bigint not null,
+    dataset_id bigint not null,
+    dataset_version integer not null,
+    status varchar(30) not null,
+    retrieval_strategy varchar(100) not null,
+    top_k integer not null check (top_k between 1 and 20),
+    prompt_version varchar(100) not null,
+    model_name varchar(200) not null,
+    experiment_config jsonb not null,
+    baseline_job_id bigint,
+    retry_of_job_id bigint,
+    total_cases integer not null check (total_cases >= 0),
+    completed_cases integer not null default 0 check (completed_cases >= 0),
+    progress integer not null default 0 check (progress between 0 and 100),
+    metrics jsonb,
+    quality_gate jsonb,
+    quality_gate_result jsonb,
+    case_results jsonb not null default '[]'::jsonb check (jsonb_typeof(case_results) = 'array'),
+    failure_reason varchar(1000) not null default '',
+    attempt_count integer not null default 0 check (attempt_count >= 0),
+    recovery_count integer not null default 0 check (recovery_count >= 0),
+    lease_owner varchar(200) not null default '',
+    lease_expires_at timestamptz,
+    heartbeat_at timestamptz,
+    created_at timestamptz not null,
+    started_at timestamptz,
+    updated_at timestamptz not null,
+    completed_at timestamptz,
+    unique (id, owner_user_id, workspace_id),
+    constraint fk_rag_evaluation_job_version_scope
+        foreign key (dataset_id, dataset_version, owner_user_id, workspace_id)
+        references rag_evaluation_dataset_versions (dataset_id, version, owner_user_id, workspace_id),
+    constraint fk_rag_evaluation_job_baseline
+        foreign key (baseline_job_id)
+        references rag_evaluation_jobs (id)
+        on delete set null,
+    constraint fk_rag_evaluation_job_retry_source
+        foreign key (retry_of_job_id)
+        references rag_evaluation_jobs (id)
+        on delete set null,
+    constraint ck_rag_evaluation_job_status
+        check (status in ('PENDING', 'RUNNING', 'CANCEL_REQUESTED', 'CANCELED', 'SUCCEEDED', 'FAILED'))
+);
+
+-- 兼容已经执行过 Stage 9 首版建表脚本的本地数据库，以下变更均可重复执行。
+alter table rag_evaluation_jobs add column if not exists experiment_config jsonb;
+alter table rag_evaluation_jobs add column if not exists retry_of_job_id bigint;
+alter table rag_evaluation_jobs add column if not exists total_cases integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists completed_cases integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists progress integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists quality_gate jsonb;
+alter table rag_evaluation_jobs add column if not exists quality_gate_result jsonb;
+alter table rag_evaluation_jobs add column if not exists updated_at timestamptz;
+alter table rag_evaluation_jobs add column if not exists attempt_count integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists recovery_count integer not null default 0;
+alter table rag_evaluation_jobs add column if not exists lease_owner varchar(200) not null default '';
+alter table rag_evaluation_jobs add column if not exists lease_expires_at timestamptz;
+alter table rag_evaluation_jobs add column if not exists heartbeat_at timestamptz;
+update rag_evaluation_jobs
+set total_cases = jsonb_array_length(case_results),
+    completed_cases = jsonb_array_length(case_results),
+    progress = case when status = 'SUCCEEDED' then 100 else progress end
+where total_cases = 0 and jsonb_array_length(case_results) > 0;
+update rag_evaluation_jobs
+set experiment_config = jsonb_build_object(
+    'experimentName', '历史任务-' || id,
+    'chunkStrategyVersion', 'legacy',
+    'retrievalStrategy', 'VECTOR',
+    'candidatePoolSize', top_k,
+    'rerankStrategy', 'NONE',
+    'topK', top_k,
+    'promptVersion', prompt_version,
+    'modelName', model_name
+)
+where experiment_config is null;
+alter table rag_evaluation_jobs alter column experiment_config set not null;
+update rag_evaluation_jobs set updated_at = coalesce(completed_at, started_at, created_at) where updated_at is null;
+alter table rag_evaluation_jobs alter column updated_at set not null;
+alter table rag_evaluation_jobs alter column started_at drop not null;
+alter table rag_evaluation_jobs alter column status type varchar(30);
+alter table rag_evaluation_jobs drop constraint if exists rag_evaluation_jobs_status_check;
+alter table rag_evaluation_jobs drop constraint if exists ck_rag_evaluation_job_status;
+alter table rag_evaluation_jobs add constraint ck_rag_evaluation_job_status
+    check (status in ('PENDING', 'RUNNING', 'CANCEL_REQUESTED', 'CANCELED', 'SUCCEEDED', 'FAILED'));
+alter table rag_evaluation_jobs drop constraint if exists fk_rag_evaluation_job_retry_source;
+alter table rag_evaluation_jobs add constraint fk_rag_evaluation_job_retry_source
+    foreign key (retry_of_job_id) references rag_evaluation_jobs (id) on delete set null;
+
+create index if not exists idx_rag_evaluation_job_scope_created
+    on rag_evaluation_jobs (owner_user_id, workspace_id, created_at desc, id desc);
+
+create index if not exists idx_rag_evaluation_job_baseline_lookup
+    on rag_evaluation_jobs (
+        owner_user_id, workspace_id, dataset_id, dataset_version, status, completed_at desc, id desc
+    );
+
+-- 维护器只扫描持有过期租约的活跃任务，该部分索引显著减少多实例恢复时的锁范围。
+create index if not exists idx_rag_evaluation_job_expired_lease
+    on rag_evaluation_jobs (lease_expires_at, id)
+    where status in ('RUNNING', 'CANCEL_REQUESTED') and lease_expires_at is not null;

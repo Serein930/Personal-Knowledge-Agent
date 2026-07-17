@@ -322,6 +322,8 @@ com.agentmind
 
 已引入 Flyway 统一管理数据库版本；知识索引使用 pgvector 与事务 Outbox 原子写入、OpenSearch 异步批量消费，并具备租约、重试、死信、全量重建、Testcontainers 全链路 CI、Grafana/Prometheus/Tempo 观测和多实例压测脚本。详细操作见 `PRODUCTION_RELEASE_RUNBOOK.md`。
 
+数据库正式结构已归并为连续的 `V1-V7` 迁移。`V4-V7` 分别覆盖 pgvector、模型调用审计、Agent 与学习系统、RAG 评估；旧 `db/schema` 只作为已发布 `V1` 的冻结基线保留。所有 JDBC 集成测试统一通过 Flyway 准备结构，并新增空库迁移验收，详细操作见 `FLYWAY_MIGRATION_RUNBOOK.md`。
+
 # 生产实测证据闭环进展
 
 已建立受保护预发布环境的统一验收工作流，按同一 Git 提交和不可变镜像摘要串联 Vault 秘密轮换、10% 灰度、k6 容量门禁、单实例故障注入及

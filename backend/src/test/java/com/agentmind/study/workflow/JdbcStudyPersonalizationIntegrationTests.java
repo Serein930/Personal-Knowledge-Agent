@@ -16,11 +16,10 @@ import com.agentmind.study.flashcard.model.StudyFlashcardStatus;
 import com.agentmind.study.flashcard.repository.StudyFlashcardRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.Connection;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
-import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -28,11 +27,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -68,16 +64,15 @@ class JdbcStudyPersonalizationIntegrationTests {
     private ChatMemoryRepository chatMemoryRepository;
 
     @Autowired
-    private DataSource dataSource;
+    private Flyway flyway;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
-    void setUpSchema() throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            executePostgreSqlSchema(connection);
-        }
+    void setUpSchema() {
+        // 学习画像测试复用正式 Flyway 历史，避免测试环境悄悄补齐生产环境缺失字段。
+        flyway.migrate();
         // 严格按外键依赖从明细到主表清理，测试只能连接本地开发数据库。
         jdbcTemplate.update("delete from daily_study_task_events");
         jdbcTemplate.update("delete from daily_study_task_cards");
@@ -93,15 +88,6 @@ class JdbcStudyPersonalizationIntegrationTests {
         jdbcTemplate.update("delete from fsrs_user_profiles");
         jdbcTemplate.update("delete from study_flashcard_reviews");
         jdbcTemplate.update("delete from study_flashcards");
-    }
-
-    private void executePostgreSqlSchema(Connection connection) throws Exception {
-        ResourceDatabasePopulator populator = new ResourceDatabasePopulator(
-                new ClassPathResource("db/schema/agent_write_tools.sql")
-        );
-        // PostgreSQL 匿名块内部包含分号，整份交给数据库解析可避免测试工具错误拆分 DO $$ 块。
-        populator.setSeparator(ScriptUtils.EOF_STATEMENT_SEPARATOR);
-        populator.populate(connection);
     }
 
     @Test

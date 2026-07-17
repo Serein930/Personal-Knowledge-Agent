@@ -2,7 +2,7 @@
 
 ## 存储内容
 
-`agent_write_tools.sql` 创建以下表：
+Flyway 的 `V6__reconcile_agent_and_study_schema.sql` 负责创建以下表：
 
 - `agent_tool_confirmations`：确认单、令牌摘要、参数与状态流转。
 - `agent_tool_call_audits`：工具类型、请求摘要、结果摘要、耗时与失败原因。

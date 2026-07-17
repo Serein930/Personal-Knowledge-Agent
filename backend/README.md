@@ -294,11 +294,13 @@ cd D:\Program\AgentMind
 docker compose up -d agentmind-postgres
 ```
 
-2. 容器首次初始化时会自动执行表结构脚本：
+2. 后端启动时由 Flyway 自动执行完整数据库迁移：
 
 ```text
-backend/src/main/resources/db/schema/knowledge_vector_chunks.sql
+backend/src/main/resources/db/migration
 ```
+
+不要再手工执行 `db/schema` 下的旧基线脚本；已有数据卷也会由 Flyway 自动升级。
 
 3. 使用 `local` profile 启动后端：
 

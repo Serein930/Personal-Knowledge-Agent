@@ -20,12 +20,14 @@ docker compose --profile opensearch up -d agentmind-postgres agentmind-opensearc
 docker compose ps
 ```
 
-已有 PostgreSQL 数据卷不会再次执行初始化脚本，需要手工应用增量列和索引：
+已有 PostgreSQL 数据卷必须通过后端启动或专用迁移任务应用 Flyway，不能手工执行建表脚本：
 
 ```powershell
-Get-Content -Raw .\backend\src\main\resources\db\schema\rag_evaluations.sql |
-  docker compose exec -T agentmind-postgres psql -U agentmind -d agentmind
+Set-Location .\backend
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
 ```
+
+启动日志出现 Flyway 校验或迁移失败时必须停止发布并修复，禁止通过关闭校验绕过。
 
 组合启用 JDBC、pgvector 和 OpenSearch：
 

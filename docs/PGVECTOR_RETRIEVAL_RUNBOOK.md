@@ -32,13 +32,13 @@ docker compose up -d agentmind-postgres
 docker compose ps
 ```
 
-首次启动时会通过下面的脚本初始化 `knowledge_vector_chunks` 表：
+首次启动时由 Flyway 创建 `knowledge_vector_chunks` 表：
 
 ```text
-backend/src/main/resources/db/schema/knowledge_vector_chunks.sql
+backend/src/main/resources/db/migration/V4__reconcile_knowledge_vector_chunks.sql
 ```
 
-如果你曾经在该表结构存在前启动过容器，需要重建数据卷：
+已有数据卷不需要为了表结构升级而删除；启动后端时 Flyway 会自动应用尚未执行的版本。只有确定要清空全部本地数据时才使用：
 
 ```powershell
 docker compose down -v

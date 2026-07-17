@@ -23,7 +23,6 @@ import com.agentmind.study.note.repository.JdbcKnowledgeNoteRepository;
 import com.agentmind.study.note.repository.KnowledgeNoteRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -33,7 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -44,12 +43,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -81,7 +77,7 @@ class JdbcAgentWriteToolIntegrationTests {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private DataSource dataSource;
+    private Flyway flyway;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -102,15 +98,9 @@ class JdbcAgentWriteToolIntegrationTests {
     private StudyFlashcardRepository flashcardRepository;
 
     @BeforeEach
-    void setUpSchema() throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            ResourceDatabasePopulator populator = new ResourceDatabasePopulator(
-                    new ClassPathResource("db/schema/agent_write_tools.sql")
-            );
-            // 保留 PostgreSQL DO $$ 匿名块，由数据库一次性完成脚本解析。
-            populator.setSeparator(ScriptUtils.EOF_STATEMENT_SEPARATOR);
-            populator.populate(connection);
-        }
+    void setUpSchema() {
+        // 集成测试只允许通过 Flyway 准备结构，防止测试脚本与生产迁移产生两套定义。
+        flyway.migrate();
         jdbcTemplate.update("delete from agent_tool_confirmations");
         jdbcTemplate.update("delete from agent_tool_call_audits");
         jdbcTemplate.update("delete from knowledge_notes");

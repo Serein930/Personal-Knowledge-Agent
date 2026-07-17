@@ -9,8 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.Connection;
-import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -18,10 +17,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import com.agentmind.evaluation.model.RagEvaluationExperimentConfig;
@@ -60,7 +57,7 @@ class JdbcRagEvaluationIntegrationTests {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private DataSource dataSource;
+    private Flyway flyway;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -72,11 +69,9 @@ class JdbcRagEvaluationIntegrationTests {
     private RagEvaluationJobRepository jobRepository;
 
     @BeforeEach
-    void setUpSchema() throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            new ResourceDatabasePopulator(new ClassPathResource("db/schema/rag_evaluations.sql"))
-                    .populate(connection);
-        }
+    void setUpSchema() {
+        // 集成测试只允许通过 Flyway 准备结构，保证评估任务字段与正式环境一致。
+        flyway.migrate();
         jdbcTemplate.update("delete from rag_evaluation_jobs");
         jdbcTemplate.update("delete from rag_evaluation_dataset_versions");
         jdbcTemplate.update("delete from rag_evaluation_datasets");
