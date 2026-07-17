@@ -338,3 +338,7 @@ com.agentmind
 # 受保护预发布环境就绪门禁进展
 
 已为主验收 Runner 和独立灾备 Runner 增加零变更就绪检查，并将两者设为 `staging-acceptance.yml` 中 Vault 轮换和灰度部署的共同前置条件。检查覆盖 PowerShell、Docker、Vault、Cosign、restic、Swarm 管理面、加密覆盖网络、服务副本、灾备隔离、Compose 配置和异地仓库只读访问；就绪报告不会混入六类发布证据。另提供不含秘密的 OIDC、PostgreSQL、Redis、MinIO、OpenSearch 和 OTLP 配置模板，完整部署说明见 `STAGING_ENVIRONMENT_DEPLOYMENT_RUNBOOK.md`。
+
+# 预发布环境引导与真实依赖冒烟进展
+
+已增加双 Runner 安全注册脚本和 GitHub `staging` Environment 声明式配置脚本，注册令牌及环境秘密只从当前进程读取，所有真实写入动作要求显式确认。灰度部署完成后会通过真实业务接口验证 OIDC、PostgreSQL、MinIO、pgvector、OpenSearch、模型适配器和 Redis 会话链路，冒烟失败会阻止容量测试、故障注入、灾备演练与候选冻结。真实资源仍需由维护者在受保护环境配置并执行，仓库不会用本地模拟结果代替预发布证据。

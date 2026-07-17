@@ -168,12 +168,25 @@ jobs:
           -Image $env:AGENTMIND_CANDIDATE_IMAGE
           -GitCommit $env:GITHUB_SHA
 
+      - name: 验证真实依赖业务链路
+        shell: pwsh
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          STAGING_WORKSPACE_ID: ${{ vars.STAGING_WORKSPACE_ID }}
+          STAGING_ACCESS_TOKEN: ${{ secrets.STAGING_ACCESS_TOKEN }}
+        run: >-
+          ./scripts/test-staging-dependency-smoke.ps1
+          -BaseUrl $env:STAGING_BASE_URL
+          -WorkspaceId $env:STAGING_WORKSPACE_ID
+
       - name: 保存基础设施验收证据
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: staging-infrastructure-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .production-acceptance-evidence/*.json
+          path: |
+            .production-acceptance-evidence/*.json
+            .staging-smoke-reports/*.json
           if-no-files-found: warn
           retention-days: 90
 

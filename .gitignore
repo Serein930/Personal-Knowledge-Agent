@@ -34,6 +34,7 @@ tmp/
 .production-acceptance-evidence/
 .production-acceptance-reports/
 .staging-readiness-reports/
+.staging-smoke-reports/
 performance-summary.json
 deploy/.secret-versions.env
 deploy/.secret-versions.env.pending

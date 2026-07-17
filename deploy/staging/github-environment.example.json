@@ -1,0 +1,31 @@
+{
+  "environmentName": "staging",
+  "waitTimerMinutes": 0,
+  "preventSelfReview": true,
+  "reviewerUserIds": [
+    12345678
+  ],
+  "variables": {
+    "STAGING_BASE_URL": "https://替换为预发布域名",
+    "STAGING_WORKSPACE_ID": "替换为验收知识空间编号",
+    "STAGING_VAULT_AGENT_CONFIG": "/替换为主Runner绝对路径/agent.hcl",
+    "STAGING_VAULT_RENDERED_DIRECTORY": "/替换为主Runner绝对路径/rendered",
+    "STAGING_DR_VAULT_AGENT_CONFIG": "/替换为灾备Runner绝对路径/agent.hcl",
+    "STAGING_DR_VAULT_RENDERED_DIRECTORY": "/替换为灾备Runner绝对路径/rendered",
+    "STAGING_RESTIC_REPOSITORY": "s3:https://替换为异地对象存储/agentmind",
+    "STAGING_RESTIC_PASSWORD_FILE": "/替换为灾备Runner绝对路径/restic-password",
+    "STAGING_BACKUP_REGION": "替换为对象存储区域",
+    "STAGING_DR_ENVIRONMENT": "agentmind-staging-dr",
+    "STAGING_DR_COMPOSE_FILE": "/替换为灾备Runner绝对路径/docker-compose.yml",
+    "STAGING_RPO_TARGET_MINUTES": "1440",
+    "STAGING_RTO_TARGET_MINUTES": "60"
+  },
+  "secretEnvironmentVariables": {
+    "STAGING_ACCESS_TOKEN": "AGENTMIND_STAGING_ACCESS_TOKEN",
+    "STAGING_BACKUP_ACCESS_KEY_ID": "AGENTMIND_STAGING_BACKUP_ACCESS_KEY_ID",
+    "STAGING_BACKUP_SECRET_ACCESS_KEY": "AGENTMIND_STAGING_BACKUP_SECRET_ACCESS_KEY"
+  },
+  "optionalSecretEnvironmentVariables": {
+    "STAGING_BACKUP_SESSION_TOKEN": "AGENTMIND_STAGING_BACKUP_SESSION_TOKEN"
+  }
+}

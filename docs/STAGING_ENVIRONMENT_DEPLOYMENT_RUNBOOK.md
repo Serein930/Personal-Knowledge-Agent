@@ -58,6 +58,22 @@ agentmind-staging-dr
 
 必须安装 PowerShell 7、Docker Compose、Vault CLI 和 restic。该节点不能是主验收 Swarm 管理节点，不能挂载主集群数据卷，也不能使用生产 Swarm 栈文件。它只使用只读异地备份凭据恢复到可丢弃环境。
 
+从 GitHub 仓库的“设置、操作、Runner、新建自托管 Runner”页面取得官方安装命令，分别下载与校验对应平台的 Runner 包。安装包解压后，使用仓库提供的注册脚本统一标签并避免令牌进入命令历史：
+
+```powershell
+$env:GITHUB_RUNNER_REGISTRATION_TOKEN = "粘贴 GitHub 页面生成的一次性令牌"
+./deploy/staging/register-github-runner.ps1 `
+  -Role primary `
+  -RunnerDirectory "D:\受保护目录\agentmind-staging-runner" `
+  -RunnerName "agentmind-staging-primary-01" `
+  -InstallService `
+  -ConfirmRunnerRegistration
+```
+
+灾备节点将 `Role` 改为 `disaster-recovery`，并使用独立目录和名称。脚本分别写入 `agentmind-staging` 与 `agentmind-staging-dr` 标签；已存在 `.runner` 身份时会拒绝覆盖。注册令牌只从当前进程环境读取，并在调用 GitHub 配置程序前从环境中清除。
+
+注册完成后，应先在 GitHub 页面确认两个 Runner 都是空闲在线状态，再手工执行本地零变更就绪检查。不要在同一主机上同时放置主验收和灾备 Runner。
+
 ## 四、运行时配置
 
 非秘密配置模板位于：
@@ -134,6 +150,30 @@ STAGING_BACKUP_SESSION_TOKEN
 
 所有 Runner 路径变量都必须填写绝对路径。S3 访问密钥应优先替换为云工作负载身份产生的短期凭据；若暂时无法使用，至少限制为目标备份桶的只读恢复权限并设置短期轮换。
 
+仓库提供不含秘密值的声明模板：
+
+```text
+deploy/staging/github-environment.example.json
+```
+
+将模板复制到仓库外，替换审核人用户编号和全部占位变量。秘密值只放入当前 PowerShell 进程，变量名需与模板中的映射一致：
+
+```powershell
+$env:AGENTMIND_STAGING_ACCESS_TOKEN = "预发布验收用户的短期访问令牌"
+$env:AGENTMIND_STAGING_BACKUP_ACCESS_KEY_ID = "异地备份只读访问编号"
+$env:AGENTMIND_STAGING_BACKUP_SECRET_ACCESS_KEY = "异地备份只读秘密"
+
+./scripts/configure-github-staging-environment.ps1 `
+  -ConfigurationFile "D:\受保护目录\github-staging-environment.json" `
+  -ValidateOnly
+
+./scripts/configure-github-staging-environment.ps1 `
+  -ConfigurationFile "D:\受保护目录\github-staging-environment.json" `
+  -ConfirmEnvironmentUpdate
+```
+
+第二条命令需要已认证且有仓库管理权限的 GitHub CLI。脚本创建或更新 `staging` Environment、必要审核人、禁止自审、受保护分支策略、变量和秘密；秘密通过标准输入传给 GitHub CLI，不会作为命令参数或文件内容保存。完成后应立即清除当前进程中的秘密环境变量。
+
 ## 六、零变更就绪门禁
 
 `staging-acceptance.yml` 会首先并行检查两个 Runner，任一失败时不会进入 Vault 轮换、灰度发布或故障注入。
@@ -170,6 +210,17 @@ STAGING_BACKUP_SESSION_TOKEN
 
 不得使用普通标签、`latest`、本地构造 JSON 或手工修改报告绕过门禁。
 
+灰度实例启动后、容量测试开始前，工作流会运行 `test-staging-dependency-smoke.ps1`。该脚本通过真实业务接口完成以下检查：
+
+- 使用 OIDC 访问令牌读取当前用户。
+- 上传带唯一标记的 Markdown 文档并等待异步摄取完成。
+- 从文档列表验证 PostgreSQL 元数据。
+- 从知识检索验证 pgvector 与 OpenSearch 双路索引结果。
+- 执行一次带来源引用的检索增强生成问答。
+- 查询并删除会话，验证 Redis 会话记忆。
+
+报告保存在 `.staging-smoke-reports/staging-dependency-smoke.json` 并作为工作流产物留存。验收会话会自动删除；上传文档暂时没有删除接口，因此必须使用专用验收知识空间，并通过生命周期策略定期清理带 `staging-smoke` 标签的证据文档。
+
 ## 八、指标固化
 
 容量工作流生成的 `performance-summary.json` 是 P95、P99、错误率和吞吐分析的原始依据；故障和灾备报告分别给出副本恢复时间、最大连续失败次数、RPO 与 RTO。
@@ -189,8 +240,9 @@ STAGING_BACKUP_SESSION_TOKEN
 普通开发机只能验证安全边界和冻结逻辑：
 
 ```powershell
+./scripts/tests/staging-bootstrap-tests.ps1
 ./scripts/tests/staging-runner-readiness-tests.ps1
 ./scripts/tests/production-acceptance-evidence-tests.ps1
 ```
 
-第一条测试证明开发环境无法绕过受保护 Runner 门禁；第二条测试证明失败、缺失或被篡改的验收证据不能冻结发布候选。它们不产生任何生产性能结论。
+第一条测试验证 Runner 注册、Environment 声明和真实依赖冒烟的防误操作边界；第二条测试证明开发环境无法绕过受保护 Runner 门禁；第三条测试证明失败、缺失或被篡改的验收证据不能冻结发布候选。它们不产生任何生产性能结论。
