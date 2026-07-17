@@ -19,6 +19,12 @@ spring:
       ssl:
         enabled: ${AGENTMIND_REDIS_SSL:true}
       timeout: 2s
+  ai:
+    model:
+      embedding: ${AGENTMIND_SPRING_AI_EMBEDDING_MODEL:openai}
+    openai:
+      # 生产环境不允许使用本地占位值，未注入密钥时应在启动阶段暴露配置错误。
+      api-key: ${OPENAI_API_KEY}
 
 server:
   shutdown: graceful
@@ -49,6 +55,14 @@ management:
       enabled: true
 
 agentmind:
+  embedding:
+    provider: spring-ai
+    model-name: ${AGENTMIND_EMBEDDING_MODEL:text-embedding-3-small}
+    dimensions: ${AGENTMIND_EMBEDDING_DIMENSIONS:128}
+    batch-size: ${AGENTMIND_EMBEDDING_BATCH_SIZE:32}
+    maximum-attempts: ${AGENTMIND_EMBEDDING_MAXIMUM_ATTEMPTS:3}
+    retry-initial-backoff: ${AGENTMIND_EMBEDDING_RETRY_INITIAL_BACKOFF:200ms}
+    input-cost-per-million-tokens: ${AGENTMIND_EMBEDDING_INPUT_COST_PER_MILLION_TOKENS:0}
   security:
     mode: ${AGENTMIND_SECURITY_MODE:oidc}
     issuer-uri: ${AGENTMIND_OIDC_ISSUER_URI:}
@@ -73,6 +87,7 @@ agentmind:
       bucket: ${AGENTMIND_MINIO_BUCKET:agentmind}
   vector-store:
     type: pgvector
+    embedding-dimensions: ${AGENTMIND_EMBEDDING_DIMENSIONS:128}
   keyword-index:
     type: opensearch
     opensearch:

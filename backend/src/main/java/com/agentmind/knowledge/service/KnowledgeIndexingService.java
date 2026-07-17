@@ -11,6 +11,7 @@ import com.agentmind.knowledge.outbox.service.KnowledgeIndexChangePublisher;
 import com.agentmind.knowledge.outbox.service.KnowledgeIndexTransactionExecutor;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -49,8 +50,13 @@ public class KnowledgeIndexingService {
     }
 
     public void indexChunks(Long workspaceId, Long documentId, List<DocumentChunk> chunks) {
-        List<KnowledgeVector> vectors = chunks.stream()
-                .map(chunk -> toVector(workspaceId, chunk))
+        List<float[]> embeddings = embeddingClient.embedAll(chunks.stream().map(DocumentChunk::content).toList());
+        if (embeddings.size() != chunks.size()) {
+            throw new IllegalStateException("向量模型返回数量与文档片段数量不一致");
+        }
+        OffsetDateTime indexedAt = OffsetDateTime.now();
+        List<KnowledgeVector> vectors = IntStream.range(0, chunks.size())
+                .mapToObj(index -> toVector(workspaceId, chunks.get(index), embeddings.get(index), indexedAt))
                 .toList();
         transactionExecutor.execute(() -> {
             vectorStore.replaceDocumentVectors(workspaceId, documentId, vectors);
@@ -65,7 +71,12 @@ public class KnowledgeIndexingService {
         });
     }
 
-    private KnowledgeVector toVector(Long workspaceId, DocumentChunk chunk) {
+    private KnowledgeVector toVector(
+            Long workspaceId,
+            DocumentChunk chunk,
+            float[] embedding,
+            OffsetDateTime indexedAt
+    ) {
         return new KnowledgeVector(
                 workspaceId + ":" + chunk.id(),
                 workspaceId,
@@ -74,8 +85,8 @@ public class KnowledgeIndexingService {
                 chunk.sequence(),
                 chunk.headingPath(),
                 chunk.content(),
-                embeddingClient.embed(chunk.content()),
-                OffsetDateTime.now()
+                embedding,
+                indexedAt
         );
     }
 }

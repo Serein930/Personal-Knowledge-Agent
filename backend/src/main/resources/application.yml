@@ -13,8 +13,13 @@ spring:
   ai:
     model:
       chat: none
+      embedding: ${AGENTMIND_SPRING_AI_EMBEDDING_MODEL:none}
     openai:
       api-key: ${OPENAI_API_KEY:agentmind-local-placeholder}
+      embedding:
+        options:
+          model: ${AGENTMIND_EMBEDDING_MODEL:text-embedding-3-small}
+          dimensions: ${AGENTMIND_EMBEDDING_DIMENSIONS:128}
   servlet:
     multipart:
       max-file-size: 20MB
@@ -45,6 +50,15 @@ logging:
     com.agentmind: INFO
 
 agentmind:
+  embedding:
+    # 默认实现不访问外部模型，便于离线开发与稳定测试；真实环境通过 profile 切换到 spring-ai。
+    provider: ${AGENTMIND_EMBEDDING_PROVIDER:deterministic}
+    model-name: ${AGENTMIND_EMBEDDING_MODEL:deterministic-local}
+    dimensions: ${AGENTMIND_EMBEDDING_DIMENSIONS:128}
+    batch-size: ${AGENTMIND_EMBEDDING_BATCH_SIZE:32}
+    maximum-attempts: ${AGENTMIND_EMBEDDING_MAXIMUM_ATTEMPTS:3}
+    retry-initial-backoff: ${AGENTMIND_EMBEDDING_RETRY_INITIAL_BACKOFF:200ms}
+    input-cost-per-million-tokens: ${AGENTMIND_EMBEDDING_INPUT_COST_PER_MILLION_TOKENS:0}
   rate-limit:
     # 默认关闭以保证常规单元测试不依赖 Redis；生产配置会显式启用。
     mode: ${AGENTMIND_RATE_LIMIT_MODE:disabled}
@@ -98,7 +112,7 @@ agentmind:
       bucket: ${AGENTMIND_MINIO_BUCKET:agentmind}
   vector-store:
     type: memory
-    embedding-dimensions: 128
+    embedding-dimensions: ${AGENTMIND_EMBEDDING_DIMENSIONS:128}
   keyword-index:
     type: memory
     opensearch:

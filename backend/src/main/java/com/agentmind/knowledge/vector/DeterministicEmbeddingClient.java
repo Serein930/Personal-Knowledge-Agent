@@ -1,6 +1,7 @@
 package com.agentmind.knowledge.vector;
 
 import java.nio.charset.StandardCharsets;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -11,6 +12,12 @@ import org.springframework.util.StringUtils;
  * 足够在接入付费或本地向量模型前验证索引、知识空间隔离和检索排序。</p>
  */
 @Component
+@ConditionalOnProperty(
+        prefix = "agentmind.embedding",
+        name = "provider",
+        havingValue = "deterministic",
+        matchIfMissing = true
+)
 public class DeterministicEmbeddingClient implements EmbeddingClient {
 
     private static final int DIMENSIONS = 128;
