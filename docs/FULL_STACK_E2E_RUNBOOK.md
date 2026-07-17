@@ -93,3 +93,29 @@ sh ./mvnw test
 本地全链路测试只验证功能正确性和接口兼容性，不生成生产性能结论。RPO、RTO、P95、P99、最大吞吐和故障恢复时间必须由受保护的真实验收环境运行 `staging-acceptance.yml` 后固化，任何本地模拟值都不得写入发布候选证据。
 
 只有生产证据工作流和本全链路测试同时通过，才允许冻结发布候选版本并进入最终发布审批。
+
+## 真实 staging 浏览器验收
+
+真实环境使用独立配置 `playwright.staging.config.ts` 和用例目录 `staging-e2e`。它不会启动模拟后端，而是启动一份临时 Vite 前端，并通过同源服务器代理访问真实 staging 后端。
+
+安全边界：
+
+- `STAGING_ACCESS_TOKEN` 只传给 Vite 的 Node.js 代理进程。
+- 令牌不使用 `VITE_` 前缀，不会进入浏览器构建变量或前端存储。
+- 后端仍保持正式 CORS 白名单，不需要为 GitHub 托管 Runner 放宽来源。
+- 测试只在“发布候选全链路验收”成功且来源分支为 `main` 时自动触发。
+- 测试检出上游通过门禁的同一提交，并使用受保护的 `staging` Environment。
+
+真实用例依次验证 OIDC 用户映射、MinIO 文件上传、异步解析、PostgreSQL 文档元数据、pgvector/OpenSearch 索引、SSE 回答和引用来源。每次使用唯一标记，测试资料写入专用验收知识空间，由 staging 生命周期策略定期清理。
+
+具备相同环境变量时可以在受保护运维机手工诊断：
+
+```powershell
+$env:STAGING_BASE_URL = "https://替换为真实预发布域名"
+$env:STAGING_WORKSPACE_ID = "替换为验收知识空间编号"
+$env:STAGING_ACCESS_TOKEN = "通过 OIDC 获取的短期验收令牌"
+cd ui
+npm run e2e:staging
+```
+
+本地开发机不得使用模拟令牌运行该命令，也不得把真实令牌写入 `.env`、Playwright 配置、截图或 Git 记录。

@@ -1,0 +1,87 @@
+name: 真实预发布前后端全链路验收
+
+on:
+  workflow_run:
+    workflows:
+      - 发布候选全链路验收
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentmind-staging-e2e-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  staging_full_stack_e2e:
+    name: OIDC、摄取、生产索引与流式引用
+    # 只有默认分支的上游门禁全部成功后才允许读取 staging 秘密并执行真实写入测试。
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - name: 检出通过门禁的同一提交
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: 配置 Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: 安装锁定的前端依赖
+        working-directory: ui
+        run: npm ci
+
+      - name: 安装 Chromium 及系统依赖
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+
+      - name: 执行真实 staging 浏览器闭环
+        working-directory: ui
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          STAGING_WORKSPACE_ID: ${{ vars.STAGING_WORKSPACE_ID }}
+          STAGING_ACCESS_TOKEN: ${{ secrets.STAGING_ACCESS_TOKEN }}
+        run: npm run e2e:staging
+
+      - name: 生成真实前后端验收清单
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p .staging-e2e-evidence
+          jq -n \
+            --arg gitCommit "${{ github.event.workflow_run.head_sha }}" \
+            --arg upstreamRunId "${{ github.event.workflow_run.id }}" \
+            --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schemaVersion: "1.0",
+              evidenceType: "staging_full_stack_e2e",
+              environment: "staging",
+              gitCommit: $gitCommit,
+              upstreamAcceptanceRunId: $upstreamRunId,
+              completedAt: $completedAt,
+              passed: true
+            }' > .staging-e2e-evidence/staging-full-stack-e2e.json
+
+      - name: 保存浏览器诊断与验收清单
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-full-stack-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ui/staging-playwright-report
+            ui/staging-test-results
+            .staging-e2e-evidence
+          if-no-files-found: warn
+          retention-days: 90

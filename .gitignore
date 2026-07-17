@@ -35,6 +35,7 @@ tmp/
 .production-acceptance-reports/
 .staging-readiness-reports/
 .staging-smoke-reports/
+.staging-e2e-evidence/
 performance-summary.json
 deploy/.secret-versions.env
 deploy/.secret-versions.env.pending
@@ -46,6 +47,8 @@ deploy/vault/rendered/
 *.tsbuildinfo
 ui/playwright-report/
 ui/test-results/
+ui/staging-playwright-report/
+ui/staging-test-results/
 
 # Generated config build output
 ui/vite.config.js
