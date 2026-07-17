@@ -144,11 +144,15 @@ jobs:
 
           release_id="$(jq -r '.id' <<<"$release_json")"
           release_url="$(jq -r '.html_url' <<<"$release_json")"
+          manifest_sha="$(sha256sum "$manifest" | cut -d ' ' -f 1)"
+          candidate_image="$(jq -r '.candidateImage' "$manifest")"
           jq -n \
             --arg version "$VERSION" \
             --arg gitCommit "$GITHUB_SHA" \
             --arg releaseId "$release_id" \
             --arg releaseUrl "$release_url" \
+            --arg releaseManifestSha256 "$manifest_sha" \
+            --arg candidateImage "$candidate_image" \
             --arg releasedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{
               schemaVersion: "1.0",
@@ -157,6 +161,8 @@ jobs:
               gitCommit: $gitCommit,
               githubReleaseId: $releaseId,
               githubReleaseUrl: $releaseUrl,
+              releaseManifestSha256: $releaseManifestSha256,
+              candidateImage: $candidateImage,
               releasedAt: $releasedAt,
               passed: true
             }' > .production-release/production-release-record.json

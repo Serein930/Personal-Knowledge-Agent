@@ -1,0 +1,110 @@
+name: 独立生产集群部署
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_release_run_id:
+        description: 成功的“正式版本发布”工作流运行编号
+        required: true
+        type: string
+      smoke_query:
+        description: 能命中预置生产冒烟文档的检索问题
+        required: true
+        type: string
+      expected_document_id:
+        description: 预置生产冒烟文档编号
+        required: true
+        type: string
+      canary_observation_seconds:
+        description: 灰度发布后观察秒数
+        required: true
+        default: "300"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+concurrency:
+  group: agentmind-independent-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy_production:
+    name: 摘要镜像灰度、冒烟、流量切换与自动回滚
+    runs-on: [self-hosted, agentmind-production]
+    environment: production-deployment
+    timeout-minutes: 60
+    env:
+      AGENTMIND_ENVIRONMENT: production
+      PRODUCTION_ACCESS_TOKEN: ${{ secrets.PRODUCTION_ACCESS_TOKEN }}
+    steps:
+      - name: 检出待部署的已审批提交
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 验证生产部署环境已经显式配置
+        shell: pwsh
+        env:
+          DEPLOYMENT_GUARD: ${{ secrets.PRODUCTION_DEPLOYMENT_GUARD }}
+          RELEASE_RUN_ID: ${{ inputs.production_release_run_id }}
+          EXPECTED_DOCUMENT_ID: ${{ inputs.expected_document_id }}
+          OBSERVATION_SECONDS: ${{ inputs.canary_observation_seconds }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_GUARD)) {
+            throw "production-deployment Environment 缺少部署守卫秘密"
+          }
+          if ($env:RELEASE_RUN_ID -notmatch '^[1-9][0-9]*$') {
+            throw "正式版本发布运行编号必须是正整数"
+          }
+          if ($env:EXPECTED_DOCUMENT_ID -notmatch '^[1-9][0-9]*$') {
+            throw "预置冒烟文档编号必须是正整数"
+          }
+          if ($env:OBSERVATION_SECONDS -notmatch '^[0-9]+$' -or [int]$env:OBSERVATION_SECONDS -gt 1800) {
+            throw "灰度观察时间必须是 0 到 1800 秒的整数"
+          }
+
+      - name: 下载正式版本发布证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: production-release-v*
+          path: .production-deployment-input
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.production_release_run_id }}
+
+      - name: 登录 GitHub 容器仓库
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 执行受保护生产部署
+        shell: pwsh
+        env:
+          PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+          PRODUCTION_WORKSPACE_ID: ${{ vars.PRODUCTION_WORKSPACE_ID }}
+          PRODUCTION_STACK_NAME: ${{ vars.PRODUCTION_STACK_NAME }}
+          SMOKE_QUERY: ${{ inputs.smoke_query }}
+          EXPECTED_DOCUMENT_ID: ${{ inputs.expected_document_id }}
+          OBSERVATION_SECONDS: ${{ inputs.canary_observation_seconds }}
+        run: >-
+          ./deploy/invoke-production-deployment.ps1
+          -ProductionReleaseEvidenceDirectory .production-deployment-input
+          -BaseUrl $env:PRODUCTION_BASE_URL
+          -WorkspaceId $env:PRODUCTION_WORKSPACE_ID
+          -SmokeQuery $env:SMOKE_QUERY
+          -ExpectedDocumentId $env:EXPECTED_DOCUMENT_ID
+          -StackName $env:PRODUCTION_STACK_NAME
+          -CanaryObservationSeconds $env:OBSERVATION_SECONDS
+          -ConfirmProductionDeployment
+
+      - name: 保存生产部署和冒烟证据
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-deployment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .production-deployment-evidence/*.json
+          if-no-files-found: error
+          retention-days: 365

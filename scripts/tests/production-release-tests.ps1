@@ -87,6 +87,8 @@ try {
         "PRODUCTION_RELEASE_GUARD",
         "final-release-approval-*",
         "target_commitish",
+        "releaseManifestSha256",
+        "candidateImage",
         '版本 $VERSION 已存在但指向其他提交'
     )) {
         if (-not $workflow.Contains($requiredText)) {

@@ -51,3 +51,5 @@ PRODUCTION_RELEASE_GUARD
 ## 六、部署边界
 
 GitHub Release 表示代码和镜像版本已经正式固化，不等于生产流量已经完成切换。若后续接入独立生产集群，应继续使用摘要镜像、受保护部署环境、滚动发布、自动回滚和发布后冒烟，不得从版本标签重新构建镜像。
+
+独立生产集群的 Runner、Environment、灰度发布、发布后冒烟和自动回滚步骤见 `INDEPENDENT_PRODUCTION_DEPLOYMENT_RUNBOOK.md`。
