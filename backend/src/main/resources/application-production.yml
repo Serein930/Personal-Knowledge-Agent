@@ -21,10 +21,15 @@ spring:
       timeout: 2s
   ai:
     model:
+      chat: ${AGENTMIND_SPRING_AI_CHAT_MODEL:openai}
       embedding: ${AGENTMIND_SPRING_AI_EMBEDDING_MODEL:openai}
     openai:
       # 生产环境不允许使用本地占位值，未注入密钥时应在启动阶段暴露配置错误。
       api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: ${AGENTMIND_CHAT_MODEL:gpt-4o-mini}
+          temperature: ${AGENTMIND_CHAT_TEMPERATURE:0.2}
 
 server:
   shutdown: graceful
@@ -55,6 +60,12 @@ management:
       enabled: true
 
 agentmind:
+  rag:
+    # 生产环境固定使用真实模型适配器，不能因为公共默认值而静默退回 Mock。
+    answer-generator: spring-ai
+    model-name: ${AGENTMIND_RAG_MODEL_NAME:${AGENTMIND_CHAT_MODEL:gpt-4o-mini}}
+    spring-ai-failure-fallback-enabled: ${AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED:true}
+    observation-store: jdbc
   embedding:
     provider: spring-ai
     model-name: ${AGENTMIND_EMBEDDING_MODEL:text-embedding-3-small}

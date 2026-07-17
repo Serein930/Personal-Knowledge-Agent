@@ -10,7 +10,6 @@ import com.agentmind.chat.model.dto.TokenUsageResponse;
 import java.util.List;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
@@ -21,10 +20,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * 真实聊天模型回答生成适配器骨架。
+ * 真实聊天模型回答生成适配器。
  *
  * <p>该实现只在显式切换到真实模型模式，并且容器中已经存在聊天模型客户端时启用。
- * 业务服务仍然只依赖回答生成端口，因此默认模拟实现和真实模型实现可以通过配置平滑切换。</p>
+ * 业务服务仍然只依赖回答生成端口；模型异常原文只进入审计日志，不会通过降级回答暴露给客户端。</p>
  */
 @Component
 @ConditionalOnBean(ChatModel.class)
@@ -127,7 +126,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
                 modelCallLogger.logFailure(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, exception);
                 throw exception;
             }
-            String fallbackAnswer = fallbackAnswer(exception);
+            String fallbackAnswer = fallbackAnswer();
             modelCallLogger.logFallback(
                     request,
                     GENERATOR_TYPE,
@@ -139,7 +138,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
             return new GeneratedAnswer(
                     fallbackAnswer,
                     new TokenUsageResponse(0, 0, 0),
-                    fallbackMetadata(request, elapsedMillis, exception),
+                    fallbackMetadata(request, elapsedMillis),
                     findToolCalls(request)
             );
         }
@@ -152,9 +151,11 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
      */
     private ModelAnswer callModel(AnswerGenerationRequest request) {
         if (!properties.isToolCallingEnabled() || toolCallbackAdapter == null || toolCallingOrchestrator == null) {
+            ChatResponse response = chatModel.call(new Prompt(request.generationPrompt()));
+            validateResponse(response);
             return new ModelAnswer(
-                    chatModel.call(request.generationPrompt()),
-                    new TokenUsageResponse(0, 0, 0),
+                    response.getResult().getOutput().getText(),
+                    ChatModelTokenUsage.from(response),
                     List.of()
             );
         }
@@ -173,7 +174,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
             if (!response.hasToolCalls()) {
                 return new ModelAnswer(
                         response.getResult().getOutput().getText(),
-                        toUsage(response),
+                        ChatModelTokenUsage.from(response),
                         findToolCalls(request)
                 );
             }
@@ -190,21 +191,6 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
             throw new IllegalStateException("真实模型没有返回有效回答");
         }
-    }
-
-    private TokenUsageResponse toUsage(ChatResponse response) {
-        Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
-        if (usage == null) {
-            return new TokenUsageResponse(0, 0, 0);
-        }
-        int promptTokens = usage.getPromptTokens() == null ? 0 : usage.getPromptTokens();
-        int completionTokens = usage.getCompletionTokens() == null ? 0 : usage.getCompletionTokens();
-        Integer totalTokens = usage.getTotalTokens();
-        return new TokenUsageResponse(
-                promptTokens,
-                completionTokens,
-                totalTokens == null ? promptTokens + completionTokens : totalTokens
-        );
     }
 
     private List<AgentToolCallSummaryResponse> findToolCalls(AnswerGenerationRequest request) {
@@ -236,23 +222,21 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
 
     private RagAnswerGenerationMetadataResponse fallbackMetadata(
             AnswerGenerationRequest request,
-            long elapsedMillis,
-            RuntimeException exception
+            long elapsedMillis
     ) {
         return new RagAnswerGenerationMetadataResponse(
                 request.promptVersion(),
                 GENERATOR_TYPE,
                 properties.getModelName(),
                 true,
-                "真实模型调用失败，已按本地降级策略返回可解释结果：" + exception.getMessage(),
+                "真实模型暂时不可用，系统已返回安全降级结果",
                 elapsedMillis
         );
     }
 
-    private String fallbackAnswer(RuntimeException exception) {
+    private String fallbackAnswer() {
         return "当前已经完成知识库检索，但真实聊天模型调用失败，系统已进入降级模式。"
-                + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。失败原因："
-                + exception.getMessage();
+                + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。";
     }
 
     private long elapsedMillis(long startNanos) {

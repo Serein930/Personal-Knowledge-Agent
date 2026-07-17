@@ -1,0 +1,21 @@
+spring:
+  config:
+    activate:
+      on-profile: local-ai
+  ai:
+    model:
+      # local-ai 只负责打开真实聊天模型；向量模型仍由 embedding 配置独立控制。
+      chat: ${AGENTMIND_SPRING_AI_CHAT_MODEL:openai}
+    openai:
+      # 本地真实联调必须显式提供密钥，禁止沿用公共配置中的占位值。
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: ${AGENTMIND_CHAT_MODEL:gpt-4o-mini}
+          temperature: ${AGENTMIND_CHAT_TEMPERATURE:0.2}
+
+agentmind:
+  rag:
+    answer-generator: spring-ai
+    model-name: ${AGENTMIND_RAG_MODEL_NAME:${AGENTMIND_CHAT_MODEL:gpt-4o-mini}}
+    spring-ai-failure-fallback-enabled: ${AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED:true}

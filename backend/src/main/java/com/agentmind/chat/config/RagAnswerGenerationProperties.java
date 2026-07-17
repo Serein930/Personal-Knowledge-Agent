@@ -6,8 +6,8 @@ import org.springframework.stereotype.Component;
 /**
  * 检索增强生成回答生成配置。
  *
- * <p>这些配置先服务于本地模拟生成链路，后续接入真实聊天模型时也沿用同一组开关，
- * 避免在控制层或业务服务中散落模型选择、置信度阈值和提示词版本等基础参数。</p>
+ * <p>Mock 与 Spring AI 真实模型共用本配置，统一管理模型选择、置信度阈值、提示词版本、
+ * 流式超时和失败降级策略，避免这些运行参数散落在控制层或业务编排代码中。</p>
  */
 @Component
 @ConfigurationProperties(prefix = "agentmind.rag")

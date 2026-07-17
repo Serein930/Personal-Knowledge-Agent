@@ -376,3 +376,9 @@ com.agentmind
 已在项目级 `EmbeddingClient` 契约中增加批量生成能力，并提供基于 Spring AI `EmbeddingModel` 的真实模型适配器。适配器负责受控分批、顺序保持、返回数量与维度校验、有限次数指数退避重试，以及调用次数、输入数量、Token、费用估算、耗时和尝试次数观测。默认开发与自动化测试仍使用确定性实现，`production` profile 明确启用 Spring AI，且要求从外部注入模型密钥。
 
 文档摄取索引已改为批量生成 chunk 向量，查询和摄取共用同一适配器与维度配置。切换真实模型后必须重建原有确定性向量，禁止在同一索引中混用两种向量空间。真实供应商联调方法、环境变量、费用配置和维度迁移约束见 `SPRING_AI_EMBEDDING_RUNBOOK.md`。
+
+# 真实 RAG 模型生产启用进展
+
+已增加独立 `local-ai` profile，并在 `production` profile 中强制启用 Spring AI 回答生成器和真实 ChatModel，防止生产环境沿用公共 Mock 默认值。模型名称、温度和安全降级开关均支持外部配置；生产模型审计切换到 JDBC 持久化。
+
+同步回答和 SSE 完成结果现在都会保留供应商 Token 元数据。模型失败时，原始异常只进入日志和审计，面向客户端的降级回答与拒答原因不再携带供应商内部细节。无密钥自动跳过的真实 API 测试、启动方式和人工联调步骤见 `SPRING_AI_RAG_RUNBOOK.md`。

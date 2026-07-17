@@ -9,7 +9,11 @@ import com.agentmind.chat.repository.InMemoryRagModelCallObservationRepository;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
@@ -33,10 +37,31 @@ class SpringAiStreamingAnswerGeneratorTests {
         StreamingGeneratedAnswer answer = generator.generate(request(), deltas::add, () -> { });
 
         assertThat(String.join("", deltas)).contains("真实聊天模型流式调用失败");
+        assertThat(String.join("", deltas)).doesNotContain("供应商内部细节");
+        assertThat(answer.metadata().refusalReason()).doesNotContain("供应商内部细节");
         assertThat(answer.metadata().refused()).isTrue();
         assertThat(repository.countByWorkspaceId(1L, null)).isEqualTo(1);
         assertThat(repository.findByWorkspaceId(1L, null, 0, 10).getFirst().status())
                 .isEqualTo(RagModelCallStatus.FALLBACK);
+    }
+
+    @Test
+    void generateShouldReturnLatestStreamTokenUsage() {
+        RagAnswerGenerationProperties successProperties = new RagAnswerGenerationProperties();
+        successProperties.setToolCallingEnabled(false);
+        SpringAiStreamingAnswerGenerator successGenerator = new SpringAiStreamingAnswerGenerator(
+                new SuccessfulStreamingChatModel(),
+                successProperties,
+                new RagModelCallLogger(new InMemoryRagModelCallObservationRepository())
+        );
+        List<String> deltas = new ArrayList<>();
+
+        StreamingGeneratedAnswer answer = successGenerator.generate(request(), deltas::add, () -> { });
+
+        assertThat(String.join("", deltas)).isEqualTo("真实回答");
+        assertThat(answer.usage().promptTokens()).isEqualTo(13);
+        assertThat(answer.usage().completionTokens()).isEqualTo(4);
+        assertThat(answer.usage().totalTokens()).isEqualTo(17);
     }
 
     @Test
@@ -71,7 +96,26 @@ class SpringAiStreamingAnswerGeneratorTests {
 
         @Override
         public Flux<ChatResponse> stream(Prompt prompt) {
-            return Flux.error(new IllegalStateException("流式模型不可用"));
+            return Flux.error(new IllegalStateException("流式模型不可用：供应商内部细节"));
+        }
+    }
+
+    /** 固定返回两个文本增量，并在最后一个响应携带供应商 Token 用量。 */
+    private static class SuccessfulStreamingChatModel implements StreamingChatModel {
+
+        @Override
+        public Flux<ChatResponse> stream(Prompt prompt) {
+            ChatResponse first = new ChatResponse(
+                    List.of(new Generation(new AssistantMessage("真实")))
+            );
+            ChatResponse last = new ChatResponse(
+                    List.of(new Generation(new AssistantMessage("回答"))),
+                    ChatResponseMetadata.builder()
+                            .model("openai-stream-test")
+                            .usage(new DefaultUsage(13, 4))
+                            .build()
+            );
+            return Flux.just(first, last);
         }
     }
 }

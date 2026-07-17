@@ -99,11 +99,15 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
         modelCallLogger.logStart(request, GENERATOR_TYPE, properties.getModelName());
         StringBuilder streamedAnswer = new StringBuilder();
         List<AgentToolCallSummaryResponse> toolCalls = List.of();
+        TokenUsageResponse tokenUsage = ChatModelTokenUsage.zero();
         try {
             if (request.refusalDecision().shouldRefuse()) {
                 emitText(request.refusalDecision().reason(), streamedAnswer, deltaConsumer, cancellationCheck);
             } else {
-                toolCalls = streamModel(request, streamedAnswer, deltaConsumer, cancellationCheck);
+                StreamingModelAnswer modelAnswer = streamModel(
+                        request, streamedAnswer, deltaConsumer, cancellationCheck);
+                toolCalls = modelAnswer.toolCalls();
+                tokenUsage = modelAnswer.usage();
             }
             long elapsedMillis = elapsedMillis(startNanos);
             modelCallLogger.logSuccess(
@@ -119,6 +123,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                     elapsedMillis,
                     false,
                     request.refusalDecision().reason(),
+                    tokenUsage,
                     toolCalls
             );
         } catch (RagStreamTerminatedException exception) {
@@ -142,7 +147,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
         }
     }
 
-    private List<AgentToolCallSummaryResponse> streamModel(
+    private StreamingModelAnswer streamModel(
             AnswerGenerationRequest request,
             StringBuilder streamedAnswer,
             Consumer<String> deltaConsumer,
@@ -169,12 +174,17 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                         planningResponse
                 );
                 // 工具执行完成后关闭工具定义，再流式生成最终回答，避免流中再次产生无法安全处理的工具请求。
-                streamPrompt(
+                TokenUsageResponse streamUsage = streamPrompt(
                         new Prompt(executionResult.conversationHistory()),
                         timeout,
                         streamedAnswer,
                         deltaConsumer,
                         cancellationCheck
+                );
+                cancellationCheck.check();
+                return new StreamingModelAnswer(
+                        findToolCalls(request),
+                        ChatModelTokenUsage.add(ChatModelTokenUsage.from(planningResponse), streamUsage)
                 );
             } else {
                 emitText(
@@ -185,10 +195,10 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                 );
             }
             cancellationCheck.check();
-            return findToolCalls(request);
+            return new StreamingModelAnswer(findToolCalls(request), ChatModelTokenUsage.from(planningResponse));
         }
 
-        streamPrompt(
+        TokenUsageResponse streamUsage = streamPrompt(
                 new Prompt(request.generationPrompt()),
                 timeout,
                 streamedAnswer,
@@ -196,18 +206,26 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                 cancellationCheck
         );
         cancellationCheck.check();
-        return List.of();
+        return new StreamingModelAnswer(List.of(), streamUsage);
     }
 
-    private void streamPrompt(
+    private TokenUsageResponse streamPrompt(
             Prompt prompt,
             Duration timeout,
             StringBuilder streamedAnswer,
             Consumer<String> deltaConsumer,
             RagStreamCancellationCheck cancellationCheck
     ) {
+        java.util.concurrent.atomic.AtomicReference<TokenUsageResponse> latestUsage =
+                new java.util.concurrent.atomic.AtomicReference<>(ChatModelTokenUsage.zero());
         streamingChatModel.stream(prompt)
                 .timeout(timeout)
+                .doOnNext(response -> {
+                    TokenUsageResponse usage = ChatModelTokenUsage.from(response);
+                    if (usage.totalTokens() > 0) {
+                        latestUsage.set(usage);
+                    }
+                })
                 .map(response -> response == null
                         || response.getResult() == null
                         || response.getResult().getOutput() == null
@@ -216,6 +234,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                 .filter(delta -> delta != null && !delta.isEmpty())
                 .doOnNext(delta -> emitDelta(delta, streamedAnswer, deltaConsumer, cancellationCheck))
                 .blockLast();
+        return latestUsage.get();
     }
 
     private void validatePlanningResponse(ChatResponse response) {
@@ -243,7 +262,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             throw exception;
         }
 
-        String fallbackAnswer = fallbackAnswer(exception);
+        String fallbackAnswer = fallbackAnswer();
         try {
             emitText(fallbackAnswer, streamedAnswer, deltaConsumer, cancellationCheck);
             long elapsedMillis = elapsedMillis(startNanos);
@@ -260,7 +279,8 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                     streamedAnswer.length(),
                     elapsedMillis,
                     true,
-                    fallbackReason(exception),
+                    fallbackReason(),
+                    ChatModelTokenUsage.zero(),
                     findToolCalls(request)
             );
         } catch (RagStreamTerminatedException terminatedException) {
@@ -306,11 +326,12 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             long elapsedMillis,
             boolean refused,
             String refusalReason,
+            TokenUsageResponse tokenUsage,
             List<AgentToolCallSummaryResponse> toolCalls
     ) {
         return new StreamingGeneratedAnswer(
                 answerLength,
-                new TokenUsageResponse(0, 0, 0),
+                tokenUsage,
                 new RagAnswerGenerationMetadataResponse(
                         request.promptVersion(),
                         GENERATOR_TYPE,
@@ -339,21 +360,22 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
         );
     }
 
-    private String fallbackAnswer(RuntimeException exception) {
+    private String fallbackAnswer() {
         return "当前已经完成知识库检索，但真实聊天模型流式调用失败，系统已进入降级模式。"
-                + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。失败原因："
-                + safeMessage(exception);
+                + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。";
     }
 
-    private String fallbackReason(RuntimeException exception) {
-        return "真实模型流式调用失败，已按本地降级策略返回可解释结果：" + safeMessage(exception);
-    }
-
-    private String safeMessage(RuntimeException exception) {
-        return exception.getMessage() == null ? "未知模型异常" : exception.getMessage();
+    private String fallbackReason() {
+        return "真实模型流式调用失败，系统已返回安全降级结果";
     }
 
     private long elapsedMillis(long startNanos) {
         return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
+    private record StreamingModelAnswer(
+            List<AgentToolCallSummaryResponse> toolCalls,
+            TokenUsageResponse usage
+    ) {
     }
 }

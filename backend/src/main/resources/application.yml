@@ -12,10 +12,14 @@ spring:
         enabled: false
   ai:
     model:
-      chat: none
+      chat: ${AGENTMIND_SPRING_AI_CHAT_MODEL:none}
       embedding: ${AGENTMIND_SPRING_AI_EMBEDDING_MODEL:none}
     openai:
       api-key: ${OPENAI_API_KEY:agentmind-local-placeholder}
+      chat:
+        options:
+          model: ${AGENTMIND_CHAT_MODEL:gpt-4o-mini}
+          temperature: ${AGENTMIND_CHAT_TEMPERATURE:0.2}
       embedding:
         options:
           model: ${AGENTMIND_EMBEDDING_MODEL:text-embedding-3-small}
@@ -134,12 +138,13 @@ agentmind:
       initial-delay-millis: 3000
       rebuild-document-batch-size: 100
   rag:
-    answer-generator: mock
+    # 普通开发与测试默认不访问付费模型；local-ai 和 production profile 会显式启用真实模型。
+    answer-generator: ${AGENTMIND_RAG_ANSWER_GENERATOR:mock}
     prompt-version: rag-chat-v1
-    model-name: mock-local
+    model-name: ${AGENTMIND_RAG_MODEL_NAME:mock-local}
     minimum-citation-score: 0.05
     max-context-citations: 5
-    spring-ai-failure-fallback-enabled: true
+    spring-ai-failure-fallback-enabled: ${AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED:true}
     stream-timeout-millis: 60000
     stream-chunk-size: 24
     tool-calling-enabled: true
