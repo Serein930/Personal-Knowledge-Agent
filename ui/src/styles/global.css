@@ -279,7 +279,23 @@ textarea {
 }
 
 .upload-zone {
-  margin-top: 16px;
+  margin-top: 0;
+}
+
+.ingestion-upload-panel {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.ingestion-upload-panel h3 {
+  margin-bottom: 0;
+}
+
+/* 限制拖拽区使用内容高度，避免组件的百分比高度把提交按钮挤出面板。 */
+.upload-zone.ant-upload-wrapper .ant-upload-drag {
+  height: auto;
+  min-height: 180px;
 }
 
 .form-stack {

@@ -328,3 +328,9 @@ com.agentmind
 隔离异地恢复。六类 JSON 证据必须全部通过才能生成带 SHA-256 的发布候选冻结清单；晋级前会重新核对证据哈希、清单时效、当前提交和灰度镜像，
 任一阶段失败时自动撤销灰度。真实 RPO、RTO、吞吐量和延迟数字只能由受保护验收环境生成，详细操作见
 `PRODUCTION_ACCEPTANCE_EVIDENCE_RUNBOOK.md`。
+
+# 前后端全链路验收进展
+
+已补齐固定 Maven 3.9.11 且校验分发包摘要的 Maven Wrapper，并建立基于 Playwright 的第一条前后端真实业务闭环：自动启动隔离的 Spring Boot 与 Vite 服务，上传固定 Markdown 资料，验证文档摄取与知识库展示，再通过 SSE 完成带引用来源的 RAG 问答。该用例已接入独立 GitHub Actions 工作流，详细操作见 `FULL_STACK_E2E_RUNBOOK.md`。
+
+真实 RPO、RTO、P95、P99、最大吞吐及故障恢复结论仍必须由受保护预发布环境执行现有生产证据工作流后生成；在这些证据全部通过前，不冻结发布候选版本。

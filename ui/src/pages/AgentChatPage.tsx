@@ -70,7 +70,7 @@ export function AgentChatPage() {
       await streamRagChat(env.workspaceId, normalizedQuestion, conversationId, {
         onMetadata: (event) => setConversationId(event.conversationId),
         onDelta: (event) => setMessages((current) => current.map((item) => (
-          item.id === assistantViewId ? { ...item, content: item.content + event.delta } : item
+          item.id === assistantViewId ? { ...item, content: item.content + event.content } : item
         ))),
         onCitation: (event) => setCitations((current) => [...current, event.citation]),
         onToolCall: (event) => setToolCalls((current) => [...current, event.toolCall]),

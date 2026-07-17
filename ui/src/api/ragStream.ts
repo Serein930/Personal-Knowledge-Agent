@@ -3,7 +3,7 @@ import type { CreatedToolConfirmationDto, RagCitationDto, ToolCallSummaryDto } f
 
 interface RagStreamHandlers {
   onMetadata?: (data: { conversationId: number; messageId: number }) => void;
-  onDelta?: (data: { sequence: number; delta: string }) => void;
+  onDelta?: (data: { sequence: number; content: string }) => void;
   onCitation?: (data: { citation: RagCitationDto }) => void;
   onToolCall?: (data: { toolCall: ToolCallSummaryDto }) => void;
   onConfirmationRequired?: (data: { proposal: CreatedToolConfirmationDto }) => void;
@@ -24,7 +24,6 @@ export async function streamRagChat(
     headers: {
       Accept: 'text/event-stream',
       'Content-Type': 'application/json',
-      'X-Demo-User-Id': '1',
     },
     body: JSON.stringify({ conversationId, question, topK: 5 }),
   });

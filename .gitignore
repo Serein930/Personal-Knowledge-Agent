@@ -42,6 +42,8 @@ deploy/vault/rendered/
 
 # TypeScript build cache
 *.tsbuildinfo
+ui/playwright-report/
+ui/test-results/
 
 # Generated config build output
 ui/vite.config.js

@@ -1,0 +1,58 @@
+name: 前后端全链路验收
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentmind-full-stack-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-stack-e2e:
+    name: 文件摄取、知识检索与流式问答
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出待验收源码
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 配置 Java 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: 配置 Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: 安装前端依赖
+        working-directory: ui
+        run: npm ci
+
+      - name: 安装 Chromium 及系统依赖
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+
+      - name: 执行前后端全链路验收
+        working-directory: ui
+        run: npm run e2e
+
+      - name: 保存失败诊断与网页报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-stack-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ui/playwright-report
+            ui/test-results
+          if-no-files-found: warn
+          retention-days: 14

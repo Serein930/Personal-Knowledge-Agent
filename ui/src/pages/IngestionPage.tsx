@@ -82,7 +82,7 @@ export function IngestionPage() {
       <SectionHeader title="采集中心" description={`当前知识空间：${workspaceId}`} />
 
       <div className="two-column">
-        <section className="panel">
+        <section className="panel ingestion-upload-panel">
           <h3>上传学习资料</h3>
           <Upload.Dragger
             maxCount={1}
