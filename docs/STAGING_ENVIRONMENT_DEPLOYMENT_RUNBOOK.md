@@ -199,14 +199,18 @@ $env:AGENTMIND_STAGING_BACKUP_SECRET_ACCESS_KEY = "异地备份只读秘密"
 
 ## 七、执行真实验收
 
-1. 运行 `production-release-gate.yml` 并选择发布镜像。
-2. 从 GHCR 获取带 `sha256` 的候选镜像地址。
-3. 确认镜像 OCI revision 等于准备验收的完整 Git 提交。
-4. 手动运行 `staging-acceptance.yml`。
-5. 填写候选镜像、并发用户数、稳态持续时间和 restic 快照。
+推荐通过 `release-candidate-acceptance.yml` 运行完整流程：
+
+1. 在 GitHub Actions 页面选择“发布候选全链路验收”。
+2. 填写并发用户数、稳态持续时间和 restic 快照，然后手动运行。
+3. 供应链门禁执行常规测试、真实依赖测试、镜像构建、软件物料清单、漏洞扫描、GHCR 推送、Cosign 无密钥签名和来源证明。
+4. 供应链门禁生成 `release-candidate.json`，并直接输出带 `sha256` 摘要的不可变镜像。
+5. 预发布验收只消费该输出；供应链失败或输出为空时不会调度任何自托管 Runner。
 6. 审核人批准 `staging` Environment。
-7. 等待双 Runner 就绪、预检、秘密轮换、灰度、容量、故障注入和灾备全部通过。
+7. 等待双 Runner 就绪、预检、秘密轮换、灰度、真实依赖冒烟、容量、故障注入和灾备全部通过。
 8. 工作流冻结六类证据并晋级稳定组；任一变更后步骤失败时自动撤销灰度。
+
+保留单独手动运行 `production-release-gate.yml` 和 `staging-acceptance.yml` 的能力，用于失败诊断和按同一摘要重试。单独运行 staging 时必须从候选清单读取完整镜像地址，不得从普通标签推断摘要。
 
 不得使用普通标签、`latest`、本地构造 JSON 或手工修改报告绕过门禁。
 
@@ -243,6 +247,7 @@ $env:AGENTMIND_STAGING_BACKUP_SECRET_ACCESS_KEY = "异地备份只读秘密"
 ./scripts/tests/staging-bootstrap-tests.ps1
 ./scripts/tests/staging-runner-readiness-tests.ps1
 ./scripts/tests/production-acceptance-evidence-tests.ps1
+./scripts/tests/release-candidate-workflow-contract-tests.ps1
 ```
 
-第一条测试验证 Runner 注册、Environment 声明和真实依赖冒烟的防误操作边界；第二条测试证明开发环境无法绕过受保护 Runner 门禁；第三条测试证明失败、缺失或被篡改的验收证据不能冻结发布候选。它们不产生任何生产性能结论。
+第一条测试验证 Runner 注册、Environment 声明和真实依赖冒烟的防误操作边界；第二条测试证明开发环境无法绕过受保护 Runner 门禁；第三条测试证明失败、缺失或被篡改的验收证据不能冻结发布候选；第四条测试固定供应链摘要向 staging 的直接传递契约。它们不产生任何生产性能结论。

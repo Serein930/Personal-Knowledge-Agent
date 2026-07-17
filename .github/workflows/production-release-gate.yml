@@ -1,6 +1,17 @@
 name: 生产镜像供应链门禁
 
 on:
+  workflow_call:
+    inputs:
+      publish:
+        description: 测试和扫描通过后是否发布镜像
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      candidate_image:
+        description: 已签名且带 sha256 摘要的不可变候选镜像
+        value: ${{ jobs.release-gate.outputs.candidate_image }}
   workflow_dispatch:
     inputs:
       publish:
@@ -23,6 +34,8 @@ jobs:
   release-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      candidate_image: ${{ steps.candidate.outputs.image }}
     steps:
       - name: 检出不可变发布源码
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -163,3 +176,41 @@ jobs:
           subject-digest: ${{ steps.publish.outputs.digest }}
           sbom-path: agentmind-backend-sbom.cdx.json
           push-to-registry: true
+
+      - name: 生成不可变候选镜像清单
+        if: steps.publish.outcome == 'success'
+        id: candidate
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          candidate_image="${IMAGE}@${DIGEST}"
+          echo "image=${candidate_image}" >> "$GITHUB_OUTPUT"
+          jq -n \
+            --arg gitCommit "$GITHUB_SHA" \
+            --arg candidateImage "$candidate_image" \
+            --arg workflowRunId "$GITHUB_RUN_ID" \
+            --arg workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schemaVersion: "1.0",
+              manifestType: "signed_release_candidate",
+              gitCommit: $gitCommit,
+              candidateImage: $candidateImage,
+              workflowRunId: $workflowRunId,
+              workflowRunAttempt: $workflowRunAttempt,
+              generatedAt: $generatedAt,
+              signed: true,
+              provenanceAttested: true,
+              sbomAttested: true
+            }' > release-candidate.json
+
+      - name: 保存不可变候选镜像清单
+        if: steps.candidate.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: release-candidate.json
+          if-no-files-found: error
+          retention-days: 90

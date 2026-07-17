@@ -1,0 +1,53 @@
+name: 发布候选全链路验收
+
+on:
+  workflow_dispatch:
+    inputs:
+      virtual_users:
+        description: k6 并发用户数
+        required: true
+        default: "30"
+        type: string
+      duration:
+        description: k6 稳态压测时长
+        required: true
+        default: "5m"
+        type: string
+      backup_snapshot:
+        description: 用于异地恢复演练的 restic 快照
+        required: true
+        default: latest
+        type: string
+
+# 调用方权限是可复用工作流能够取得的权限上限。供应链工作流仍使用自身定义的最小权限，
+# staging 工作流只能读取源码和镜像，不会继承不必要的包写入能力。
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+  security-events: write
+
+concurrency:
+  group: agentmind-release-candidate-acceptance
+  cancel-in-progress: false
+
+jobs:
+  supply_chain_gate:
+    name: 构建、扫描、签名并证明候选镜像
+    uses: ./.github/workflows/production-release-gate.yml
+    with:
+      publish: true
+    secrets: inherit
+
+  staging_acceptance:
+    name: 部署候选镜像并固化真实验收证据
+    needs: supply_chain_gate
+    uses: ./.github/workflows/staging-acceptance.yml
+    with:
+      # 摘要由供应链工作流直接输出，避免人工复制普通标签或验收错误提交。
+      candidate_image: ${{ needs.supply_chain_gate.outputs.candidate_image }}
+      virtual_users: ${{ inputs.virtual_users }}
+      duration: ${{ inputs.duration }}
+      backup_snapshot: ${{ inputs.backup_snapshot }}
+    secrets: inherit

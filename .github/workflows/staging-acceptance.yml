@@ -1,6 +1,27 @@
 name: 预发布生产证据验收
 
 on:
+  workflow_call:
+    inputs:
+      candidate_image:
+        description: 带 sha256 摘要的候选后端镜像
+        required: true
+        type: string
+      virtual_users:
+        description: k6 并发用户数
+        required: false
+        default: "30"
+        type: string
+      duration:
+        description: k6 稳态压测时长
+        required: false
+        default: "5m"
+        type: string
+      backup_snapshot:
+        description: 用于异地恢复演练的 restic 快照
+        required: false
+        default: latest
+        type: string
   workflow_dispatch:
     inputs:
       candidate_image:
