@@ -362,3 +362,7 @@ com.agentmind
 # 独立生产集群部署进展
 
 已增加受 `production-deployment` Environment 保护的独立生产部署工作流。工作流只接受正式版本发布产物，并交叉校验提交、版本、不可变摘要镜像以及发布清单 SHA-256；随后在专用生产 Runner 上执行约 10% 灰度、真实业务冒烟、稳定组滚动更新和全量冒烟。任一阶段失败时会尝试恢复发布前稳定组与灰度组镜像，灰度和稳定阶段分别保存证据。该能力目前仅完成仓库内代码、测试和操作手册，必须在真实生产集群完成 Environment 配置与人工审批后才能形成有效部署结论。
+
+# 生产 Runner 与部署环境引导进展
+
+已增加 `agentmind-production` 专用 Runner 安全注册脚本、`production-deployment` Environment 声明式配置脚本和无秘密模板。生产部署工作流在下载正式制品前执行零变更就绪检查，验证 PowerShell、Git、Docker、Swarm 管理面、加密覆盖网络、服务副本与滚动回滚策略，并保存独立就绪报告。注册令牌和 Environment 秘密只允许从当前进程注入，任何真实写操作均要求显式确认。真实 Runner 注册、Environment 创建和完整发布链路仍需在仓库外准备生产资源后由维护者执行。

@@ -1,0 +1,18 @@
+{
+  "environmentName": "production-deployment",
+  "waitTimerMinutes": 5,
+  "preventSelfReview": true,
+  "reviewerUserIds": [
+    12345678
+  ],
+  "variables": {
+    "PRODUCTION_BASE_URL": "https://替换为生产域名",
+    "PRODUCTION_WORKSPACE_ID": "替换为生产冒烟知识空间编号",
+    "PRODUCTION_STACK_NAME": "agentmind-production",
+    "PRODUCTION_OVERLAY_NETWORK": "agentmind-production"
+  },
+  "secretEnvironmentVariables": {
+    "PRODUCTION_ACCESS_TOKEN": "AGENTMIND_PRODUCTION_ACCESS_TOKEN",
+    "PRODUCTION_DEPLOYMENT_GUARD": "AGENTMIND_PRODUCTION_DEPLOYMENT_GUARD"
+  }
+}
