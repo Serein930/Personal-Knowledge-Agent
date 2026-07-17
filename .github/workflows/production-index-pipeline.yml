@@ -11,7 +11,7 @@ on:
 jobs:
   production-index-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -26,11 +26,17 @@ jobs:
       - name: 调整 OpenSearch 所需内核参数
         run: sudo sysctl -w vm.max_map_count=262144
 
-      - name: 执行 PostgreSQL 与 OpenSearch 全链路测试
+      - name: 执行 PostgreSQL、OpenSearch、Redis 与 MinIO 全链路测试
         working-directory: backend
         env:
           AGENTMIND_RUN_PRODUCTION_INTEGRATION: "true"
         run: mvn -B -Dtest=ProductionKnowledgeIndexPipelineIntegrationTests,IdentityPersistenceIntegrationTests test
+
+      - name: 执行真实 OIDC 发行方验签测试
+        working-directory: backend
+        env:
+          AGENTMIND_RUN_OIDC_INTEGRATION: "true"
+        run: mvn -B -Dtest=OidcJwtDecoderIntegrationTests test
 
       - name: 执行全部常规测试
         working-directory: backend

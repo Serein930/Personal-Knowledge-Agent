@@ -1,0 +1,80 @@
+spring:
+  config:
+    activate:
+      on-profile: production
+    # Docker/Kubernetes/Vault Agent 均可把秘密以同名文件挂载到该目录。
+    import: optional:configtree:${AGENTMIND_SECRETS_PATH:/run/secrets/}
+  datasource:
+    url: ${AGENTMIND_DATABASE_URL}
+    username: ${AGENTMIND_DATABASE_USERNAME:agentmind}
+    hikari:
+      maximum-pool-size: ${AGENTMIND_DATABASE_POOL_MAX_SIZE:20}
+      minimum-idle: ${AGENTMIND_DATABASE_POOL_MIN_IDLE:5}
+      connection-timeout: 5s
+      validation-timeout: 3s
+  data:
+    redis:
+      host: ${AGENTMIND_REDIS_HOST}
+      port: ${AGENTMIND_REDIS_PORT:6379}
+      ssl:
+        enabled: ${AGENTMIND_REDIS_SSL:true}
+      timeout: 2s
+
+server:
+  shutdown: graceful
+  forward-headers-strategy: framework
+  tomcat:
+    connection-timeout: 10s
+
+spring.lifecycle.timeout-per-shutdown-phase: 30s
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+        add-additional-paths: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,db,redis
+  health:
+    # 生产限流和会话记忆依赖 Redis，必须将连接状态纳入整体健康结果。
+    redis:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+agentmind:
+  security:
+    mode: ${AGENTMIND_SECURITY_MODE:oidc}
+    issuer-uri: ${AGENTMIND_OIDC_ISSUER_URI:}
+    audience: ${AGENTMIND_OIDC_AUDIENCE:}
+  core:
+    persistence:
+      store: jdbc
+  rate-limit:
+    mode: redis
+    fail-open: false
+  web:
+    allowed-origin: ${AGENTMIND_ALLOWED_ORIGIN}
+  storage:
+    type: minio
+    minio:
+      endpoint: ${AGENTMIND_MINIO_ENDPOINT}
+      bucket: ${AGENTMIND_MINIO_BUCKET:agentmind}
+  vector-store:
+    type: pgvector
+  keyword-index:
+    type: opensearch
+    opensearch:
+      base-url: ${AGENTMIND_OPENSEARCH_URL}
+      username: ${AGENTMIND_OPENSEARCH_USERNAME}
+  knowledge-index:
+    outbox:
+      enabled: true
+  chat:
+    memory:
+      store: redis

@@ -5,6 +5,8 @@ import com.agentmind.chat.model.dto.RagChatResponse;
 import com.agentmind.chat.service.RagContextAssemblyService;
 import com.agentmind.chat.service.RagStreamingChatService;
 import com.agentmind.common.response.ApiResponse;
+import com.agentmind.common.security.CurrentUserId;
+import com.agentmind.workspace.service.WorkspaceAccessService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import com.agentmind.common.security.CurrentUserId;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -36,20 +37,25 @@ public class RagChatController {
 
     private final RagContextAssemblyService ragContextAssemblyService;
     private final RagStreamingChatService ragStreamingChatService;
+    private final WorkspaceAccessService workspaceAccessService;
 
     public RagChatController(
             RagContextAssemblyService ragContextAssemblyService,
-            RagStreamingChatService ragStreamingChatService
+            RagStreamingChatService ragStreamingChatService,
+            WorkspaceAccessService workspaceAccessService
     ) {
         this.ragContextAssemblyService = ragContextAssemblyService;
         this.ragStreamingChatService = ragStreamingChatService;
+        this.workspaceAccessService = workspaceAccessService;
     }
 
     @PostMapping("/chat")
     public ApiResponse<RagChatResponse> chat(
+            @CurrentUserId Long ownerUserId,
             @PathVariable @Positive(message = "知识空间编号必须为正数") Long workspaceId,
             @Valid @RequestBody RagChatRequest request
     ) {
+        workspaceAccessService.requireReadable(ownerUserId, workspaceId);
         return ApiResponse.success(ragContextAssemblyService.prepareChatContext(workspaceId, request));
     }
 

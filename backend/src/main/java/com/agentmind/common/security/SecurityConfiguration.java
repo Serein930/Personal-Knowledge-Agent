@@ -1,9 +1,11 @@
 package com.agentmind.common.security;
 
+import com.agentmind.common.ratelimit.DistributedRateLimitFilter;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,7 +19,10 @@ import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.StringUtils;
 
@@ -34,7 +39,8 @@ public class SecurityConfiguration {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             AgentMindSecurityProperties properties,
-            RestSecurityErrorHandler errorHandler
+            RestSecurityErrorHandler errorHandler,
+            ObjectProvider<DistributedRateLimitFilter> rateLimitFilterProvider
     ) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
@@ -45,7 +51,8 @@ public class SecurityConfiguration {
             http.authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll());
         } else {
             http.authorizeHttpRequests(authorize -> authorize
-                            .requestMatchers("/actuator/health", "/actuator/info", "/api/v1/auth/**").permitAll()
+                            .requestMatchers("/actuator/health", "/actuator/health/**", "/livez", "/readyz",
+                                    "/actuator/info", "/api/v1/auth/**").permitAll()
                             .anyRequest().authenticated())
                     .oauth2ResourceServer(resourceServer -> resourceServer
                             .jwt(Customizer.withDefaults())
@@ -54,6 +61,8 @@ public class SecurityConfiguration {
                             .authenticationEntryPoint(errorHandler)
                             .accessDeniedHandler(errorHandler));
         }
+        rateLimitFilterProvider.ifAvailable(filter ->
+                http.addFilterAfter(filter, BearerTokenAuthenticationFilter.class));
         return http.build();
     }
 
@@ -81,7 +90,15 @@ public class SecurityConfiguration {
         if (!StringUtils.hasText(properties.getIssuerUri())) {
             throw new IllegalStateException("OIDC 安全模式必须配置 AGENTMIND_OIDC_ISSUER_URI");
         }
-        return JwtDecoders.fromIssuerLocation(properties.getIssuerUri());
+        if (!StringUtils.hasText(properties.getAudience())) {
+            throw new IllegalStateException("OIDC 安全模式必须配置 AGENTMIND_OIDC_AUDIENCE");
+        }
+        NimbusJwtDecoder decoder = JwtDecoders.fromIssuerLocation(properties.getIssuerUri());
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(properties.getIssuerUri()),
+                new OidcAudienceValidator(properties.getAudience())
+        ));
+        return decoder;
     }
 
     private SecretKey localSecretKey(AgentMindSecurityProperties properties) {

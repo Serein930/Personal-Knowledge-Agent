@@ -24,6 +24,10 @@ server:
   port: 8081
 
 management:
+  health:
+    # 默认开发模式使用内存适配器，不应因为本机未启动 Redis 而把应用整体标记为不可用。
+    redis:
+      enabled: false
   tracing:
     enabled: ${AGENTMIND_TRACING_ENABLED:false}
     sampling:
@@ -41,11 +45,23 @@ logging:
     com.agentmind: INFO
 
 agentmind:
+  rate-limit:
+    # 默认关闭以保证常规单元测试不依赖 Redis；生产配置会显式启用。
+    mode: ${AGENTMIND_RATE_LIMIT_MODE:disabled}
+    key-prefix: ${AGENTMIND_RATE_LIMIT_KEY_PREFIX:agentmind:rate-limit}
+    window: ${AGENTMIND_RATE_LIMIT_WINDOW:1m}
+    fail-open: ${AGENTMIND_RATE_LIMIT_FAIL_OPEN:false}
+    client-ip-header: ${AGENTMIND_CLIENT_IP_HEADER:}
+    general-requests: ${AGENTMIND_RATE_LIMIT_GENERAL_REQUESTS:300}
+    authentication-requests: ${AGENTMIND_RATE_LIMIT_AUTH_REQUESTS:20}
+    ingestion-requests: ${AGENTMIND_RATE_LIMIT_INGESTION_REQUESTS:60}
+    rag-requests: ${AGENTMIND_RATE_LIMIT_RAG_REQUESTS:60}
   security:
     # 默认关闭便于无外部依赖测试；生产环境必须显式使用 local-jwt 或 oidc。
     mode: ${AGENTMIND_SECURITY_MODE:disabled}
     jwt-secret: ${AGENTMIND_JWT_SECRET:}
     issuer-uri: ${AGENTMIND_OIDC_ISSUER_URI:}
+    audience: ${AGENTMIND_OIDC_AUDIENCE:}
     access-token-ttl: ${AGENTMIND_ACCESS_TOKEN_TTL:2h}
   core:
     persistence:

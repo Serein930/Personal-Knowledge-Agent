@@ -4,6 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.agentmind.document.chunk.DocumentChunk;
+import com.agentmind.common.ratelimit.RateLimitDecision;
+import com.agentmind.common.ratelimit.RateLimitProperties;
+import com.agentmind.common.ratelimit.RateLimitScope;
+import com.agentmind.common.ratelimit.RedisDistributedRateLimiter;
+import com.agentmind.common.storage.MinioObjectStorageService;
+import com.agentmind.common.storage.MinioStorageProperties;
 import com.agentmind.knowledge.keyword.OpenSearchKeywordIndex;
 import com.agentmind.knowledge.keyword.OpenSearchKeywordIndexProperties;
 import com.agentmind.knowledge.outbox.config.KnowledgeIndexOutboxProperties;
@@ -16,9 +22,13 @@ import com.agentmind.knowledge.repository.PgVectorStore;
 import com.agentmind.knowledge.service.KnowledgeIndexingService;
 import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.minio.GetObjectArgs;
+import io.minio.MinioClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.io.ByteArrayInputStream;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import org.flywaydb.core.Flyway;
@@ -28,6 +38,9 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -36,7 +49,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * PostgreSQL、pgvector、事务 Outbox 与 OpenSearch 的生产链路集成测试。
+ * PostgreSQL、pgvector、事务 Outbox、OpenSearch、Redis 与 MinIO 的生产链路集成测试。
  *
  * <p>该测试需要拉取容器镜像，因此默认不进入普通单元测试；CI 或本地显式设置
  * {@code AGENTMIND_RUN_PRODUCTION_INTEGRATION=true} 后运行。</p>
@@ -57,10 +70,25 @@ class ProductionKnowledgeIndexPipelineIntegrationTests {
             DockerImageName.parse("opensearchproject/opensearch:2.17.1"))
             .withEnv("discovery.type", "single-node")
             .withEnv("plugins.security.disabled", "true")
+            .withEnv("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "T9#kW4!zP7@rN2$q")
             .withEnv("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
             .withExposedPorts(9200)
             .waitingFor(Wait.forHttp("/_cluster/health").forStatusCode(200)
                     .withStartupTimeout(Duration.ofMinutes(3)));
+
+    @Container
+    private static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine"))
+            .withExposedPorts(6379)
+            .waitingFor(Wait.forLogMessage(".*Ready to accept connections.*", 1));
+
+    @Container
+    private static final GenericContainer<?> MINIO = new GenericContainer<>(
+            DockerImageName.parse("minio/minio:RELEASE.2025-04-22T22-12-26Z"))
+            .withEnv("MINIO_ROOT_USER", "agentmind-test")
+            .withEnv("MINIO_ROOT_PASSWORD", "agentmind-test-secret")
+            .withCommand("server", "/data")
+            .withExposedPorts(9000)
+            .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000).forStatusCode(200));
 
     private static JdbcTemplate jdbcTemplate;
     private static DriverManagerDataSource dataSource;
@@ -154,6 +182,50 @@ class ProductionKnowledgeIndexPipelineIntegrationTests {
                 "select count(*) from knowledge_vector_chunks where workspace_id = 101 and document_id = 9201",
                 Long.class)).isZero();
         assertThat(outboxRepository.statistics(101L).pending()).isZero();
+    }
+
+    @Test
+    void shouldReachRedisAndMinioInTheSameProductionDependencyChain() throws Exception {
+        RedisStandaloneConfiguration redisConfiguration = new RedisStandaloneConfiguration(
+                REDIS.getHost(), REDIS.getMappedPort(6379));
+        LettuceConnectionFactory connectionFactory = new LettuceConnectionFactory(redisConfiguration);
+        connectionFactory.afterPropertiesSet();
+        connectionFactory.start();
+        try {
+            StringRedisTemplate redisTemplate = new StringRedisTemplate(connectionFactory);
+            redisTemplate.afterPropertiesSet();
+            RateLimitProperties rateLimitProperties = new RateLimitProperties();
+            rateLimitProperties.setKeyPrefix("agentmind:test:production-rate-limit");
+            RedisDistributedRateLimiter rateLimiter = new RedisDistributedRateLimiter(
+                    redisTemplate, rateLimitProperties);
+
+            assertThat(rateLimiter.tryAcquire(RateLimitScope.RAG, "user:9001", 1).allowed()).isTrue();
+            RateLimitDecision rejected = rateLimiter.tryAcquire(RateLimitScope.RAG, "user:9001", 1);
+            assertThat(rejected.allowed()).isFalse();
+            assertThat(rejected.retryAfterSeconds()).isPositive();
+        } finally {
+            connectionFactory.destroy();
+        }
+
+        MinioStorageProperties minioProperties = new MinioStorageProperties();
+        minioProperties.setEndpoint("http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000));
+        minioProperties.setAccessKey("agentmind-test");
+        minioProperties.setSecretKey("agentmind-test-secret");
+        minioProperties.setBucket("agentmind-production-test");
+        MinioObjectStorageService objectStorage = new MinioObjectStorageService(minioProperties);
+        byte[] content = "生产依赖链对象存储验证".getBytes(StandardCharsets.UTF_8);
+
+        var stored = objectStorage.store("integration", "production.txt",
+                new ByteArrayInputStream(content), content.length, "text/plain");
+
+        MinioClient verificationClient = MinioClient.builder()
+                .endpoint(minioProperties.getEndpoint())
+                .credentials(minioProperties.getAccessKey(), minioProperties.getSecretKey())
+                .build();
+        try (var input = verificationClient.getObject(GetObjectArgs.builder()
+                .bucket(minioProperties.getBucket()).object(stored.storageKey()).build())) {
+            assertThat(input.readAllBytes()).isEqualTo(content);
+        }
     }
 
     private static KnowledgeIndexingService createIndexingService() {

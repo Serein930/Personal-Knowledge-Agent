@@ -58,7 +58,7 @@ public class JdbcKnowledgeIndexOutboxRepository implements KnowledgeIndexOutboxR
                 with candidates as (
                     select id
                     from knowledge_index_outbox
-                    where (? is null or workspace_id = ?)
+                    where (cast(? as bigint) is null or workspace_id = ?)
                       and ((status in ('PENDING', 'RETRY') and available_at <= ?)
                            or (status = 'PROCESSING' and lease_expires_at <= ?))
                     order by available_at, id

@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+.m2
+.agents
+ui/node_modules
+ui/dist
+backend/target
+logs
+.agentmind-storage
+*.log
+docs
+observability
+scripts

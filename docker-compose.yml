@@ -64,11 +64,15 @@ services:
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
+      path.repo: /usr/share/opensearch/snapshots
+      # OpenSearch 2.12+ 的安装脚本即使关闭安全插件也要求提供初始管理员密码。
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${AGENTMIND_OPENSEARCH_INITIAL_ADMIN_PASSWORD:-L7!qR2#zN9@wT4%k}
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
       - "${AGENTMIND_OPENSEARCH_PORT:-9200}:9200"
     volumes:
       - agentmind-opensearch-data:/usr/share/opensearch/data
+      - agentmind-opensearch-snapshots:/usr/share/opensearch/snapshots
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
       interval: 15s
@@ -119,5 +123,6 @@ volumes:
   agentmind-postgres-data:
   agentmind-redis-data:
   agentmind-opensearch-data:
+  agentmind-opensearch-snapshots:
   agentmind-grafana-data:
   agentmind-minio-data:

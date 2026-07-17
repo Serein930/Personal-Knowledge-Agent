@@ -10,6 +10,7 @@ public class AgentMindSecurityProperties {
     private SecurityMode mode = SecurityMode.DISABLED;
     private String jwtSecret = "";
     private String issuerUri = "";
+    private String audience = "";
     private Duration accessTokenTtl = Duration.ofHours(2);
 
     public SecurityMode getMode() {
@@ -34,6 +35,14 @@ public class AgentMindSecurityProperties {
 
     public void setIssuerUri(String issuerUri) {
         this.issuerUri = issuerUri;
+    }
+
+    public String getAudience() {
+        return audience;
+    }
+
+    public void setAudience(String audience) {
+        this.audience = audience;
     }
 
     public Duration getAccessTokenTtl() {

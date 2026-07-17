@@ -65,6 +65,8 @@ public class GlobalExceptionHandler {
         return switch (errorCode) {
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
+            case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
+            case DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case RESOURCE_CONFLICT -> HttpStatus.CONFLICT;
             case BAD_REQUEST -> HttpStatus.BAD_REQUEST;

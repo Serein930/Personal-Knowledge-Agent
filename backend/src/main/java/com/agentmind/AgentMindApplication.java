@@ -6,8 +6,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * 后端应用入口。
  *
- * <p>当前阶段已经具备基础网页服务、统一响应、文档摄取、向量检索和模拟检索增强问答能力。
- * 数据库持久化、真实模型和对象存储等外部依赖会按后续阶段逐步接入。</p>
+ * <p>应用已经具备认证授权、知识摄取、混合检索、检索增强生成、Agent 工具、学习系统、
+ * 评估观测和生产基础设施适配能力。具体实现通过配置在本地内存模式与生产外部依赖之间切换。</p>
  */
 @SpringBootApplication
 public class AgentMindApplication {

@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  agentmind-backend:
+    image: ${AGENTMIND_BACKEND_IMAGE}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      AGENTMIND_INSTANCE_ID: "{{.Service.Name}}-{{.Task.Slot}}"
+      AGENTMIND_SECURITY_MODE: ${AGENTMIND_SECURITY_MODE:-oidc}
+      AGENTMIND_OIDC_ISSUER_URI: ${AGENTMIND_OIDC_ISSUER_URI}
+      AGENTMIND_OIDC_AUDIENCE: ${AGENTMIND_OIDC_AUDIENCE}
+      AGENTMIND_DATABASE_URL: ${AGENTMIND_DATABASE_URL}
+      AGENTMIND_DATABASE_USERNAME: ${AGENTMIND_DATABASE_USERNAME:-agentmind}
+      AGENTMIND_REDIS_HOST: ${AGENTMIND_REDIS_HOST}
+      AGENTMIND_REDIS_PORT: ${AGENTMIND_REDIS_PORT:-6379}
+      AGENTMIND_REDIS_SSL: ${AGENTMIND_REDIS_SSL:-true}
+      AGENTMIND_MINIO_ENDPOINT: ${AGENTMIND_MINIO_ENDPOINT}
+      AGENTMIND_MINIO_BUCKET: ${AGENTMIND_MINIO_BUCKET:-agentmind}
+      AGENTMIND_OPENSEARCH_URL: ${AGENTMIND_OPENSEARCH_URL}
+      AGENTMIND_OPENSEARCH_USERNAME: ${AGENTMIND_OPENSEARCH_USERNAME:-agentmind}
+      AGENTMIND_ALLOWED_ORIGIN: ${AGENTMIND_ALLOWED_ORIGIN}
+      AGENTMIND_TRACING_ENABLED: ${AGENTMIND_TRACING_ENABLED:-true}
+      AGENTMIND_OTLP_TRACING_ENDPOINT: ${AGENTMIND_OTLP_TRACING_ENDPOINT}
+    secrets:
+      - source: database_password
+        target: spring.datasource.password
+      - source: redis_password
+        target: spring.data.redis.password
+      - source: minio_access_key
+        target: agentmind.storage.minio.access-key
+      - source: minio_secret_key
+        target: agentmind.storage.minio.secret-key
+      - source: opensearch_password
+        target: agentmind.keyword-index.opensearch.password
+    ports:
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: ingress
+    networks:
+      - agentmind-production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 40s
+    stop_grace_period: 45s
+    deploy:
+      replicas: 2
+      endpoint_mode: vip
+      update_config:
+        parallelism: 1
+        delay: 20s
+        monitor: 30s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        monitor: 30s
+        failure_action: pause
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+networks:
+  agentmind-production:
+    external: true
+
+secrets:
+  database_password:
+    external: true
+    name: agentmind_database_password
+  redis_password:
+    external: true
+    name: agentmind_redis_password
+  minio_access_key:
+    external: true
+    name: agentmind_minio_access_key
+  minio_secret_key:
+    external: true
+    name: agentmind_minio_secret_key
+  opensearch_password:
+    external: true
+    name: agentmind_opensearch_password

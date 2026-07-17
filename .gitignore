@@ -28,6 +28,7 @@ uploads/
 logs/
 tmp/
 .agentmind-storage/
+.agentmind-backups/
 
 # TypeScript build cache
 *.tsbuildinfo
