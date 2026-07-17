@@ -239,6 +239,8 @@ $env:AGENTMIND_STAGING_BACKUP_SECRET_ACCESS_KEY = "异地备份只读秘密"
 - 真实 OIDC、对象存储、混合检索和会话链路通过。
 - 可观测平台在完整观察窗口内没有新的严重告警。
 
+真实 staging E2E 通过后的证据交叉校验、`production-approval` Environment 配置和最终人工审批流程见 `FINAL_RELEASE_APPROVAL_RUNBOOK.md`。
+
 ## 九、本地可执行测试
 
 普通开发机只能验证安全边界和冻结逻辑：

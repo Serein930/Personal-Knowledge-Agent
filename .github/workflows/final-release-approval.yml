@@ -1,0 +1,139 @@
+name: 最终发布审批
+
+on:
+  workflow_run:
+    workflows:
+      - 真实预发布前后端全链路验收
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: agentmind-final-release-approval-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify_release_evidence:
+    name: 交叉校验生产验收与真实 E2E 证据
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      packet_artifact_name: ${{ steps.packet.outputs.artifact_name }}
+    steps:
+      - name: 检出通过真实 E2E 的同一提交
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: 下载真实 staging E2E 证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-full-stack-e2e-*
+          path: .final-release-input/e2e
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: 读取上游发布候选验收运行编号
+        id: upstream
+        shell: pwsh
+        run: |
+          $evidenceFile = Get-ChildItem .final-release-input/e2e -Filter staging-full-stack-e2e.json -Recurse | Select-Object -First 1
+          if ($null -eq $evidenceFile) {
+            throw "真实 staging E2E 产物缺少证据清单"
+          }
+          $evidence = Get-Content -Raw -Encoding UTF8 $evidenceFile.FullName | ConvertFrom-Json
+          if ([long]$evidence.upstreamAcceptanceRunId -le 0) {
+            throw "真实 staging E2E 证据缺少上游验收运行编号"
+          }
+          "run_id=$($evidence.upstreamAcceptanceRunId)" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: 下载同一候选版本的冻结验收证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: production-acceptance-*
+          path: .final-release-input/acceptance
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.upstream.outputs.run_id }}
+
+      - name: 生成最终发布审批候选包
+        id: packet
+        shell: pwsh
+        run: |
+          ./scripts/new-final-release-approval-packet.ps1 `
+            -StagingE2eEvidenceDirectory .final-release-input/e2e `
+            -ProductionAcceptanceEvidenceDirectory .final-release-input/acceptance `
+            -GitCommit "${{ github.event.workflow_run.head_sha }}" `
+            -StagingE2eWorkflowRunId "${{ github.event.workflow_run.id }}"
+          "artifact_name=final-release-candidate-${{ github.event.workflow_run.head_sha }}" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: 保存待审批证据包
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: final-release-candidate-${{ github.event.workflow_run.head_sha }}
+          path: .final-release-approval/final-release-approval-candidate.json
+          if-no-files-found: error
+          retention-days: 365
+
+  protected_release_approval:
+    name: 受保护环境人工发布审批
+    needs: verify_release_evidence
+    runs-on: ubuntu-latest
+    environment: production-approval
+    timeout-minutes: 10
+    steps:
+      - name: 验证审批环境已经显式配置
+        shell: bash
+        env:
+          APPROVAL_GUARD: ${{ secrets.FINAL_RELEASE_APPROVAL_GUARD }}
+        run: |
+          if [ -z "$APPROVAL_GUARD" ]; then
+            echo "production-approval Environment 缺少审批守卫秘密" >&2
+            exit 1
+          fi
+
+      - name: 下载已交叉校验的审批候选包
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.verify_release_evidence.outputs.packet_artifact_name }}
+          path: .final-release-approval
+
+      - name: 固化最终人工审批记录
+        shell: bash
+        run: |
+          packet=.final-release-approval/final-release-approval-candidate.json
+          test -f "$packet"
+          jq -e '.passed == true and .packetType == "final_release_approval_candidate"' "$packet" >/dev/null
+          packet_sha="$(sha256sum "$packet" | cut -d ' ' -f 1)"
+          jq -n \
+            --arg gitCommit "${{ github.event.workflow_run.head_sha }}" \
+            --arg workflowRunId "$GITHUB_RUN_ID" \
+            --arg packetSha256 "$packet_sha" \
+            --arg approvedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schemaVersion: "1.0",
+              evidenceType: "final_release_approval",
+              approvalEnvironment: "production-approval",
+              gitCommit: $gitCommit,
+              workflowRunId: $workflowRunId,
+              candidatePacketSha256: $packetSha256,
+              approvedAt: $approvedAt,
+              passed: true
+            }' > .final-release-approval/final-release-approval.json
+
+      - name: 保存最终发布审批记录
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: final-release-approval-${{ github.event.workflow_run.head_sha }}
+          path: .final-release-approval/*.json
+          if-no-files-found: error
+          retention-days: 365

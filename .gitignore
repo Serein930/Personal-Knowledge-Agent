@@ -36,6 +36,8 @@ tmp/
 .staging-readiness-reports/
 .staging-smoke-reports/
 .staging-e2e-evidence/
+.final-release-input/
+.final-release-approval/
 performance-summary.json
 deploy/.secret-versions.env
 deploy/.secret-versions.env.pending
