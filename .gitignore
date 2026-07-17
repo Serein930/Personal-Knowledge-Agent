@@ -31,6 +31,8 @@ tmp/
 .agentmind-backups/
 .disaster-recovery-reports/
 .fault-injection-reports/
+.production-acceptance-evidence/
+.production-acceptance-reports/
 performance-summary.json
 deploy/.secret-versions.env
 deploy/.secret-versions.env.pending

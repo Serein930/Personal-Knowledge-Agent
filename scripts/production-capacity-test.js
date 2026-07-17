@@ -78,9 +78,40 @@ export function knowledgeWorkload() {
 }
 
 export function handleSummary(data) {
-  // 原始指标保留给容量报告和不同版本之间的可重复比较，不在脚本中伪造测试结论。
+  const testRunDurationMs = Number((data.state && data.state.testRunDurationMs) || 0);
+  const thresholdResults = [];
+  for (const [metricName, metric] of Object.entries(data.metrics)) {
+    for (const [thresholdName, threshold] of Object.entries(metric.thresholds || {})) {
+      thresholdResults.push({
+        metric: metricName,
+        threshold: thresholdName,
+        passed: threshold.ok === true,
+      });
+    }
+  }
+
+  // 证据同时保留 k6 原始指标和门禁结论，便于复核，也避免只上传一句“测试通过”。
+  const report = {
+    schemaVersion: "1.0",
+    evidenceType: "capacity",
+    evidenceId: `capacity-${Date.now()}`,
+    environment: __ENV.ACCEPTANCE_ENVIRONMENT || "staging",
+    gitCommit: __ENV.GIT_COMMIT || "",
+    candidateImage: __ENV.CANDIDATE_IMAGE || "",
+    startedAt: new Date(Date.now() - testRunDurationMs).toISOString(),
+    completedAt: new Date().toISOString(),
+    workload: {
+      virtualUsers: Number(__ENV.VUS || 30),
+      duration: __ENV.DURATION || "2m",
+      rampUp: __ENV.RAMP_UP || "30s",
+    },
+    thresholdResults,
+    metrics: data.metrics,
+    passed: thresholdResults.length > 0 && thresholdResults.every((result) => result.passed),
+    failure: thresholdResults.some((result) => !result.passed) ? "至少一个 k6 性能门禁未通过" : null,
+  };
   return {
-    "performance-summary.json": JSON.stringify(data, null, 2),
-    stdout: "性能门禁完成，原始结果已写入 performance-summary.json\n",
+    "performance-summary.json": JSON.stringify(report, null, 2),
+    stdout: `性能门禁完成，通过=${report.passed}，证据已写入 performance-summary.json\n`,
   };
 }

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$BaseUrl,
     [Parameter(Mandatory = $true)]

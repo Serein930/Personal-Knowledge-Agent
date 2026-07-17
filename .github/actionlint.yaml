@@ -2,3 +2,4 @@ self-hosted-runner:
   # 故障注入只能调度到明确标记的预发布 Swarm 节点。
   labels:
     - agentmind-staging
+    - agentmind-staging-dr

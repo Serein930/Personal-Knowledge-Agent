@@ -3,6 +3,8 @@
     [string]$BaseUrl,
     [string]$StackName = "agentmind",
     [string]$ReportRoot = ".fault-injection-reports",
+    [string]$GitCommit = $env:GITHUB_SHA,
+    [string]$CandidateImage = $env:AGENTMIND_CANDIDATE_IMAGE,
     [switch]$ConfirmStagingFaultInjection
 )
 
@@ -23,6 +25,7 @@ if ([string]::IsNullOrWhiteSpace($containerId)) {
 }
 
 $startedAt = [DateTimeOffset]::Now
+$recoveryStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $failures = 0
 $maximumConsecutiveFailures = 0
 $consecutiveFailures = 0
@@ -56,18 +59,27 @@ for ($attempt = 1; $attempt -le 60; $attempt++) {
     }
     Start-Sleep -Seconds 2
 }
+$recoveryStopwatch.Stop()
 
 $report = [ordered]@{
+    schemaVersion = "1.0"
+    evidenceType = "fault_injection"
+    evidenceId = "fault-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    environment = "staging"
+    gitCommit = $GitCommit
+    candidateImage = $CandidateImage
     startedAt = $startedAt.ToString("o")
     completedAt = ([DateTimeOffset]::Now).ToString("o")
     terminatedContainer = $containerId
     gatewayProbeFailures = $failures
     maximumConsecutiveFailures = $maximumConsecutiveFailures
     replicaRecovered = $recovered
+    replicaRecoverySeconds = [Math]::Round($recoveryStopwatch.Elapsed.TotalSeconds, 2)
     passed = $recovered -and $maximumConsecutiveFailures -le 1
+    failure = if ($recovered) { $null } else { "Swarm 未在观察窗口内恢复目标副本数" }
 }
 New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
-$reportPath = Join-Path $ReportRoot "fault-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
+$reportPath = Join-Path $ReportRoot "$($report.evidenceId).json"
 $report | ConvertTo-Json -Depth 4 | Set-Content -Path $reportPath -Encoding UTF8
 if (-not $report.passed) {
     throw "故障注入未通过，详情见 $reportPath"

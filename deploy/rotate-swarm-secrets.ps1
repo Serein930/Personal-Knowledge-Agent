@@ -2,10 +2,15 @@
     [Parameter(Mandatory = $true)]
     [string]$RenderedSecretDirectory,
     [string]$StackName = "agentmind",
-    [string]$VersionFile = "$PSScriptRoot/.secret-versions.env"
+    [string]$VersionFile = "$PSScriptRoot/.secret-versions.env",
+    [string]$EnvironmentName = "staging",
+    [string]$GitCommit = $env:GITHUB_SHA,
+    [string]$CandidateImage = $env:AGENTMIND_CANDIDATE_IMAGE,
+    [string]$ReportRoot = ".production-acceptance-evidence"
 )
 
 $ErrorActionPreference = "Stop"
+$startedAt = [DateTimeOffset]::UtcNow
 $resolvedDirectory = (Resolve-Path -Path $RenderedSecretDirectory).Path
 $version = Get-Date -Format "yyyyMMddHHmmss"
 
@@ -73,4 +78,31 @@ foreach ($shortServiceName in @("agentmind-backend-canary", "agentmind-backend",
 
 # 只有三个服务全部收敛后才把 pending 清单晋级为当前版本文件。
 Move-Item -Path $pendingVersionFile -Destination $VersionFile -Force
+if (-not [string]::IsNullOrWhiteSpace($GitCommit) -and -not [string]::IsNullOrWhiteSpace($CandidateImage)) {
+    # 报告只记录 Docker Secret 的版本化名称，绝不记录渲染文件内容或秘密值。
+    $report = [ordered]@{
+        schemaVersion = "1.0"
+        evidenceType = "secret_rotation"
+        evidenceId = "secret-rotation-$version"
+        environment = $EnvironmentName
+        gitCommit = $GitCommit
+        candidateImage = $CandidateImage
+        startedAt = $startedAt.ToString("o")
+        completedAt = ([DateTimeOffset]::UtcNow).ToString("o")
+        secretVersions = $created
+        services = @(
+            "$StackName`_agentmind-backend-canary",
+            "$StackName`_agentmind-backend",
+            "$StackName`_agentmind-gateway"
+        )
+        passed = $true
+        failure = $null
+    }
+    New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
+    $reportPath = Join-Path $ReportRoot "$($report.evidenceId).json"
+    $report | ConvertTo-Json -Depth 8 | Set-Content -Path $reportPath -Encoding UTF8
+    Write-Host "秘密轮换证据已写入：$reportPath"
+} else {
+    Write-Warning "未提供 GitCommit 或 CandidateImage，本次运维轮换不会生成发布验收证据"
+}
 Write-Host "秘密轮换完成。旧版本仍保留用于回滚，验证稳定后再按变更单人工清理。"

@@ -321,3 +321,10 @@ com.agentmind
 # 生产发布收尾进展
 
 已引入 Flyway 统一管理数据库版本；知识索引使用 pgvector 与事务 Outbox 原子写入、OpenSearch 异步批量消费，并具备租约、重试、死信、全量重建、Testcontainers 全链路 CI、Grafana/Prometheus/Tempo 观测和多实例压测脚本。详细操作见 `PRODUCTION_RELEASE_RUNBOOK.md`。
+
+# 生产实测证据闭环进展
+
+已建立受保护预发布环境的统一验收工作流，按同一 Git 提交和不可变镜像摘要串联 Vault 秘密轮换、10% 灰度、k6 容量门禁、单实例故障注入及
+隔离异地恢复。六类 JSON 证据必须全部通过才能生成带 SHA-256 的发布候选冻结清单；晋级前会重新核对证据哈希、清单时效、当前提交和灰度镜像，
+任一阶段失败时自动撤销灰度。真实 RPO、RTO、吞吐量和延迟数字只能由受保护验收环境生成，详细操作见
+`PRODUCTION_ACCEPTANCE_EVIDENCE_RUNBOOK.md`。

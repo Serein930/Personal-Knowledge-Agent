@@ -8,7 +8,10 @@
     [int]$RpoTargetMinutes = 1440,
     [int]$RtoTargetMinutes = 60,
     [string]$ComposeFile = "docker-compose.yml",
-    [string]$ReportRoot = ".disaster-recovery-reports"
+    [string]$ReportRoot = ".disaster-recovery-reports",
+    [string]$AcceptanceEnvironment = "staging",
+    [string]$GitCommit = $env:GITHUB_SHA,
+    [string]$CandidateImage = $env:AGENTMIND_CANDIDATE_IMAGE
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,8 +73,13 @@ try {
 
 $durationMinutes = [Math]::Round($stopwatch.Elapsed.TotalMinutes, 2)
 $report = [ordered]@{
-    drillId = "drill-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-    environment = $EnvironmentName
+    schemaVersion = "1.0"
+    evidenceType = "disaster_recovery"
+    evidenceId = "drill-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    environment = $AcceptanceEnvironment
+    drillEnvironment = $EnvironmentName
+    gitCommit = $GitCommit
+    candidateImage = $CandidateImage
     startedAt = $startedAt.ToString("o")
     completedAt = ([DateTimeOffset]::Now).ToString("o")
     backupCreatedAt = $backupCreatedAt.ToString("o")
@@ -86,7 +94,7 @@ $report = [ordered]@{
     failure = $failure
 }
 New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
-$reportPath = Join-Path $ReportRoot "$($report.drillId).json"
+$reportPath = Join-Path $ReportRoot "$($report.evidenceId).json"
 $report | ConvertTo-Json -Depth 6 | Set-Content -Path $reportPath -Encoding UTF8
 if (-not $report.passed) {
     throw "灾备演练未通过，详情见 $reportPath"

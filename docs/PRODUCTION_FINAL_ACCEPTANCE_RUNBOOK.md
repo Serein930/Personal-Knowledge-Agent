@@ -137,14 +137,21 @@ cosign verify `
 ./deploy/canary-release.ps1 -Image "ghcr.io/example/agentmind/backend@sha256:候选摘要"
 ```
 
-观察完整监控窗口并通过 k6 后晋级；异常则终止灰度：
+观察完整监控窗口并通过全部验收门禁后，先冻结六类证据再晋级；异常则终止灰度：
 
 ```powershell
-./deploy/promote-canary-release.ps1
+./scripts/complete-production-acceptance.ps1 `
+  -EvidenceDirectory ".production-acceptance-evidence" `
+  -CandidateImage "ghcr.io/example/agentmind/backend@sha256:候选摘要" `
+  -GitCommit "完整的四十位提交摘要"
+
+./deploy/promote-canary-release.ps1 `
+  -AcceptanceManifest ".production-acceptance-reports/rc-清单.json" `
+  -EvidenceDirectory ".production-acceptance-evidence"
 ./deploy/abort-canary-release.ps1
 ```
 
-GitHub Actions 的 `预发布容量与故障验收` 工作流使用受保护的 `staging` Environment。必须配置：
+GitHub Actions 的 `预发布生产证据验收` 工作流使用受保护的 `staging` Environment。基础配置包括：
 
 ```text
 变量 STAGING_BASE_URL
@@ -168,3 +175,22 @@ GitHub Actions 的 `预发布容量与故障验收` 工作流使用受保护的 
 - 灰度异常能够恢复为稳定镜像，稳定组升级失败能够自动回滚。
 
 只有上述证据均来自真实预发布环境，才能把版本标记为生产验收通过。
+
+## 八、生产实测证据闭环
+
+完整自动化入口是 `.github/workflows/staging-acceptance.yml`。工作流按固定顺序执行环境预检、Cosign 签名验证、
+Vault Agent 渲染、Docker Secret 版本化轮换、10% 灰度部署、外部 k6、单实例故障注入、隔离灾备恢复、证据冻结和稳定组晋级。
+
+每份证据使用统一 `1.0` 结构，必须绑定同一个 Git 提交、同一个不可变镜像摘要和 `staging` 环境。冻结脚本要求以下六类证据全部存在且
+`passed=true`：
+
+- `preflight`
+- `secret_rotation`
+- `canary_release`
+- `capacity`
+- `fault_injection`
+- `disaster_recovery`
+
+冻结清单会保存每份原始 JSON 的 SHA-256。晋级脚本会再次计算哈希、检查清单时效、当前提交和灰度服务镜像；任何报告被修改、缺失、过期或来自
+其他版本时都会拒绝更新稳定组。完整 Runner、Vault、restic 和 GitHub Environment 配置见
+`PRODUCTION_ACCEPTANCE_EVIDENCE_RUNBOOK.md`。

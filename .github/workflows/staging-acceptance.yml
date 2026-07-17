@@ -1,29 +1,110 @@
-name: 预发布容量与故障验收
+name: 预发布生产证据验收
 
 on:
   workflow_dispatch:
     inputs:
+      candidate_image:
+        description: 带 sha256 摘要的候选后端镜像
+        required: true
+        type: string
       virtual_users:
         description: k6 并发用户数
         required: true
         default: "30"
         type: string
       duration:
-        description: 稳态压测时长
+        description: k6 稳态压测时长
         required: true
         default: "5m"
         type: string
-      run_fault_injection:
-        description: 是否在自托管预发布节点执行单实例故障注入
+      backup_snapshot:
+        description: 用于异地恢复演练的 restic 快照
         required: true
-        default: false
-        type: boolean
+        default: latest
+        type: string
 
 permissions:
   contents: read
+  packages: read
+
+concurrency:
+  group: agentmind-staging-production-acceptance
+  cancel-in-progress: false
 
 jobs:
-  capacity-gate:
+  preflight_canary:
+    name: 预检、秘密轮换与灰度部署
+    runs-on: [self-hosted, agentmind-staging]
+    environment: staging
+    timeout-minutes: 30
+    env:
+      AGENTMIND_ENVIRONMENT: staging
+      AGENTMIND_CANDIDATE_IMAGE: ${{ inputs.candidate_image }}
+    steps:
+      - name: 检出候选提交
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 登录 GitHub 容器仓库
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 执行只读环境预检
+        shell: pwsh
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+        run: >-
+          ./scripts/test-production-acceptance-preflight.ps1
+          -BaseUrl $env:STAGING_BASE_URL
+          -CandidateImage $env:AGENTMIND_CANDIDATE_IMAGE
+          -GitCommit $env:GITHUB_SHA
+          -CertificateIdentityRegexp
+          "https://github.com/Serein930/Personal-Knowledge-Agent/.github/workflows/production-release-gate.yml@.*"
+
+      - name: 使用 Vault Agent 渲染短期秘密
+        shell: pwsh
+        env:
+          VAULT_AGENT_CONFIG: ${{ vars.STAGING_VAULT_AGENT_CONFIG }}
+        run: |
+          if (-not (Test-Path $env:VAULT_AGENT_CONFIG)) {
+            throw "受保护 Runner 未配置有效的 STAGING_VAULT_AGENT_CONFIG"
+          }
+          vault agent -config=$env:VAULT_AGENT_CONFIG
+          if ($LASTEXITCODE -ne 0) {
+            throw "Vault Agent 渲染失败"
+          }
+
+      - name: 执行版本化秘密轮换
+        shell: pwsh
+        env:
+          VAULT_RENDERED_DIRECTORY: ${{ vars.STAGING_VAULT_RENDERED_DIRECTORY }}
+        run: >-
+          ./deploy/rotate-swarm-secrets.ps1
+          -RenderedSecretDirectory $env:VAULT_RENDERED_DIRECTORY
+          -GitCommit $env:GITHUB_SHA
+          -CandidateImage $env:AGENTMIND_CANDIDATE_IMAGE
+
+      - name: 部署百分之十灰度实例
+        shell: pwsh
+        run: >-
+          ./deploy/canary-release.ps1
+          -Image $env:AGENTMIND_CANDIDATE_IMAGE
+          -GitCommit $env:GITHUB_SHA
+
+      - name: 保存基础设施验收证据
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-infrastructure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .production-acceptance-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  capacity:
+    name: 正式规格 k6 容量门禁
+    needs: preflight_canary
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 30
@@ -43,6 +124,7 @@ jobs:
           test -n "$BASE_URL"
           test -n "$ACCESS_TOKEN"
           test -n "$WORKSPACE_ID"
+          test "${BASE_URL#https://}" != "$BASE_URL"
 
       - name: 执行正式规格容量门禁
         env:
@@ -52,22 +134,29 @@ jobs:
           VUS: ${{ inputs.virtual_users }}
           DURATION: ${{ inputs.duration }}
           RAMP_UP: 1m
+          GIT_COMMIT: ${{ github.sha }}
+          CANDIDATE_IMAGE: ${{ inputs.candidate_image }}
+          ACCEPTANCE_ENVIRONMENT: staging
         run: k6 run scripts/production-capacity-test.js
 
-      - name: 保存原始容量报告
+      - name: 保存容量验收证据
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: staging-capacity-${{ github.run_id }}
+          name: staging-capacity-${{ github.run_id }}-${{ github.run_attempt }}
           path: performance-summary.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
-  fault-injection:
-    if: inputs.run_fault_injection == true
+  fault_injection:
+    name: 单实例故障注入
+    needs: capacity
     runs-on: [self-hosted, agentmind-staging]
     environment: staging
     timeout-minutes: 15
+    env:
+      AGENTMIND_ENVIRONMENT: staging
+      AGENTMIND_CANDIDATE_IMAGE: ${{ inputs.candidate_image }}
     steps:
       - name: 检出故障注入脚本
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -75,18 +164,169 @@ jobs:
       - name: 执行单实例故障和自动恢复验证
         shell: pwsh
         env:
-          AGENTMIND_ENVIRONMENT: staging
           STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
         run: >-
           ./scripts/run-fault-injection.ps1
           -BaseUrl $env:STAGING_BASE_URL
+          -GitCommit $env:GITHUB_SHA
+          -CandidateImage $env:AGENTMIND_CANDIDATE_IMAGE
+          -ReportRoot .production-acceptance-evidence
           -ConfirmStagingFaultInjection
 
-      - name: 保存故障注入报告
+      - name: 保存故障注入证据
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: staging-fault-${{ github.run_id }}
-          path: .fault-injection-reports/*.json
+          name: staging-fault-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .production-acceptance-evidence/*.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+
+  disaster_recovery:
+    name: 隔离环境异地恢复演练
+    needs: capacity
+    runs-on: [self-hosted, agentmind-staging-dr]
+    environment: staging
+    timeout-minutes: 120
+    env:
+      AGENTMIND_ENVIRONMENT: staging
+      AGENTMIND_CANDIDATE_IMAGE: ${{ inputs.candidate_image }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.STAGING_BACKUP_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.STAGING_BACKUP_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.STAGING_BACKUP_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: ${{ vars.STAGING_BACKUP_REGION }}
+    steps:
+      - name: 检出灾备脚本
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 为隔离灾备环境渲染短期凭据
+        shell: pwsh
+        env:
+          DR_VAULT_AGENT_CONFIG: ${{ vars.STAGING_DR_VAULT_AGENT_CONFIG }}
+        run: |
+          if (-not (Test-Path $env:DR_VAULT_AGENT_CONFIG)) {
+            throw "灾备 Runner 未配置有效的 STAGING_DR_VAULT_AGENT_CONFIG"
+          }
+          vault agent -config=$env:DR_VAULT_AGENT_CONFIG
+          if ($LASTEXITCODE -ne 0) {
+            throw "灾备 Runner 的 Vault Agent 渲染失败"
+          }
+
+      - name: 从异地加密仓库恢复快照
+        id: offsite_restore
+        shell: pwsh
+        env:
+          RESTIC_REPOSITORY: ${{ vars.STAGING_RESTIC_REPOSITORY }}
+          RESTIC_PASSWORD_FILE: ${{ vars.STAGING_RESTIC_PASSWORD_FILE }}
+        run: |
+          $restoreRoot = Join-Path $env:RUNNER_TEMP "agentmind-dr-${{ github.run_id }}-${{ github.run_attempt }}"
+          ./scripts/restore-offsite-backup.ps1 `
+            -DestinationDirectory $restoreRoot `
+            -Repository $env:RESTIC_REPOSITORY `
+            -PasswordFile $env:RESTIC_PASSWORD_FILE `
+            -Snapshot "${{ inputs.backup_snapshot }}"
+          $manifest = Get-ChildItem -Path $restoreRoot -Filter manifest.json -Recurse | Select-Object -First 1
+          if ($null -eq $manifest) {
+            throw "异地恢复结果缺少备份清单"
+          }
+          "backup_directory=$($manifest.Directory.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: 执行 RPO 和 RTO 恢复演练
+        shell: pwsh
+        env:
+          DR_ENVIRONMENT: ${{ vars.STAGING_DR_ENVIRONMENT }}
+          DR_COMPOSE_FILE: ${{ vars.STAGING_DR_COMPOSE_FILE }}
+          RPO_TARGET_MINUTES: ${{ vars.STAGING_RPO_TARGET_MINUTES }}
+          RTO_TARGET_MINUTES: ${{ vars.STAGING_RTO_TARGET_MINUTES }}
+          VAULT_RENDERED_DIRECTORY: ${{ vars.STAGING_DR_VAULT_RENDERED_DIRECTORY }}
+        run: |
+          $env:AGENTMIND_MINIO_ACCESS_KEY = Get-Content -Raw -Encoding UTF8 (Join-Path $env:VAULT_RENDERED_DIRECTORY "agentmind.storage.minio.access-key")
+          $env:AGENTMIND_MINIO_SECRET_KEY = Get-Content -Raw -Encoding UTF8 (Join-Path $env:VAULT_RENDERED_DIRECTORY "agentmind.storage.minio.secret-key")
+          ./scripts/run-disaster-recovery-drill.ps1 `
+            -BackupDirectory "${{ steps.offsite_restore.outputs.backup_directory }}" `
+            -EnvironmentName $env:DR_ENVIRONMENT `
+            -ConfirmationText "DISPOSABLE:$env:DR_ENVIRONMENT" `
+            -RpoTargetMinutes $env:RPO_TARGET_MINUTES `
+            -RtoTargetMinutes $env:RTO_TARGET_MINUTES `
+            -ComposeFile $env:DR_COMPOSE_FILE `
+            -ReportRoot .production-acceptance-evidence `
+            -GitCommit $env:GITHUB_SHA `
+            -CandidateImage $env:AGENTMIND_CANDIDATE_IMAGE
+
+      - name: 保存灾备验收证据
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-disaster-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .production-acceptance-evidence/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  freeze_promote:
+    name: 冻结证据并晋级稳定组
+    needs: [preflight_canary, capacity, fault_injection, disaster_recovery]
+    runs-on: [self-hosted, agentmind-staging]
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - name: 检出候选提交
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 下载全部验收证据
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: staging-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .production-acceptance-evidence
+          merge-multiple: true
+
+      - name: 校验证据并冻结发布候选
+        id: freeze
+        shell: pwsh
+        run: |
+          $manifestPath = ./scripts/complete-production-acceptance.ps1 `
+            -EvidenceDirectory .production-acceptance-evidence `
+            -CandidateImage "${{ inputs.candidate_image }}" `
+            -GitCommit $env:GITHUB_SHA | Select-Object -Last 1
+          "manifest_path=$manifestPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: 使用冻结证据晋级稳定组
+        shell: pwsh
+        run: >-
+          ./deploy/promote-canary-release.ps1
+          -AcceptanceManifest "${{ steps.freeze.outputs.manifest_path }}"
+          -EvidenceDirectory .production-acceptance-evidence
+
+      - name: 保存冻结清单和完整证据
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .production-acceptance-evidence/*.json
+            .production-acceptance-reports/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  abort_on_failure:
+    name: 验收失败时撤销灰度
+    needs: [preflight_canary, capacity, fault_injection, disaster_recovery, freeze_promote]
+    if: >-
+      ${{
+        always() &&
+        (needs.preflight_canary.result != 'success' ||
+         needs.capacity.result != 'success' ||
+         needs.fault_injection.result != 'success' ||
+         needs.disaster_recovery.result != 'success' ||
+         needs.freeze_promote.result != 'success')
+      }}
+    runs-on: [self-hosted, agentmind-staging]
+    environment: staging
+    timeout-minutes: 10
+    steps:
+      - name: 检出回退脚本
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: 将灰度组恢复为稳定镜像
+        continue-on-error: true
+        shell: pwsh
+        run: ./deploy/abort-canary-release.ps1
