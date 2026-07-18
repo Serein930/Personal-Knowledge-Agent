@@ -322,6 +322,20 @@ export interface DashboardOverviewDto {
   generatedAt: string;
 }
 
+export type CitationPolicy = 'REQUIRED' | 'WHEN_AVAILABLE';
+
+/** 当前用户在指定知识空间内保存的模型与回答偏好。 */
+export interface UserWorkspacePreferenceDto {
+  workspaceId: number;
+  chatModel: string;
+  embeddingModel: string;
+  citationPolicy: CitationPolicy;
+  defaultTopK: number;
+  version: number;
+  persisted: boolean;
+  updatedAt?: string;
+}
+
 export interface KnowledgeNoteDto {
   id: number;
   workspaceId: number;

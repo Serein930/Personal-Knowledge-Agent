@@ -54,6 +54,12 @@ logging:
     com.agentmind: INFO
 
 agentmind:
+  preferences:
+    # 设置页只保存非敏感模型标识与回答策略；密钥仍由后端环境变量或密钥管理服务注入。
+    default-chat-model: ${AGENTMIND_CHAT_MODEL:gpt-4o-mini}
+    default-embedding-model: ${AGENTMIND_EMBEDDING_MODEL:text-embedding-3-small}
+    default-citation-policy: ${AGENTMIND_DEFAULT_CITATION_POLICY:REQUIRED}
+    default-top-k: ${AGENTMIND_DEFAULT_TOP_K:5}
   embedding:
     # 默认实现不访问外部模型，便于离线开发与稳定测试；真实环境通过 profile 切换到 spring-ai。
     provider: ${AGENTMIND_EMBEDDING_PROVIDER:deterministic}

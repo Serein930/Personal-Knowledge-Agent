@@ -15,7 +15,9 @@ import com.agentmind.knowledge.vector.VectorStore;
 import com.agentmind.study.flashcard.repository.JdbcStudyFlashcardRepository;
 import com.agentmind.study.flashcard.repository.StudyFlashcardRepository;
 import com.agentmind.user.repository.JdbcUserAccountRepository;
+import com.agentmind.user.repository.JdbcUserWorkspacePreferenceRepository;
 import com.agentmind.user.repository.UserAccountRepository;
+import com.agentmind.user.repository.UserWorkspacePreferenceRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +76,9 @@ class PersistentRepositoryProfileIntegrationTests {
     private UserAccountRepository userAccountRepository;
 
     @Autowired
+    private UserWorkspacePreferenceRepository preferenceRepository;
+
+    @Autowired
     private AgentToolConfirmationRepository confirmationRepository;
 
     @Autowired
@@ -94,6 +99,7 @@ class PersistentRepositoryProfileIntegrationTests {
     @Test
     void localProfileShouldSelectOnlyPersistentRepositoryAdapters() {
         assertThat(userAccountRepository).isInstanceOf(JdbcUserAccountRepository.class);
+        assertThat(preferenceRepository).isInstanceOf(JdbcUserWorkspacePreferenceRepository.class);
         assertThat(confirmationRepository).isInstanceOf(JdbcAgentToolConfirmationRepository.class);
         assertThat(flashcardRepository).isInstanceOf(JdbcStudyFlashcardRepository.class);
         assertThat(observationRepository).isInstanceOf(JdbcRagModelCallObservationRepository.class);

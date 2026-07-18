@@ -2,6 +2,10 @@ package com.agentmind.database;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.agentmind.user.model.CitationPolicy;
+import com.agentmind.user.model.UserWorkspacePreference;
+import com.agentmind.user.repository.JdbcUserWorkspacePreferenceRepository;
+import java.time.OffsetDateTime;
 import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
@@ -51,6 +55,7 @@ class FlywayFreshDatabaseIntegrationTests {
             "study_flashcards",
             "study_review_session_items",
             "study_review_sessions",
+            "user_workspace_preference",
             "workspace_member"
     );
 
@@ -71,7 +76,7 @@ class FlywayFreshDatabaseIntegrationTests {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
 
         assertThat(firstMigration.success).isTrue();
-        assertThat(migrationVersions(jdbcTemplate)).containsExactly("1", "2", "3", "4", "5", "6", "7");
+        assertThat(migrationVersions(jdbcTemplate)).containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
         assertThat(publicTables(jdbcTemplate)).containsAll(REQUIRED_TABLES);
         assertThat(extensionNames(jdbcTemplate)).contains("vector");
         assertThat(vectorColumnType(jdbcTemplate)).isEqualTo("vector(128)");
@@ -80,12 +85,67 @@ class FlywayFreshDatabaseIntegrationTests {
                 "uk_knowledge_notes_request",
                 "uk_study_flashcard_reviews_request",
                 "ck_rag_evaluation_job_status",
+                "ck_user_workspace_preference_top_k",
                 "uk_knowledge_index_outbox_event_key"
         );
 
         // 已完成的数据库再次启动时不应重复执行任何版本，避免生产发布期间产生结构漂移。
         MigrateResult secondMigration = flyway.migrate();
         assertThat(secondMigration.migrationsExecuted).isZero();
+    }
+
+    @Test
+    void preferenceRepositoryShouldPersistAndRejectStaleVersion() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Flyway.configure().dataSource(dataSource).load().migrate();
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        OffsetDateTime now = OffsetDateTime.now();
+        jdbcTemplate.update("""
+                insert into app_user (
+                    id, username, display_name, email, password_hash, role, status, created_at, updated_at
+                ) values (81001, 'preference-test', '偏好测试', 'preference@example.com', 'test',
+                          'USER', 'ACTIVE', ?, ?)
+                on conflict (id) do nothing
+                """, now, now);
+        jdbcTemplate.update("""
+                insert into knowledge_workspace (
+                    id, owner_user_id, name, description, visibility, created_at, updated_at
+                ) values (82001, 81001, '偏好测试空间', '', 'PRIVATE', ?, ?)
+                on conflict (id) do nothing
+                """, now, now);
+
+        JdbcUserWorkspacePreferenceRepository repository =
+                new JdbcUserWorkspacePreferenceRepository(jdbcTemplate);
+        UserWorkspacePreference first = preference("gpt-4o-mini", 5, now);
+        UserWorkspacePreference inserted = repository.save(first, 0).orElseThrow();
+        assertThat(inserted.version()).isEqualTo(1);
+
+        UserWorkspacePreference second = preference("qwen-plus", 8, now);
+        UserWorkspacePreference updated = repository.save(second, 1).orElseThrow();
+        assertThat(updated.version()).isEqualTo(2);
+        assertThat(updated.chatModel()).isEqualTo("qwen-plus");
+        assertThat(updated.defaultTopK()).isEqualTo(8);
+
+        assertThat(repository.save(first, 1)).isEmpty();
+        assertThat(repository.findByUserIdAndWorkspaceId(81001L, 82001L))
+                .get()
+                .extracting(UserWorkspacePreference::version)
+                .isEqualTo(2L);
+    }
+
+    private UserWorkspacePreference preference(String chatModel, int topK, OffsetDateTime now) {
+        return new UserWorkspacePreference(
+                81001L,
+                82001L,
+                chatModel,
+                "text-embedding-3-small",
+                CitationPolicy.REQUIRED,
+                topK,
+                0,
+                now,
+                now
+        );
     }
 
     private List<String> migrationVersions(JdbcTemplate jdbcTemplate) {

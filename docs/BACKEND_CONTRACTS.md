@@ -753,6 +753,20 @@ GET /api/v1/workspaces/{workspaceId}/dashboard
 今日学习任务数、到期卡片数、Agent 调用次数和平均响应耗时。响应同时返回最近五条知识资产及
 今日学习任务，供前端首屏一次加载。没有文档、模型调用或学习计划时返回零值和空列表，不返回模拟数据。
 
+## 用户知识空间偏好接口
+
+```text
+GET /api/v1/workspaces/{workspaceId}/preferences
+PUT /api/v1/workspaces/{workspaceId}/preferences
+```
+
+偏好按“当前用户 + 知识空间”隔离，保存聊天模型标识、Embedding 模型标识、引用策略和默认召回数量。
+首次读取返回部署配置中的默认值，并以 `persisted=false`、`version=0` 标识尚未写入；首次保存后版本从 `1` 开始。
+更新请求必须提交 `expectedVersion`，版本落后时返回 `RESOURCE_CONFLICT`，前端应重新加载后再编辑。
+
+该接口不接收或返回 API Key、访问令牌、模型供应商端点等敏感信息。模型标识用于后续受控模型路由，
+Embedding 模型变更在真正应用于已建索引前仍需执行兼容性检查和重新索引流程。
+
 1. Stage 1 先实现统一响应、异常处理和健康检查。
 2. Stage 2 实现核心 DTO、枚举和领域模型骨架。
 3. Stage 3 开始落地文件上传、URL 采集和文档列表接口。
