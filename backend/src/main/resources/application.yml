@@ -50,6 +50,9 @@ management:
         include: health,info,metrics,prometheus
 
 logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
   level:
     com.agentmind: INFO
 

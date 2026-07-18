@@ -67,10 +67,17 @@ public class OpenSearchKeywordIndex implements KeywordIndex {
         if (!requestBody.isBlank()) {
             JsonNode response = client.post().uri("/_bulk")
                     .contentType(MediaType.parseMediaType("application/x-ndjson"))
-                    .body(requestBody)
+                    // String 消息转换器可能按照系统代码页发送正文；NDJSON 必须显式使用 UTF-8，
+                    // 否则中文文档会被 OpenSearch 判定为非法 UTF-8 并造成部分条目写入失败。
+                    .body(requestBody.getBytes(StandardCharsets.UTF_8))
                     .retrieve().body(JsonNode.class);
             if (response != null && response.path("errors").asBoolean(false)) {
-                throw new IllegalStateException("OpenSearch 批量索引存在失败条目");
+                IllegalStateException failure = bulkIndexFailure(response);
+                // OpenSearch 批量接口可能部分成功。失败时清理本批次所有目标文档，
+                // 防止失败任务留下不完整片段并参与后续检索。
+                documents.forEach(document ->
+                        deleteDocumentChunks(document.workspaceId(), document.documentId()));
+                throw failure;
             }
         }
         client.post().uri("/{index}/_refresh", indexName).retrieve().toBodilessEntity();
@@ -79,7 +86,9 @@ public class OpenSearchKeywordIndex implements KeywordIndex {
     @Override
     public void deleteDocumentChunks(Long workspaceId, Long documentId) {
         ensureIndex();
-        client.post().uri("/{index}/_delete_by_query?conflicts=proceed", indexName)
+        // replacement 与删除接口返回后，调用方会立即写入或查询；refresh=true 保证旧片段
+        // 在本次操作完成前对后续搜索不可见，避免同一文档新旧版本短暂混合。
+        client.post().uri("/{index}/_delete_by_query?conflicts=proceed&refresh=true", indexName)
                 .body(Map.of("query", Map.of("bool", Map.of("filter", List.of(
                         Map.of("term", Map.of("workspaceId", workspaceId)),
                         Map.of("term", Map.of("documentId", documentId))
@@ -147,6 +156,31 @@ public class OpenSearchKeywordIndex implements KeywordIndex {
 
     private String documentKey(Long workspaceId, String chunkId) {
         return workspaceId + "-" + chunkId;
+    }
+
+    /**
+     * 提取首个失败条目的安全摘要，保留排障信息但不把用户正文写入异常或日志。
+     */
+    private IllegalStateException bulkIndexFailure(JsonNode response) {
+        int failedCount = 0;
+        String firstFailure = "OpenSearch 未返回具体失败原因";
+        for (JsonNode item : response.path("items")) {
+            JsonNode operation = item.elements().hasNext() ? item.elements().next() : null;
+            if (operation == null || operation.path("status").asInt(200) < 300) {
+                continue;
+            }
+            failedCount++;
+            if (failedCount == 1) {
+                JsonNode error = operation.path("error");
+                JsonNode cause = error.path("caused_by");
+                String type = error.path("type").asText("unknown");
+                String reason = cause.path("reason").asText(error.path("reason").asText("unknown"));
+                firstFailure = "文档编号=" + operation.path("_id").asText("unknown")
+                        + "，类型=" + type + "，原因=" + reason;
+            }
+        }
+        return new IllegalStateException(
+                "OpenSearch 批量索引失败：失败条目=" + failedCount + "，首个失败=" + firstFailure);
     }
 
     /** 使用 Jackson 生成每一行 JSON，避免正文中的引号或换行破坏批量协议。 */

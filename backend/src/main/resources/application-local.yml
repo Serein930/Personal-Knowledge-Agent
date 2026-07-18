@@ -18,6 +18,9 @@ spring:
 agentmind:
   demo:
     seed-data: false
+  web:
+    # Vite 可能通过 localhost 或 127.0.0.1 打开，两种本机来源都允许访问携带 JWT 的接口。
+    allowed-origin: ${AGENTMIND_ALLOWED_ORIGIN:http://localhost:5173,http://127.0.0.1:5173}
   security:
     # JDBC 模式不依赖固定种子用户；通过注册接口创建真实用户和默认知识空间。
     mode: ${AGENTMIND_SECURITY_MODE:local-jwt}

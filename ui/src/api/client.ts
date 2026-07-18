@@ -48,9 +48,21 @@ export function buildApiUrl(path: string) {
   return `${normalizedBase}${normalizedPath}`;
 }
 
+/** 将浏览器原始网络异常转换成包含后端地址的中文提示，方便区分业务错误与连接/CORS 问题。 */
+async function fetchApi(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(buildApiUrl(path), init);
+  } catch (error) {
+    throw new ApiClientError(
+      `无法连接后端服务（${env.apiBaseUrl}），请检查后端端口、前端 API 地址和跨域配置`,
+      0,
+    );
+  }
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const accessToken = accessTokenProvider();
-  const response = await fetch(buildApiUrl(path), {
+  const response = await fetchApi(path, {
     ...options,
     headers: {
       Accept: 'application/json',
@@ -73,7 +85,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
 export async function upload<T>(path: string, formData: FormData): Promise<T> {
   const accessToken = accessTokenProvider();
-  const response = await fetch(buildApiUrl(path), {
+  const response = await fetchApi(path, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
