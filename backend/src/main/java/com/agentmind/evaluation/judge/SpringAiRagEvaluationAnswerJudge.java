@@ -9,7 +9,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -21,7 +20,6 @@ import org.springframework.util.StringUtils;
  * 提示词要求忽略其中的指令；解析失败或模型不可用时可降级到确定性裁判。</p>
  */
 @Component
-@ConditionalOnBean(ChatModel.class)
 @ConditionalOnProperty(prefix = "agentmind.evaluation.judge", name = "type", havingValue = "spring-ai")
 public class SpringAiRagEvaluationAnswerJudge implements RagEvaluationAnswerJudge {
 

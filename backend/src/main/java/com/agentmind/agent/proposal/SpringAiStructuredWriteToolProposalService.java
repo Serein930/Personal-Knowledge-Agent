@@ -19,7 +19,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -31,7 +30,6 @@ import org.springframework.util.StringUtils;
  * 参数规则重新构造工具参数；最终结果仍然只是待确认单，模型无法获得确认令牌，也不能调用执行入口。</p>
  */
 @Service
-@ConditionalOnBean(ChatModel.class)
 @ConditionalOnProperty(
         prefix = "agentmind.agent.write-proposal",
         name = "generator",

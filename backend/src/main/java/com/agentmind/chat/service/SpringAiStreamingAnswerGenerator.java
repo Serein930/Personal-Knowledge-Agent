@@ -20,7 +20,6 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -31,7 +30,6 @@ import org.springframework.stereotype.Component;
  * 可以沿用本地降级策略；若已经发出部分内容，则发送错误终态，避免把降级文本拼接到半截回答后面。</p>
  */
 @Component
-@ConditionalOnBean(ChatModel.class)
 @ConditionalOnProperty(prefix = "agentmind.rag", name = "answer-generator", havingValue = "spring-ai")
 public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerator {
 

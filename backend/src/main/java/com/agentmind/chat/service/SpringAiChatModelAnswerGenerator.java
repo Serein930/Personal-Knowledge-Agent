@@ -16,18 +16,17 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
  * 真实聊天模型回答生成适配器。
  *
- * <p>该实现只在显式切换到真实模型模式，并且容器中已经存在聊天模型客户端时启用。
+ * <p>该实现只在显式切换到真实模型模式时启用。聊天模型通过构造器注入，若供应商配置缺失，
+ * Spring 会在启动阶段直接报告缺少依赖，避免因为自动配置与组件扫描的先后顺序而错误跳过本适配器。
  * 业务服务仍然只依赖回答生成端口；模型异常原文只进入审计日志，不会通过降级回答暴露给客户端。</p>
  */
 @Component
-@ConditionalOnBean(ChatModel.class)
 @ConditionalOnProperty(prefix = "agentmind.rag", name = "answer-generator", havingValue = "spring-ai")
 public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
 
