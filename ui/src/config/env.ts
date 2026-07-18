@@ -1,5 +1,8 @@
-﻿export const env = {
-  // 后端 接口 地址只从 前端构建工具 环境变量读取，避免把机器本地配置写死在代码中。
+export const env = {
+  // 后端接口地址和认证模式来自构建环境，业务页面不再读取固定知识空间编号。
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081/api',
-  workspaceId: Number(import.meta.env.VITE_WORKSPACE_ID ?? '1'),
+  authMode: import.meta.env.VITE_AUTH_MODE ?? 'disabled',
+  oidcAuthority: import.meta.env.VITE_OIDC_AUTHORITY ?? '',
+  oidcClientId: import.meta.env.VITE_OIDC_CLIENT_ID ?? '',
+  oidcScope: import.meta.env.VITE_OIDC_SCOPE ?? 'openid profile email',
 };

@@ -90,7 +90,7 @@ public class RagStreamingChatService {
     ) {
         AtomicReference<PreparedRagChat> preparedChatReference = new AtomicReference<>();
         try {
-            PreparedRagChat preparedChat = contextAssemblyService.prepareChat(workspaceId, request);
+            PreparedRagChat preparedChat = contextAssemblyService.prepareChat(ownerUserId, workspaceId, request);
             preparedChatReference.set(preparedChat);
             sendMetadata(emitter, sessionState, preparedChat);
             sendCitations(emitter, sessionState, preparedChat);

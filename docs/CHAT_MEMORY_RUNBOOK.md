@@ -149,7 +149,7 @@ GET /api/v1/workspaces/2/chat/conversations/{workspace1ConversationId}/messages
 
 ## 当前边界
 
-- 当前尚未接入认证，知识空间归属规则已经落到仓储和服务契约，后续还需要绑定当前登录用户。
+- REST 与 SSE 问答均使用当前认证用户，并在进入会话记忆前校验知识空间归属。
 - 当前默认使用 Spring AI JTokkit 估算 Token；接入非兼容编码模型时应提供对应的 `ChatTokenCounter` 实现。
 - 当前删除是短期记忆物理删除，后续若会话进入正式知识资产，应增加软删除和恢复策略。
 - 内存适配器只保证单进程内编号和状态更新，服务重启后数据会清空；需要跨进程保存时使用 Redis 模式。

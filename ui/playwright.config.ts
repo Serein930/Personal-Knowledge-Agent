@@ -33,7 +33,9 @@ export default defineConfig({
       env: {
         SERVER_PORT: '18081',
         AGENTMIND_ALLOWED_ORIGIN: 'http://127.0.0.1:15173',
-        AGENTMIND_SECURITY_MODE: 'disabled',
+        AGENTMIND_SECURITY_MODE: 'local-jwt',
+        AGENTMIND_JWT_SECRET: 'agentmind-e2e-jwt-secret-at-least-32-characters',
+        AGENTMIND_SECURITY_ALLOW_MEMORY_FOR_TESTING: 'true',
         AGENTMIND_RATE_LIMIT_MODE: 'disabled',
         AGENTMIND_TRACING_ENABLED: 'false',
       },
@@ -45,7 +47,7 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         VITE_API_BASE_URL: 'http://127.0.0.1:18081/api',
-        VITE_WORKSPACE_ID: '1',
+        VITE_AUTH_MODE: 'local-jwt',
       },
     },
   ],

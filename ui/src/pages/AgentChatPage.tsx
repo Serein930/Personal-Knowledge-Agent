@@ -13,7 +13,7 @@ import type {
 } from '../api/contracts';
 import { streamRagChat } from '../api/ragStream';
 import { SectionHeader } from '../components/SectionHeader';
-import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 
 interface ChatMessageView {
   id: string;
@@ -29,6 +29,7 @@ const toolLabel: Record<string, string> = {
 };
 
 export function AgentChatPage() {
+  const { workspaceId = 0 } = useAppSession();
   const [question, setQuestion] = useState('');
   const [conversationId, setConversationId] = useState<number>();
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
@@ -42,12 +43,12 @@ export function AgentChatPage() {
 
   const loadKnowledgeOutputs = useCallback(async () => {
     const [notePage, flashcardPage] = await Promise.all([
-      apiClient.get<PageResult<KnowledgeNoteDto>>(`/v1/workspaces/${env.workspaceId}/notes?page=1&pageSize=5`),
-      apiClient.get<PageResult<StudyFlashcardDto>>(`/v1/workspaces/${env.workspaceId}/flashcards?page=1&pageSize=5`),
+      apiClient.get<PageResult<KnowledgeNoteDto>>(`/v1/workspaces/${workspaceId}/notes?page=1&pageSize=5`),
+      apiClient.get<PageResult<StudyFlashcardDto>>(`/v1/workspaces/${workspaceId}/flashcards?page=1&pageSize=5`),
     ]);
     setNotes(notePage.records);
     setFlashcards(flashcardPage.records);
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     void loadKnowledgeOutputs().catch(() => undefined);
@@ -67,7 +68,7 @@ export function AgentChatPage() {
     setToolCalls([]);
     setSending(true);
     try {
-      await streamRagChat(env.workspaceId, normalizedQuestion, conversationId, {
+      await streamRagChat(workspaceId, normalizedQuestion, conversationId, {
         onMetadata: (event) => setConversationId(event.conversationId),
         onDelta: (event) => setMessages((current) => current.map((item) => (
           item.id === assistantViewId ? { ...item, content: item.content + event.content } : item
@@ -91,7 +92,7 @@ export function AgentChatPage() {
     setDeciding(true);
     try {
       const result = await apiClient.post<DecidedToolConfirmationDto>(
-        `/v1/workspaces/${env.workspaceId}/agent/write-tool-confirmations/`
+        `/v1/workspaces/${workspaceId}/agent/write-tool-confirmations/`
           + `${pendingProposal.confirmation.id}/${action}`,
         { confirmationToken: pendingProposal.confirmationToken },
       );
@@ -107,7 +108,7 @@ export function AgentChatPage() {
 
   return (
     <div className="page-stack">
-      <SectionHeader title="Agent 问答" description={`知识空间 ${env.workspaceId}`} />
+      <SectionHeader title="Agent 问答" description={`知识空间 ${workspaceId}`} />
 
       <div className="chat-layout">
         <section className="panel chat-panel">

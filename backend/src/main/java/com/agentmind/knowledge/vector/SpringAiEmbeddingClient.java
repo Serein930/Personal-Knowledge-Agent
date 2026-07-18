@@ -11,6 +11,8 @@ import java.util.List;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingOptionsBuilder;
+import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -48,7 +50,17 @@ public class SpringAiEmbeddingClient implements EmbeddingClient {
     }
 
     @Override
+    public float[] embed(String text, String modelName) {
+        return embedAll(List.of(text), modelName).getFirst();
+    }
+
+    @Override
     public List<float[]> embedAll(List<String> texts) {
+        return embedAll(texts, properties.getModelName());
+    }
+
+    @Override
+    public List<float[]> embedAll(List<String> texts, String requestedModel) {
         if (texts == null) {
             throw new IllegalArgumentException("向量输入列表不能为空");
         }
@@ -61,30 +73,39 @@ public class SpringAiEmbeddingClient implements EmbeddingClient {
             }
         });
 
+        String modelName = StringUtils.hasText(requestedModel) ? requestedModel.trim() : properties.getModelName();
         List<float[]> vectors = new ArrayList<>(texts.size());
         for (int start = 0; start < texts.size(); start += properties.getBatchSize()) {
             int end = Math.min(start + properties.getBatchSize(), texts.size());
-            vectors.addAll(embedBatch(List.copyOf(texts.subList(start, end))));
+            vectors.addAll(embedBatch(List.copyOf(texts.subList(start, end)), modelName));
         }
         return List.copyOf(vectors);
     }
 
-    private List<float[]> embedBatch(List<String> batch) {
+    private List<float[]> embedBatch(List<String> batch, String modelName) {
         long startedAt = System.nanoTime();
         int attempts = 0;
         while (true) {
             attempts++;
             try {
-                EmbeddingResponse response = embeddingModel.embedForResponse(batch);
+                EmbeddingResponse response = modelName.equals(properties.getModelName())
+                        ? embeddingModel.embedForResponse(batch)
+                        : embeddingModel.call(new EmbeddingRequest(
+                                batch,
+                                EmbeddingOptionsBuilder.builder()
+                                        .withModel(modelName)
+                                        .withDimensions(properties.getDimensions())
+                                        .build()
+                        ));
                 List<float[]> vectors = validateResponse(response, batch.size());
                 int inputTokens = inputTokens(response);
-                observability.record(successObservation(batch.size(), inputTokens, startedAt, attempts));
+                observability.record(successObservation(modelName, batch.size(), inputTokens, startedAt, attempts));
                 return vectors;
             } catch (RuntimeException exception) {
                 if (attempts >= properties.getMaximumAttempts() || exception instanceof IllegalArgumentException) {
-                    observability.record(failureObservation(batch.size(), startedAt, attempts, exception));
+                    observability.record(failureObservation(modelName, batch.size(), startedAt, attempts, exception));
                     throw new IllegalStateException(
-                            "向量模型调用失败，已尝试 " + attempts + " 次，模型=" + properties.getModelName(),
+                            "向量模型调用失败，已尝试 " + attempts + " 次，模型=" + modelName,
                             exception
                     );
                 }
@@ -92,7 +113,7 @@ public class SpringAiEmbeddingClient implements EmbeddingClient {
                     sleepBeforeRetry(attempts);
                 } catch (IllegalStateException interruptedException) {
                     observability.record(failureObservation(
-                            batch.size(), startedAt, attempts, interruptedException));
+                            modelName, batch.size(), startedAt, attempts, interruptedException));
                     throw interruptedException;
                 }
             }
@@ -125,25 +146,27 @@ public class SpringAiEmbeddingClient implements EmbeddingClient {
     }
 
     private EmbeddingCallObservation successObservation(
+            String modelName,
             int inputCount,
             int inputTokens,
             long startedAt,
             int attempts
     ) {
         return new EmbeddingCallObservation(
-                properties.getModelName(), inputCount, inputTokens, estimatedCost(inputTokens),
+                modelName, inputCount, inputTokens, estimatedCost(inputTokens),
                 elapsedMillis(startedAt), attempts, true, null
         );
     }
 
     private EmbeddingCallObservation failureObservation(
+            String modelName,
             int inputCount,
             long startedAt,
             int attempts,
             RuntimeException exception
     ) {
         return new EmbeddingCallObservation(
-                properties.getModelName(), inputCount, 0, BigDecimal.ZERO,
+                modelName, inputCount, 0, BigDecimal.ZERO,
                 elapsedMillis(startedAt), attempts, false, exception.getClass().getSimpleName()
         );
     }

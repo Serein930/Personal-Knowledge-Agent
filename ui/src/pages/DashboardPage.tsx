@@ -11,7 +11,7 @@ import type {
 import { MetricCard } from '../components/MetricCard';
 import { PageState } from '../components/PageState';
 import { SectionHeader } from '../components/SectionHeader';
-import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 
 const sourceLabels: Record<BackendDocumentSourceType, string> = {
   PDF: 'PDF',
@@ -45,6 +45,7 @@ function formatLatency(milliseconds: number) {
 }
 
 export function DashboardPage() {
+  const { workspaceId = 0 } = useAppSession();
   const [overview, setOverview] = useState<DashboardOverviewDto>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -54,7 +55,7 @@ export function DashboardPage() {
     setError(undefined);
     try {
       const result = await apiClient.get<DashboardOverviewDto>(
-        `/v1/workspaces/${env.workspaceId}/dashboard`,
+        `/v1/workspaces/${workspaceId}/dashboard`,
       );
       setOverview(result);
     } catch (loadError) {
@@ -62,7 +63,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     void loadOverview();
@@ -72,7 +73,7 @@ export function DashboardPage() {
     <div className="page-stack">
       <SectionHeader
         title="工作台"
-        description={`知识空间 ${env.workspaceId} 的知识、学习与 Agent 运行概览。`}
+        description={`知识空间 ${workspaceId} 的知识、学习与 Agent 运行概览。`}
         action={<Button icon={<RefreshCw size={16} />} onClick={loadOverview}>刷新</Button>}
       />
 

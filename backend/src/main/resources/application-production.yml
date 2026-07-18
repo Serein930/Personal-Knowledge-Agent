@@ -60,6 +60,8 @@ management:
       enabled: true
 
 agentmind:
+  demo:
+    seed-data: false
   rag:
     # 生产环境固定使用真实模型适配器，不能因为公共默认值而静默退回 Mock。
     answer-generator: spring-ai

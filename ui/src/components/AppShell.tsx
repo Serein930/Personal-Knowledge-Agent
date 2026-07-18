@@ -1,4 +1,5 @@
-﻿import {
+import { Button, Select, Tooltip } from 'antd';
+import {
   BarChart3,
   BookOpenText,
   BrainCircuit,
@@ -6,9 +7,11 @@
   FileUp,
   GraduationCap,
   LayoutDashboard,
+  LogOut,
   Settings,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useAppSession } from '../contexts/AppSessionContext';
 import type { PageKey } from '../types';
 
 interface AppShellProps {
@@ -28,17 +31,14 @@ const navItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
 ];
 
 export function AppShell({ activePage, onPageChange, children }: AppShellProps) {
+  const { logout, selectWorkspace, user, workspaceId, workspaces } = useAppSession();
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
           <BookOpenText size={24} />
-          <div>
-            <strong>AgentMind</strong>
-            <span>个人知识 Agent</span>
-          </div>
+          <div><strong>AgentMind</strong><span>个人知识 Agent</span></div>
         </div>
-
         <nav className="nav-list" aria-label="主导航">
           {navItems.map((item) => (
             <button
@@ -47,8 +47,7 @@ export function AppShell({ activePage, onPageChange, children }: AppShellProps) 
               onClick={() => onPageChange(item.key)}
               type="button"
             >
-              {item.icon}
-              <span>{item.label}</span>
+              {item.icon}<span>{item.label}</span>
             </button>
           ))}
         </nav>
@@ -61,11 +60,18 @@ export function AppShell({ activePage, onPageChange, children }: AppShellProps) 
             <h1>面向个人学习资料的智能知识中枢</h1>
           </div>
           <div className="topbar__status">
-            <span>Stage 9</span>
-            <strong>评估闭环联调中</strong>
+            <Select
+              aria-label="当前知识空间"
+              value={workspaceId}
+              options={workspaces.map((workspace) => ({ value: workspace.id, label: workspace.name }))}
+              onChange={selectWorkspace}
+            />
+            <div><span>{user?.displayName ?? '开发用户'}</span><strong>{user?.role ?? 'USER'}</strong></div>
+            <Tooltip title="退出登录">
+              <Button aria-label="退出登录" icon={<LogOut size={16} />} onClick={logout} />
+            </Tooltip>
           </div>
         </header>
-
         <div className="page-container">{children}</div>
       </main>
     </div>

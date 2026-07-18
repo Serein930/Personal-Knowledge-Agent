@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
@@ -92,13 +93,14 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
     @Override
     public GeneratedAnswer generate(AnswerGenerationRequest request) {
         long startNanos = System.nanoTime();
-        modelCallLogger.logStart(request, GENERATOR_TYPE, properties.getModelName());
+        String modelName = modelName(request);
+        modelCallLogger.logStart(request, GENERATOR_TYPE, modelName);
         if (request.refusalDecision().shouldRefuse()) {
             long elapsedMillis = elapsedMillis(startNanos);
             modelCallLogger.logSuccess(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName,
                     elapsedMillis,
                     request.refusalDecision().reason().length()
             );
@@ -113,7 +115,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
             ModelAnswer modelAnswer = callModel(request);
             String answer = modelAnswer.content();
             long elapsedMillis = elapsedMillis(startNanos);
-            modelCallLogger.logSuccess(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, answer.length());
+            modelCallLogger.logSuccess(request, GENERATOR_TYPE, modelName, elapsedMillis, answer.length());
             return new GeneratedAnswer(
                     answer,
                     modelAnswer.usage(),
@@ -123,14 +125,14 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
         } catch (RuntimeException exception) {
             long elapsedMillis = elapsedMillis(startNanos);
             if (!properties.isSpringAiFailureFallbackEnabled()) {
-                modelCallLogger.logFailure(request, GENERATOR_TYPE, properties.getModelName(), elapsedMillis, exception);
+                modelCallLogger.logFailure(request, GENERATOR_TYPE, modelName, elapsedMillis, exception);
                 throw exception;
             }
             String fallbackAnswer = fallbackAnswer();
             modelCallLogger.logFallback(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName,
                     elapsedMillis,
                     fallbackAnswer.length(),
                     exception.getMessage()
@@ -151,7 +153,8 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
      */
     private ModelAnswer callModel(AnswerGenerationRequest request) {
         if (!properties.isToolCallingEnabled() || toolCallbackAdapter == null || toolCallingOrchestrator == null) {
-            ChatResponse response = chatModel.call(new Prompt(request.generationPrompt()));
+            ChatResponse response = chatModel.call(new Prompt(
+                    request.generationPrompt(), ChatOptions.builder().model(modelName(request)).build()));
             validateResponse(response);
             return new ModelAnswer(
                     response.getResult().getOutput().getText(),
@@ -162,6 +165,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
 
         AgentToolExecutionContext executionContext = executionContext(request);
         ToolCallingChatOptions options = ToolCallingChatOptions.builder()
+                .model(modelName(request))
                 .toolCallbacks(toolCallbackAdapter.createReadOnlyCallbacks(executionContext))
                 .toolContext(toolCallbackAdapter.createToolContext(executionContext))
                 .internalToolExecutionEnabled(false)
@@ -213,7 +217,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
         return new RagAnswerGenerationMetadataResponse(
                 request.promptVersion(),
                 GENERATOR_TYPE,
-                properties.getModelName(),
+                modelName(request),
                 request.refusalDecision().shouldRefuse(),
                 request.refusalDecision().reason(),
                 elapsedMillis
@@ -227,7 +231,7 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
         return new RagAnswerGenerationMetadataResponse(
                 request.promptVersion(),
                 GENERATOR_TYPE,
-                properties.getModelName(),
+                modelName(request),
                 true,
                 "真实模型暂时不可用，系统已返回安全降级结果",
                 elapsedMillis
@@ -237,6 +241,11 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
     private String fallbackAnswer() {
         return "当前已经完成知识库检索，但真实聊天模型调用失败，系统已进入降级模式。"
                 + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。";
+    }
+
+    private String modelName(AnswerGenerationRequest request) {
+        return org.springframework.util.StringUtils.hasText(request.chatModel())
+                ? request.chatModel().trim() : properties.getModelName();
     }
 
     private long elapsedMillis(long startNanos) {

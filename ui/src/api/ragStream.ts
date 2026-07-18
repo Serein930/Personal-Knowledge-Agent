@@ -1,4 +1,9 @@
-import { ApiClientError, buildApiUrl } from './client';
+import {
+  ApiClientError,
+  buildApiUrl,
+  getApiAuthenticationHeaders,
+  handleApiUnauthorized,
+} from './client';
 import type { CreatedToolConfirmationDto, RagCitationDto, ToolCallSummaryDto } from './contracts';
 
 interface RagStreamHandlers {
@@ -24,10 +29,12 @@ export async function streamRagChat(
     headers: {
       Accept: 'text/event-stream',
       'Content-Type': 'application/json',
+      ...getApiAuthenticationHeaders(),
     },
-    body: JSON.stringify({ conversationId, question, topK: 5 }),
+    body: JSON.stringify({ conversationId, question }),
   });
   if (!response.ok || !response.body) {
+    handleApiUnauthorized(response.status);
     throw new ApiClientError(`流式问答连接失败：${response.status}`, response.status);
   }
 

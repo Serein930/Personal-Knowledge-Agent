@@ -52,7 +52,7 @@ public class SecurityConfiguration {
         } else {
             http.authorizeHttpRequests(authorize -> authorize
                             .requestMatchers("/actuator/health", "/actuator/health/**", "/livez", "/readyz",
-                                    "/actuator/info", "/api/v1/auth/**").permitAll()
+                                    "/actuator/info", "/api/v1/auth/login", "/api/v1/auth/register").permitAll()
                             .anyRequest().authenticated())
                     .oauth2ResourceServer(resourceServer -> resourceServer
                             .jwt(Customizer.withDefaults())

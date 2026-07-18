@@ -61,13 +61,14 @@ public class JdbcDocumentMetadataRepository implements DocumentMetadataRepositor
     }
 
     @Override
-    public void markSucceeded(Long documentId, String storageKey, String contentType, long contentSize, int chunkCount) {
+    public void markSucceeded(Long documentId, String storageKey, String contentType, long contentSize,
+            String contentHash, int chunkCount) {
         jdbcTemplate.update("""
                 update knowledge_document
-                set storage_key = ?, content_type = ?, content_size = ?, chunk_count = ?,
+                set storage_key = ?, content_type = ?, content_size = ?, content_hash = ?, chunk_count = ?,
                     ingestion_status = 'SUCCEEDED', updated_at = ?
                 where id = ? and deleted_at is null
-                """, storageKey, contentType, contentSize, chunkCount, OffsetDateTime.now(), documentId);
+                """, storageKey, contentType, contentSize, contentHash, chunkCount, OffsetDateTime.now(), documentId);
     }
 
     @Override
@@ -92,6 +93,16 @@ public class JdbcDocumentMetadataRepository implements DocumentMetadataRepositor
         return jdbcTemplate.query("""
                 select * from knowledge_document where id = ? and deleted_at is null
                 """, this::mapDocument, documentId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<DocumentMetadata> findLatestByWorkspaceIdAndSourceUri(Long workspaceId, String sourceUri) {
+        return jdbcTemplate.query("""
+                select * from knowledge_document
+                where workspace_id = ? and source_uri = ? and ingestion_status = 'SUCCEEDED'
+                  and deleted_at is null
+                order by created_at desc limit 1
+                """, this::mapDocument, workspaceId, sourceUri).stream().findFirst();
     }
 
     @Override

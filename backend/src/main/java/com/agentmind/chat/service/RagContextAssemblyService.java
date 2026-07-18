@@ -9,7 +9,10 @@ import com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse;
 import com.agentmind.knowledge.service.KnowledgeSearchService;
 import com.agentmind.chat.memory.service.ChatMemoryService;
 import com.agentmind.chat.memory.service.ChatTurnContext;
+import com.agentmind.user.model.dto.UserWorkspacePreferenceResponse;
+import com.agentmind.user.service.UserWorkspacePreferenceService;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,7 +29,26 @@ public class RagContextAssemblyService {
     private final RagPromptTemplate promptTemplate;
     private final RagRefusalPolicy refusalPolicy;
     private final ChatMemoryService chatMemoryService;
+    private final UserWorkspacePreferenceService preferenceService;
 
+    @Autowired
+    public RagContextAssemblyService(
+            KnowledgeSearchService knowledgeSearchService,
+            AnswerGenerator answerGenerator,
+            RagPromptTemplate promptTemplate,
+            RagRefusalPolicy refusalPolicy,
+            ChatMemoryService chatMemoryService,
+            UserWorkspacePreferenceService preferenceService
+    ) {
+        this.knowledgeSearchService = knowledgeSearchService;
+        this.answerGenerator = answerGenerator;
+        this.promptTemplate = promptTemplate;
+        this.refusalPolicy = refusalPolicy;
+        this.chatMemoryService = chatMemoryService;
+        this.preferenceService = preferenceService;
+    }
+
+    /** 为不启动 Spring 容器的历史单元测试保留轻量构造方式。 */
     public RagContextAssemblyService(
             KnowledgeSearchService knowledgeSearchService,
             AnswerGenerator answerGenerator,
@@ -39,10 +61,18 @@ public class RagContextAssemblyService {
         this.promptTemplate = promptTemplate;
         this.refusalPolicy = refusalPolicy;
         this.chatMemoryService = chatMemoryService;
+        this.preferenceService = null;
     }
 
     public RagChatResponse prepareChatContext(Long workspaceId, RagChatRequest request) {
-        PreparedRagChat preparedChat = prepareChat(workspaceId, request);
+        return prepareChatContext(1L, workspaceId, request);
+    }
+
+    /**
+     * 使用已认证用户的身份准备并生成回答，避免审计、偏好和后续模型路由落到演示用户名下。
+     */
+    public RagChatResponse prepareChatContext(Long ownerUserId, Long workspaceId, RagChatRequest request) {
+        PreparedRagChat preparedChat = prepareChat(ownerUserId, workspaceId, request);
         GeneratedAnswer generatedAnswer;
         try {
             generatedAnswer = answerGenerator.generate(preparedChat.generationRequest());
@@ -81,13 +111,18 @@ public class RagContextAssemblyService {
      * 再把相同的生成请求交给流式生成端口。</p>
      */
     public PreparedRagChat prepareChat(Long workspaceId, RagChatRequest request) {
+        return prepareChat(1L, workspaceId, request);
+    }
+
+    /** 同步和流式接口共用的、包含真实用户身份的上下文准备入口。 */
+    public PreparedRagChat prepareChat(Long ownerUserId, Long workspaceId, RagChatRequest request) {
         ChatTurnContext turnContext = chatMemoryService.beginTurn(
                 workspaceId,
                 request.conversationId(),
                 request.question()
         );
         try {
-            return prepareChat(workspaceId, request, turnContext);
+            return prepareChat(ownerUserId, workspaceId, request, turnContext);
         } catch (RuntimeException exception) {
             chatMemoryService.failAssistant(
                     workspaceId,
@@ -100,14 +135,20 @@ public class RagContextAssemblyService {
     }
 
     private PreparedRagChat prepareChat(
+            Long ownerUserId,
             Long workspaceId,
             RagChatRequest request,
             ChatTurnContext turnContext
     ) {
+        UserWorkspacePreferenceResponse preference = preferenceService == null
+                ? null : preferenceService.get(ownerUserId, workspaceId);
+        int effectiveTopK = request.topK() != null
+                ? request.topK() : preference == null ? 5 : preference.defaultTopK();
         KnowledgeSearchResponse searchResponse = knowledgeSearchService.search(
                 workspaceId,
                 request.question(),
-                request.topK()
+                effectiveTopK,
+                preference == null ? null : preference.embeddingModel()
         );
         List<RagCitationResponse> citations = toCitations(searchResponse.results());
         RagRefusalDecision refusalDecision = refusalPolicy.decide(citations);
@@ -116,7 +157,10 @@ public class RagContextAssemblyService {
                 citations,
                 turnContext.history()
         );
-        String generationPrompt = promptTemplate.buildGenerationPrompt(request.question(), promptContext, refusalDecision);
+        String generationPrompt = promptTemplate.buildGenerationPrompt(
+                request.question(), promptContext, refusalDecision,
+                preference == null ? com.agentmind.user.model.CitationPolicy.REQUIRED : preference.citationPolicy()
+        );
         RagRetrievalContextResponse retrievalContext = new RagRetrievalContextResponse(
                 request.question(),
                 searchResponse.topK(),
@@ -126,13 +170,14 @@ public class RagContextAssemblyService {
         );
         AnswerGenerationRequest generationRequest = new AnswerGenerationRequest(
                 workspaceId,
-                1L,
+                ownerUserId,
                 turnContext.conversation().id(),
                 turnContext.assistantMessage().id(),
                 request.question(),
                 promptTemplate.promptVersion(),
                 retrievalContext.promptContext(),
                 generationPrompt,
+                preference == null ? null : preference.chatModel(),
                 citations,
                 refusalDecision
         );

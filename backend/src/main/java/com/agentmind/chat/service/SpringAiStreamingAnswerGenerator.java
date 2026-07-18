@@ -15,6 +15,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
@@ -96,7 +97,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             RagStreamCancellationCheck cancellationCheck
     ) {
         long startNanos = System.nanoTime();
-        modelCallLogger.logStart(request, GENERATOR_TYPE, properties.getModelName());
+        modelCallLogger.logStart(request, GENERATOR_TYPE, modelName(request));
         StringBuilder streamedAnswer = new StringBuilder();
         List<AgentToolCallSummaryResponse> toolCalls = List.of();
         TokenUsageResponse tokenUsage = ChatModelTokenUsage.zero();
@@ -113,7 +114,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             modelCallLogger.logSuccess(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName(request),
                     elapsedMillis,
                     streamedAnswer.length()
             );
@@ -130,7 +131,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             modelCallLogger.logCancelled(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName(request),
                     elapsedMillis(startNanos),
                     exception.getMessage()
             );
@@ -161,6 +162,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                 && toolCallingManager != null) {
             AgentToolExecutionContext executionContext = executionContext(request);
             ToolCallingChatOptions options = ToolCallingChatOptions.builder()
+                    .model(modelName(request))
                     .toolCallbacks(toolCallbackAdapter.createReadOnlyCallbacks(executionContext))
                     .toolContext(toolCallbackAdapter.createToolContext(executionContext))
                     .internalToolExecutionEnabled(false)
@@ -175,7 +177,8 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                 );
                 // 工具执行完成后关闭工具定义，再流式生成最终回答，避免流中再次产生无法安全处理的工具请求。
                 TokenUsageResponse streamUsage = streamPrompt(
-                        new Prompt(executionResult.conversationHistory()),
+                        new Prompt(executionResult.conversationHistory(),
+                                ChatOptions.builder().model(modelName(request)).build()),
                         timeout,
                         streamedAnswer,
                         deltaConsumer,
@@ -199,7 +202,8 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
         }
 
         TokenUsageResponse streamUsage = streamPrompt(
-                new Prompt(request.generationPrompt()),
+                new Prompt(request.generationPrompt(),
+                        ChatOptions.builder().model(modelName(request)).build()),
                 timeout,
                 streamedAnswer,
                 deltaConsumer,
@@ -255,7 +259,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             modelCallLogger.logFailure(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName(request),
                     elapsedMillis(startNanos),
                     exception
             );
@@ -269,7 +273,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             modelCallLogger.logFallback(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName(request),
                     elapsedMillis,
                     streamedAnswer.length(),
                     exception.getMessage()
@@ -287,7 +291,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
             modelCallLogger.logCancelled(
                     request,
                     GENERATOR_TYPE,
-                    properties.getModelName(),
+                    modelName(request),
                     elapsedMillis(startNanos),
                     terminatedException.getMessage()
             );
@@ -335,7 +339,7 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                 new RagAnswerGenerationMetadataResponse(
                         request.promptVersion(),
                         GENERATOR_TYPE,
-                        properties.getModelName(),
+                        modelName(request),
                         refused || request.refusalDecision().shouldRefuse(),
                         refusalReason,
                         elapsedMillis
@@ -363,6 +367,11 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
     private String fallbackAnswer() {
         return "当前已经完成知识库检索，但真实聊天模型流式调用失败，系统已进入降级模式。"
                 + "请稍后重试，或切换回模拟回答生成器继续验证检索链路。";
+    }
+
+    private String modelName(AnswerGenerationRequest request) {
+        return org.springframework.util.StringUtils.hasText(request.chatModel())
+                ? request.chatModel().trim() : properties.getModelName();
     }
 
     private String fallbackReason() {

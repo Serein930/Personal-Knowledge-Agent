@@ -18,6 +18,7 @@ public record AnswerGenerationRequest(
         String promptVersion,
         String promptContext,
         String generationPrompt,
+        String chatModel,
         List<RagCitationResponse> citations,
         RagRefusalDecision refusalDecision
 ) {
@@ -25,6 +26,22 @@ public record AnswerGenerationRequest(
     /**
      * 兼容 Stage 6 中不包含工具执行上下文的构造方式。
      */
+    public AnswerGenerationRequest(
+            Long workspaceId,
+            Long ownerUserId,
+            Long conversationId,
+            Long messageId,
+            String question,
+            String promptVersion,
+            String promptContext,
+            String generationPrompt,
+            List<RagCitationResponse> citations,
+            RagRefusalDecision refusalDecision
+    ) {
+        this(workspaceId, ownerUserId, conversationId, messageId, question, promptVersion,
+                promptContext, generationPrompt, null, citations, refusalDecision);
+    }
+
     public AnswerGenerationRequest(
             Long workspaceId,
             String question,
@@ -35,6 +52,6 @@ public record AnswerGenerationRequest(
             RagRefusalDecision refusalDecision
     ) {
         this(workspaceId, 1L, null, null, question, promptVersion, promptContext,
-                generationPrompt, citations, refusalDecision);
+                generationPrompt, null, citations, refusalDecision);
     }
 }

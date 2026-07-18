@@ -1,6 +1,7 @@
 package com.agentmind.user.controller;
 
 import com.agentmind.common.response.ApiResponse;
+import com.agentmind.common.security.CurrentUserId;
 import com.agentmind.user.model.dto.AuthTokenResponse;
 import com.agentmind.user.model.dto.LoginRequest;
 import com.agentmind.user.model.dto.RegisterUserRequest;
@@ -32,5 +33,10 @@ public class LocalAuthenticationController {
     @PostMapping("/login")
     public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(authenticationService.login(request));
+    }
+
+    @PostMapping("/refresh")
+    public ApiResponse<AuthTokenResponse> refresh(@CurrentUserId Long userId) {
+        return ApiResponse.success(authenticationService.refresh(userId));
     }
 }

@@ -62,7 +62,7 @@ import type {
 } from '../api/contracts';
 import { MetricCard } from '../components/MetricCard';
 import { SectionHeader } from '../components/SectionHeader';
-import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 
 const sampleCases: RagEvaluationCaseDto[] = [
   {
@@ -120,6 +120,7 @@ function wait(milliseconds: number) {
 }
 
 export function EvaluationPage() {
+  const { workspaceId = 0 } = useAppSession();
   const [form] = Form.useForm<DatasetFormValues>();
   const [dashboard, setDashboard] = useState<RagEvaluationDashboardDto>();
   const [datasets, setDatasets] = useState<RagEvaluationDatasetDto[]>([]);
@@ -143,7 +144,7 @@ export function EvaluationPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'dataset' | 'version'>('dataset');
 
-  const workspacePath = `/v1/workspaces/${env.workspaceId}/evaluations`;
+  const workspacePath = `/v1/workspaces/${workspaceId}/evaluations`;
 
   const loadOverview = useCallback(async () => {
     const [nextDashboard, datasetPage] = await Promise.all([
@@ -448,7 +449,7 @@ export function EvaluationPage() {
     <div className="page-stack">
       <SectionHeader
         title="RAG 评估工作台"
-        description={`知识空间 ${env.workspaceId} · 可重复实验、质量门禁与逐题证据`}
+        description={`知识空间 ${workspaceId} · 可重复实验、质量门禁与逐题证据`}
         action={(
           <div className="evaluation-header-actions">
             <Tooltip title="刷新评估数据"><Button icon={<RefreshCw size={16} />} onClick={() => void loadOverview()} /></Tooltip>

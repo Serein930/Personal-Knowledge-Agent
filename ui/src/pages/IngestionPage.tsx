@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { apiClient } from '../api/client';
 import type { BackendIngestionTaskDto, BackendIngestionStatus, DocumentCreatedDto } from '../api/contracts';
 import { SectionHeader } from '../components/SectionHeader';
-import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 
 const statusLabel: Record<BackendIngestionStatus, string> = {
   PENDING: '等待中',
@@ -15,12 +15,12 @@ const statusLabel: Record<BackendIngestionStatus, string> = {
 };
 
 export function IngestionPage() {
+  const { workspaceId = 0 } = useAppSession();
   const [selectedFile, setSelectedFile] = useState<File>();
   const [webUrl, setWebUrl] = useState('');
   const [tasks, setTasks] = useState<BackendIngestionTaskDto[]>([]);
   const [uploading, setUploading] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const workspaceId = env.workspaceId;
 
   const loadTask = async (taskId: number) => {
     const task = await apiClient.get<BackendIngestionTaskDto>(

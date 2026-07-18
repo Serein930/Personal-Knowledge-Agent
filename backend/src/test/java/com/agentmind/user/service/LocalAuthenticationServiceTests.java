@@ -30,9 +30,12 @@ class LocalAuthenticationServiceTests {
         var registered = service.register(new RegisterUserRequest(
                 "serein", "Serein", "serein@example.com", "a-strong-password-2026"));
         var loggedIn = service.login(new LoginRequest("serein", "a-strong-password-2026"));
+        var refreshed = service.refresh(registered.userId());
 
         assertThat(loggedIn.userId()).isEqualTo(registered.userId());
         assertThat(loggedIn.defaultWorkspaceId()).isEqualTo(registered.defaultWorkspaceId());
+        assertThat(refreshed.userId()).isEqualTo(registered.userId());
+        assertThat(refreshed.accessToken()).isNotBlank();
         JwtDecoder decoder = configuration.localJwtDecoder(properties);
         Number uid = decoder.decode(loggedIn.accessToken()).getClaim("uid");
         assertThat(uid.longValue()).isEqualTo(registered.userId());

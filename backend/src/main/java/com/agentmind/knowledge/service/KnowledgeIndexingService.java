@@ -50,7 +50,15 @@ public class KnowledgeIndexingService {
     }
 
     public void indexChunks(Long workspaceId, Long documentId, List<DocumentChunk> chunks) {
-        List<float[]> embeddings = embeddingClient.embedAll(chunks.stream().map(DocumentChunk::content).toList());
+        indexChunks(workspaceId, documentId, chunks, null);
+    }
+
+    /** 使用知识空间偏好指定的向量模型建立索引。 */
+    public void indexChunks(Long workspaceId, Long documentId, List<DocumentChunk> chunks, String embeddingModel) {
+        List<String> texts = chunks.stream().map(DocumentChunk::content).toList();
+        List<float[]> embeddings = org.springframework.util.StringUtils.hasText(embeddingModel)
+                ? embeddingClient.embedAll(texts, embeddingModel)
+                : embeddingClient.embedAll(texts);
         if (embeddings.size() != chunks.size()) {
             throw new IllegalStateException("向量模型返回数量与文档片段数量不一致");
         }

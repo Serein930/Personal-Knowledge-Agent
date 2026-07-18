@@ -10,6 +10,15 @@ test('文件摄取、知识库展示和流式问答形成真实闭环', async ({
   expect(healthResponse.ok()).toBeTruthy();
 
   await page.goto('/');
+  await page.getByRole('tab', { name: '注册' }).click();
+  const registrationPanel = page.locator('.ant-tabs-tabpane-active');
+  const registrationInputs = registrationPanel.locator('input');
+  const uniqueUsername = `e2e_${Date.now()}`;
+  await registrationInputs.nth(0).fill(uniqueUsername);
+  await registrationInputs.nth(1).fill('全链路测试用户');
+  await registrationInputs.nth(2).fill(`${uniqueUsername}@example.com`);
+  await registrationInputs.nth(3).fill('AgentMind-E2E-Password-2026');
+  await registrationPanel.getByRole('button', { name: '创建账号' }).click();
   await expect(page.getByText('AgentMind', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '采集中心' }).click();

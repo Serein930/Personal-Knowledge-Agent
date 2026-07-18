@@ -82,6 +82,22 @@ public class LocalAuthenticationService {
         return issueToken(user, defaultWorkspaceId);
     }
 
+    /**
+     * 为仍处于有效认证状态的本地用户轮换短期访问令牌。
+     *
+     * <p>刷新请求不接受用户编号，身份只能来自已经通过签名校验的认证主体。</p>
+     */
+    public AuthTokenResponse refresh(Long userId) {
+        UserAccount user = userRepository.findById(userId)
+                .filter(account -> account.status() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED, "当前用户不可用"));
+        Long defaultWorkspaceId = workspaceRepository.findFirstOwnedBy(user.id())
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND, "用户尚未配置可用知识空间"))
+                .getId();
+        return issueToken(user, defaultWorkspaceId);
+    }
+
     private AuthTokenResponse issueToken(UserAccount user, Long defaultWorkspaceId) {
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plus(properties.getAccessTokenTtl());

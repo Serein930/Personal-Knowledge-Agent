@@ -11,7 +11,7 @@ import type {
 } from '../api/contracts';
 import { PageState } from '../components/PageState';
 import { SectionHeader } from '../components/SectionHeader';
-import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 
 const statusView: Record<BackendIngestionStatus, { label: string; color: 'success' | 'processing' | 'default' | 'error' }> = {
   PENDING: { label: '等待中', color: 'default' },
@@ -44,6 +44,7 @@ const columns: ColumnsType<BackendDocumentDto> = [
 ];
 
 export function KnowledgeBasePage() {
+  const { workspaceId = 0 } = useAppSession();
   const [documents, setDocuments] = useState<BackendDocumentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -53,7 +54,7 @@ export function KnowledgeBasePage() {
     setError(undefined);
     try {
       const page = await apiClient.get<PageResult<BackendDocumentDto>>(
-        `/v1/workspaces/${env.workspaceId}/documents?page=1&pageSize=50`,
+        `/v1/workspaces/${workspaceId}/documents?page=1&pageSize=50`,
       );
       setDocuments(page.records);
     } catch (loadError) {
@@ -61,7 +62,7 @@ export function KnowledgeBasePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => { void loadDocuments(); }, [loadDocuments]);
 
@@ -69,7 +70,7 @@ export function KnowledgeBasePage() {
     <div className="page-stack">
       <SectionHeader
         title="知识库"
-        description={`知识空间 ${env.workspaceId}`}
+        description={`知识空间 ${workspaceId}`}
         action={<Button icon={<RefreshCw size={16} />} onClick={loadDocuments}>刷新</Button>}
       />
       <PageState

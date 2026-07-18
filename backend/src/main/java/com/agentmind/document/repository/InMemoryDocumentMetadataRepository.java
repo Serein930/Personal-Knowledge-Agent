@@ -44,15 +44,16 @@ public class InMemoryDocumentMetadataRepository implements DocumentMetadataRepos
     }
 
     @Override
-    public void markSucceeded(Long documentId, String storageKey, String contentType, long contentSize, int chunkCount) {
+    public void markSucceeded(Long documentId, String storageKey, String contentType, long contentSize,
+            String contentHash, int chunkCount) {
         documents.computeIfPresent(documentId, (id, current) -> copy(current, storageKey, contentType,
-                contentSize, IngestionStatus.SUCCEEDED, chunkCount));
+                contentSize, contentHash, IngestionStatus.SUCCEEDED, chunkCount));
     }
 
     @Override
     public void markFailed(Long documentId) {
         documents.computeIfPresent(documentId, (id, current) -> copy(current, current.storageKey(),
-                current.contentType(), current.contentSize(), IngestionStatus.FAILED, 0));
+                current.contentType(), current.contentSize(), current.contentHash(), IngestionStatus.FAILED, 0));
     }
 
     @Override
@@ -67,15 +68,24 @@ public class InMemoryDocumentMetadataRepository implements DocumentMetadataRepos
     }
 
     @Override
+    public Optional<DocumentMetadata> findLatestByWorkspaceIdAndSourceUri(Long workspaceId, String sourceUri) {
+        return documents.values().stream()
+                .filter(document -> workspaceId.equals(document.workspaceId()))
+                .filter(document -> sourceUri.equals(document.sourceUri()))
+                .filter(document -> document.ingestionStatus() == IngestionStatus.SUCCEEDED)
+                .max(java.util.Comparator.comparing(DocumentMetadata::createdAt));
+    }
+
+    @Override
     public List<DocumentMetadata> findAllByWorkspaceId(Long workspaceId) {
         return documents.values().stream().filter(document -> workspaceId.equals(document.workspaceId())).toList();
     }
 
     private DocumentMetadata copy(DocumentMetadata current, String storageKey, String contentType,
-            long contentSize, IngestionStatus status, int chunkCount) {
+            long contentSize, String contentHash, IngestionStatus status, int chunkCount) {
         return new DocumentMetadata(current.id(), current.ownerUserId(), current.workspaceId(), current.title(),
                 current.sourceType(), current.sourceUri(), current.originalFilename(), storageKey, contentType,
-                contentSize, current.contentHash(), current.tags(), status, chunkCount,
+                contentSize, contentHash, current.tags(), status, chunkCount,
                 current.createdAt(), OffsetDateTime.now());
     }
 }

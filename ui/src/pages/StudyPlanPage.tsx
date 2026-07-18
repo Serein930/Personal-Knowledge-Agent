@@ -21,7 +21,7 @@ import type {
 } from '../api/contracts';
 import { MetricCard } from '../components/MetricCard';
 import { SectionHeader } from '../components/SectionHeader';
-import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 
 const scoreLabels = ['忘记', '很难', '失败', '勉强', '记住', '轻松'];
 
@@ -33,6 +33,7 @@ function todayText() {
 }
 
 export function StudyPlanPage() {
+  const { workspaceId = 0 } = useAppSession();
   const [statistics, setStatistics] = useState<StudyReviewStatisticsDto>();
   const [plan, setPlan] = useState<DailyStudyPlanDto>();
   const [cards, setCards] = useState<StudyFlashcardDto[]>([]);
@@ -43,7 +44,7 @@ export function StudyPlanPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const loadWorkspace = useCallback(async () => {
-    const workspacePath = `/v1/workspaces/${env.workspaceId}`;
+    const workspacePath = `/v1/workspaces/${workspaceId}`;
     const [nextStatistics, cardPage] = await Promise.all([
       apiClient.get<StudyReviewStatisticsDto>(`${workspacePath}/flashcards/statistics`),
       apiClient.get<PageResult<StudyFlashcardDto>>(`${workspacePath}/flashcards?page=1&pageSize=100`),
@@ -59,7 +60,7 @@ export function StudyPlanPage() {
     } catch {
       setPlan(undefined);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     void loadWorkspace()
@@ -76,7 +77,7 @@ export function StudyPlanPage() {
     setSubmitting(true);
     try {
       const result = await apiClient.post<DailyStudyPlanDto>(
-        `/v1/workspaces/${env.workspaceId}/study-plans/daily`,
+        `/v1/workspaces/${workspaceId}/study-plans/daily`,
         { planDate: todayText(), dailyReviewTarget: dailyTarget },
       );
       setPlan(result);
@@ -93,7 +94,7 @@ export function StudyPlanPage() {
     setSubmitting(true);
     try {
       const result = await apiClient.post<StudyReviewSessionDto>(
-        `/v1/workspaces/${env.workspaceId}/review-sessions`,
+        `/v1/workspaces/${workspaceId}/review-sessions`,
         { limit: Math.min(100, Math.max(1, dailyTarget)) },
       );
       setSession(result);
@@ -111,7 +112,7 @@ export function StudyPlanPage() {
     try {
       const requestId = globalThis.crypto?.randomUUID?.() ?? `review-${Date.now()}`;
       const result = await apiClient.post<SubmittedSessionReviewDto>(
-        `/v1/workspaces/${env.workspaceId}/review-sessions/${session.id}`
+        `/v1/workspaces/${workspaceId}/review-sessions/${session.id}`
           + `/cards/${currentItem.flashcard.id}/reviews`,
         { requestId, score },
       );
@@ -131,7 +132,7 @@ export function StudyPlanPage() {
     const action = card.status === 'SUSPENDED' ? 'resume' : 'suspend';
     try {
       await apiClient.post<StudyFlashcardDto>(
-        `/v1/workspaces/${env.workspaceId}/flashcards/${card.id}/${action}`,
+        `/v1/workspaces/${workspaceId}/flashcards/${card.id}/${action}`,
         { expectedVersion: card.version },
       );
       await loadWorkspace();
@@ -150,7 +151,7 @@ export function StudyPlanPage() {
     <div className="page-stack">
       <SectionHeader
         title="复习工作台"
-        description={`知识空间 ${env.workspaceId}`}
+        description={`知识空间 ${workspaceId}`}
         action={(
           <Button
             type="primary"

@@ -360,9 +360,9 @@ docs/PGVECTOR_RETRIEVAL_RUNBOOK.md
 注意事项：
 
 - 上传文件和抓取的 HTML 快照会存放在 `.agentmind-storage`，该目录已被 Git 忽略。
-- 当前阶段 Markdown、TXT、代码文本和 HTML 可以生成 chunk。
+- Markdown、TXT、代码文本、HTML、PDF、DOC 和 DOCX 均可提取文本并生成 chunk。
 - 生成的 chunk 会写入当前配置的向量库。
-- 当前 embedding 实现是本地确定性算法，只用于验证检索链路，不代表生产语义检索质量。
-- pgvector 适配器已经可以通过配置启用，但默认仍不开启。
-- PDF 和 Word 文件当前可以保存原始文件，解析能力留到后续阶段。
-- 文档、任务、chunk 和向量数据当前主要保存在内存中，服务重启后会重置。
+- 默认 profile 使用确定性向量保证测试可重复；local 与 production 可切换 Spring AI 真实 Embedding。
+- local 与 production 使用 pgvector，并通过 Flyway 创建完整表结构。
+- 默认 profile 的任务、chunk 和向量使用内存适配器；local 与 production 使用 PostgreSQL 持久化，服务重启后不会丢失。
+- 网页采集保存 SHA-256 内容摘要；同 URL 内容未变化时复用文档，内容变化时创建新版本。

@@ -73,7 +73,8 @@ class RepositoryPersistenceConditionContractTests {
             prefix = "agentmind.agent.persistence";
         } else if (packageName.contains(".user.repository")
                 || packageName.contains(".workspace.repository")
-                || packageName.contains(".document.repository")) {
+                || packageName.contains(".document.repository")
+                || packageName.contains(".ingestion.repository")) {
             prefix = "agentmind.core.persistence";
         } else {
             throw new AssertionError("发现尚未归类的持久化 Repository：" + repositoryClass.getName());

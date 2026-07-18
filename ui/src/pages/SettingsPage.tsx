@@ -6,6 +6,7 @@ import type { CitationPolicy, UserWorkspacePreferenceDto } from '../api/contract
 import { PageState } from '../components/PageState';
 import { SectionHeader } from '../components/SectionHeader';
 import { env } from '../config/env';
+import { useAppSession } from '../contexts/AppSessionContext';
 import type { RuntimeSetting } from '../types';
 
 interface PreferenceDraft {
@@ -14,24 +15,6 @@ interface PreferenceDraft {
   citationPolicy: CitationPolicy;
   defaultTopK: number;
 }
-
-const runtimeSettings: RuntimeSetting[] = [
-  {
-    label: 'API 地址',
-    value: env.apiBaseUrl,
-    description: '前端请求后端接口的基础地址，由构建环境变量提供。',
-  },
-  {
-    label: '知识空间编号',
-    value: String(env.workspaceId),
-    description: '当前阶段从前端环境变量读取，认证阶段将切换为用户知识空间选择。',
-  },
-  {
-    label: '敏感配置',
-    value: '仅后端环境变量或密钥管理服务',
-    description: 'API Key、访问令牌和供应商端点不会通过设置接口读取或保存。',
-  },
-];
 
 function toDraft(preference: UserWorkspacePreferenceDto): PreferenceDraft {
   return {
@@ -43,13 +26,31 @@ function toDraft(preference: UserWorkspacePreferenceDto): PreferenceDraft {
 }
 
 export function SettingsPage() {
+  const { workspaceId = 0 } = useAppSession();
   const [preference, setPreference] = useState<UserWorkspacePreferenceDto>();
   const [draft, setDraft] = useState<PreferenceDraft>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
 
-  const preferencePath = `/v1/workspaces/${env.workspaceId}/preferences`;
+  const preferencePath = `/v1/workspaces/${workspaceId}/preferences`;
+  const runtimeSettings: RuntimeSetting[] = [
+    {
+      label: 'API 地址',
+      value: env.apiBaseUrl,
+      description: '前端请求后端接口的基础地址，由构建环境变量提供。',
+    },
+    {
+      label: '知识空间编号',
+      value: String(workspaceId),
+      description: '来自当前用户可访问的知识空间，切换后所有业务页面同步刷新。',
+    },
+    {
+      label: '敏感配置',
+      value: '仅后端环境变量或密钥管理服务',
+      description: 'API Key、访问令牌和供应商端点不会通过设置接口读取或保存。',
+    },
+  ];
 
   const loadPreference = useCallback(async () => {
     setLoading(true);

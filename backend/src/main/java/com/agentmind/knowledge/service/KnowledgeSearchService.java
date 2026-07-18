@@ -32,12 +32,19 @@ public class KnowledgeSearchService {
     }
 
     public KnowledgeSearchResponse search(Long workspaceId, String query, Integer topK) {
+        return search(workspaceId, query, topK, null);
+    }
+
+    /** 使用与文档索引一致的向量模型生成查询向量，避免混用不同向量空间。 */
+    public KnowledgeSearchResponse search(Long workspaceId, String query, Integer topK, String embeddingModel) {
         validateWorkspaceId(workspaceId);
         if (!StringUtils.hasText(query)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "查询内容不能为空");
         }
         int safeTopK = normalizeTopK(topK);
-        float[] queryEmbedding = embeddingClient.embed(query);
+        float[] queryEmbedding = StringUtils.hasText(embeddingModel)
+                ? embeddingClient.embed(query, embeddingModel)
+                : embeddingClient.embed(query);
         List<KnowledgeSearchResultResponse> results = vectorStore.search(workspaceId, queryEmbedding, safeTopK)
                 .stream()
                 .map(this::toResponse)

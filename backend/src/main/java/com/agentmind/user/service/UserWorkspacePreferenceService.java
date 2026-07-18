@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 用户知识空间偏好应用服务。
  *
  * <p>模型名称属于用户选择，不代表前端可以修改供应商密钥。真实模型适配器仍由后端受保护配置创建，
- * 后续模型路由只消费这里保存的非敏感标识。</p>
+ * RAG 与文档摄取链路会消费这里保存的非敏感模型标识，并通过 Spring AI 请求级选项完成路由。</p>
  */
 @Service
 public class UserWorkspacePreferenceService {

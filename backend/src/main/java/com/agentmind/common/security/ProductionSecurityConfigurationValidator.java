@@ -10,18 +10,23 @@ public class ProductionSecurityConfigurationValidator {
 
     private final AgentMindSecurityProperties properties;
     private final String coreStore;
+    private final boolean allowMemoryForTesting;
 
     public ProductionSecurityConfigurationValidator(
             AgentMindSecurityProperties properties,
-            @Value("${agentmind.core.persistence.store:memory}") String coreStore
+            @Value("${agentmind.core.persistence.store:memory}") String coreStore,
+            @Value("${agentmind.security.allow-memory-for-testing:false}") boolean allowMemoryForTesting
     ) {
         this.properties = properties;
         this.coreStore = coreStore;
+        this.allowMemoryForTesting = allowMemoryForTesting;
     }
 
     @PostConstruct
     public void validate() {
-        if (properties.getMode() != SecurityMode.DISABLED && !"jdbc".equalsIgnoreCase(coreStore)) {
+        if (properties.getMode() != SecurityMode.DISABLED
+                && !"jdbc".equalsIgnoreCase(coreStore)
+                && !allowMemoryForTesting) {
             throw new IllegalStateException("启用生产身份认证时，核心数据仓储必须配置为 jdbc");
         }
     }

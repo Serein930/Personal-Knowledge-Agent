@@ -11,6 +11,11 @@ public interface EmbeddingClient {
 
     float[] embed(String text);
 
+    /** 指定模型的单条向量请求；不支持动态路由的实现沿用自身默认模型。 */
+    default float[] embed(String text, String modelName) {
+        return embed(text);
+    }
+
     /**
      * 批量生成文本向量。
      *
@@ -19,5 +24,10 @@ public interface EmbeddingClient {
      */
     default List<float[]> embedAll(List<String> texts) {
         return texts.stream().map(this::embed).toList();
+    }
+
+    /** 指定模型的批量向量请求；确定性测试实现会忽略模型名称。 */
+    default List<float[]> embedAll(List<String> texts, String modelName) {
+        return embedAll(texts);
     }
 }

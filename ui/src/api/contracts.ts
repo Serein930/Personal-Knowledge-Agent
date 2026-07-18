@@ -13,6 +13,32 @@ export interface WorkspaceDto {
   description: string;
 }
 
+export interface CurrentUserDto {
+  id: number;
+  username: string;
+  displayName: string;
+  email: string;
+  role: 'USER' | 'ADMIN';
+  status: 'ACTIVE' | 'DISABLED';
+}
+
+export interface KnowledgeWorkspaceDto {
+  id: number;
+  name: string;
+  description: string;
+  visibility: 'PRIVATE';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthTokenDto {
+  tokenType: 'Bearer';
+  accessToken: string;
+  expiresAt: string;
+  userId: number;
+  defaultWorkspaceId: number;
+}
+
 export interface KnowledgeDocumentDto {
   id: string;
   title: string;

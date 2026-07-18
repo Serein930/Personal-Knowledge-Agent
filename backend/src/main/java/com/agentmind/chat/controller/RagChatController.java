@@ -56,7 +56,7 @@ public class RagChatController {
             @Valid @RequestBody RagChatRequest request
     ) {
         workspaceAccessService.requireReadable(ownerUserId, workspaceId);
-        return ApiResponse.success(ragContextAssemblyService.prepareChatContext(workspaceId, request));
+        return ApiResponse.success(ragContextAssemblyService.prepareChatContext(ownerUserId, workspaceId, request));
     }
 
     /**

@@ -4,6 +4,7 @@ import com.agentmind.chat.config.RagAnswerGenerationProperties;
 import com.agentmind.chat.memory.model.ChatMessageRole;
 import com.agentmind.chat.memory.service.ChatMemoryEntry;
 import com.agentmind.chat.model.dto.RagCitationResponse;
+import com.agentmind.user.model.CitationPolicy;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
@@ -57,11 +58,21 @@ public class RagPromptTemplate {
     }
 
     public String buildGenerationPrompt(String question, String promptContext, RagRefusalDecision refusalDecision) {
+        return buildGenerationPrompt(question, promptContext, refusalDecision, CitationPolicy.REQUIRED);
+    }
+
+    /** 根据用户偏好生成引用约束，但始终禁止脱离检索上下文编造事实。 */
+    public String buildGenerationPrompt(String question, String promptContext,
+            RagRefusalDecision refusalDecision, CitationPolicy citationPolicy) {
         StringBuilder builder = new StringBuilder();
         builder.append("提示词版本：").append(properties.getPromptVersion()).append("\n");
         builder.append("回答要求：\n");
         builder.append("1. 只使用检索上下文中的信息。\n");
-        builder.append("2. 每个关键结论后尽量附上引用编号，例如 [1]。\n");
+        if (citationPolicy == CitationPolicy.REQUIRED) {
+            builder.append("2. 每个关键结论后必须附上引用编号，例如 [1]。\n");
+        } else {
+            builder.append("2. 有明确检索来源的结论附上引用编号，例如 [1]。\n");
+        }
         builder.append("3. 不要编造上下文之外的事实。\n");
         builder.append("4. 如果拒答判断为真，直接说明资料不足原因。\n\n");
         builder.append("拒答判断：").append(refusalDecision.shouldRefuse() ? "是" : "否").append("\n");
