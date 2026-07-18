@@ -57,7 +57,7 @@ http://localhost:5173
 
 ## 本阶段说明
 
-采集中心、知识库、Agent 问答和复习工作台已经接入真实后端。默认知识空间编号为 `1`，可通过 `VITE_WORKSPACE_ID` 修改；后端地址默认是 `http://localhost:8080/api`。
+工作台、采集中心、知识库、Agent 问答和复习工作台已经接入真实后端。默认知识空间编号为 `1`，可通过 `VITE_WORKSPACE_ID` 修改；后端地址默认是 `http://localhost:8080/api`。
 
 ```powershell
 $env:VITE_API_BASE_URL = "http://localhost:8080/api"
@@ -68,6 +68,9 @@ npm run dev
 问答页面通过 `fetch` 解析 POST SSE，支持 `delta`、`citation`、`tool_call`、`tool_confirmation_required` 和 `complete` 事件。确认令牌只保存在当前页面内存中，不写入浏览器持久化存储。
 
 复习工作台通过普通 REST 接口加载每日计划、学习统计和卡片队列。评分请求为每次用户操作生成新的 `requestId`；发生网络重试时应复用同一个编号，后端据此防止重复推进调度。
+
+工作台通过 `GET /api/v1/workspaces/{workspaceId}/dashboard` 一次加载知识资产数量、今日摄取、
+到期卡片、模型调用指标、最近文档和今日学习任务。没有文档或学习计划属于正常空状态，不应回退到模拟数据。
 
 ## 当前环境验证记录
 

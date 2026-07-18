@@ -308,6 +308,20 @@ export interface BackendIngestionTaskDto {
   updatedAt: string;
 }
 
+/** 工作台首屏聚合数据，与后端工作台接口保持一一对应。 */
+export interface DashboardOverviewDto {
+  knowledgeAssetCount: number;
+  ingestedToday: number;
+  pendingIngestionCount: number;
+  todayPlanTaskCount: number;
+  dueFlashcardCount: number;
+  agentCallCount: number;
+  averageAgentLatencyMillis: number;
+  recentDocuments: BackendDocumentDto[];
+  studyTasks: DailyStudyPlanDto['tasks'];
+  generatedAt: string;
+}
+
 export interface KnowledgeNoteDto {
   id: number;
   workspaceId: number;

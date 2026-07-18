@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
@@ -101,15 +102,27 @@ public class DailyStudyPlanApplicationService {
             AgentToolExecutionContext context,
             LocalDate planDate
     ) {
-        authorizer.authorize(context);
-        DailyStudyPlan plan = planRepository.findByScopeAndDate(
-                        context.ownerUserId(), context.workspaceId(), planDate
-                )
+        return find(context, planDate)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.RESOURCE_NOT_FOUND,
                         "指定日期的学习计划不存在"
                 ));
-        return toResponse(plan);
+    }
+
+    /**
+     * 查询指定日期的学习计划，计划不存在时返回空。
+     *
+     * <p>工作台等聚合查询允许用户尚未创建计划，因此不应把正常空状态转换成业务异常。</p>
+     */
+    public Optional<DailyStudyPlanResponse> find(
+            AgentToolExecutionContext context,
+            LocalDate planDate
+    ) {
+        authorizer.authorize(context);
+        return planRepository.findByScopeAndDate(
+                        context.ownerUserId(), context.workspaceId(), planDate
+                )
+                .map(this::toResponse);
     }
 
     private DailyStudyPlanResponse toResponse(DailyStudyPlan plan) {
