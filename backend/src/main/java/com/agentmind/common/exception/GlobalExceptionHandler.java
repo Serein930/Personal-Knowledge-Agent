@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -33,6 +34,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(resolveHttpStatus(errorCode))
                 .body(ApiResponse.failure(errorCode.code(), exception.getMessage()));
+    }
+
+    /**
+     * multipart 请求可能在进入 Controller 前就被 Servlet 容器拒绝，因此需要在全局层单独转换响应。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.PAYLOAD_TOO_LARGE)
+    public ApiResponse<Void> handleMaxUploadSizeExceededException() {
+        return ApiResponse.failure(
+                ErrorCode.BAD_REQUEST.code(),
+                "上传文件超过服务器允许的大小，请缩小文件或调整上传限制"
+        );
     }
 
     @ExceptionHandler({

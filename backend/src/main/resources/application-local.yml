@@ -2,6 +2,11 @@ spring:
   config:
     activate:
       on-profile: local
+  servlet:
+    multipart:
+      # 本地知识库允许上传较大的教材；生产环境应根据网关、内存和对象存储能力单独设置。
+      max-file-size: ${AGENTMIND_HTTP_MAX_FILE_SIZE:150MB}
+      max-request-size: ${AGENTMIND_HTTP_MAX_REQUEST_SIZE:155MB}
   datasource:
     url: jdbc:postgresql://localhost:5432/agentmind
     username: agentmind
@@ -16,6 +21,9 @@ spring:
       timeout: 2s
 
 agentmind:
+  ingestion:
+    # 与前端本地默认值保持一致，业务层仍会执行一次明确的大小校验。
+    max-upload-size-bytes: ${AGENTMIND_INGESTION_MAX_UPLOAD_SIZE_BYTES:157286400}
   demo:
     seed-data: false
   web:

@@ -50,7 +50,11 @@ public class FileUploadValidator {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "上传文件不能为空");
         }
         if (file.getSize() > maxUploadSizeBytes) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "上传文件超过大小限制");
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST,
+                    "上传文件大小为 %s，超过允许的 %s"
+                            .formatted(formatMegabytes(file.getSize()), formatMegabytes(maxUploadSizeBytes))
+            );
         }
 
         String safeFilename = sanitizeFilename(file.getOriginalFilename());
@@ -80,5 +84,9 @@ public class FileUploadValidator {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "文件名必须包含扩展名");
         }
         return filename.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String formatMegabytes(long sizeBytes) {
+        return "%.1f MiB".formatted(sizeBytes / 1024.0 / 1024.0);
     }
 }

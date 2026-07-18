@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { apiClient } from '../api/client';
 import type { BackendIngestionTaskDto, BackendIngestionStatus, DocumentCreatedDto } from '../api/contracts';
 import { SectionHeader } from '../components/SectionHeader';
+import { env } from '../config/env';
 import { useAppSession } from '../contexts/AppSessionContext';
 
 const statusLabel: Record<BackendIngestionStatus, string> = {
@@ -13,6 +14,12 @@ const statusLabel: Record<BackendIngestionStatus, string> = {
   FAILED: '失败',
   CANCELED: '已取消',
 };
+
+const maxUploadSizeBytes = env.maxUploadSizeMb * 1024 * 1024;
+
+function formatFileSize(sizeBytes: number): string {
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MiB`;
+}
 
 export function IngestionPage() {
   const { workspaceId = 0 } = useAppSession();
@@ -32,6 +39,12 @@ export function IngestionPage() {
   const uploadFile = async () => {
     if (!selectedFile) {
       message.warning('请先选择文件');
+      return;
+    }
+    if (selectedFile.size > maxUploadSizeBytes) {
+      message.error(
+        `文件大小为 ${formatFileSize(selectedFile.size)}，超过当前允许的 ${env.maxUploadSizeMb} MiB`,
+      );
       return;
     }
     setUploading(true);
@@ -88,6 +101,13 @@ export function IngestionPage() {
             maxCount={1}
             fileList={selectedFile ? [{ uid: selectedFile.name, name: selectedFile.name, status: 'done' }] : []}
             beforeUpload={(file) => {
+              if (file.size > maxUploadSizeBytes) {
+                message.error(
+                  `文件大小为 ${formatFileSize(file.size)}，超过当前允许的 ${env.maxUploadSizeMb} MiB`,
+                );
+                setSelectedFile(undefined);
+                return Upload.LIST_IGNORE;
+              }
               setSelectedFile(file);
               return false;
             }}
@@ -99,7 +119,7 @@ export function IngestionPage() {
           >
             <UploadCloud size={32} />
             <p>拖拽文件到此处，或点击选择文件</p>
-            <span>支持 PDF、Markdown、Word、TXT、HTML 和代码文件</span>
+            <span>支持 PDF、Markdown、Word、TXT、HTML 和代码文件，单个文件不超过 {env.maxUploadSizeMb} MiB</span>
           </Upload.Dragger>
           <Button type="primary" loading={uploading} disabled={!selectedFile} onClick={uploadFile}>
             提交文件

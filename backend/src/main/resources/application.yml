@@ -26,8 +26,9 @@ spring:
           dimensions: ${AGENTMIND_EMBEDDING_DIMENSIONS:128}
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 25MB
+      # HTTP 层限制必须不小于业务层限制，否则请求会在进入 Controller 前被拒绝。
+      max-file-size: ${AGENTMIND_HTTP_MAX_FILE_SIZE:20MB}
+      max-request-size: ${AGENTMIND_HTTP_MAX_REQUEST_SIZE:25MB}
 
 server:
   port: 8081
@@ -204,7 +205,7 @@ agentmind:
       minimum-optimization-interval: 7d
       batch-size: 100
   ingestion:
-    max-upload-size-bytes: 20971520
+    max-upload-size-bytes: ${AGENTMIND_INGESTION_MAX_UPLOAD_SIZE_BYTES:20971520}
     web-fetch-timeout-seconds: 8
     web-fetch-max-bytes: 1048576
     parsing:
