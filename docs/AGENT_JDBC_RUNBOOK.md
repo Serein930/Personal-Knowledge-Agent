@@ -32,11 +32,14 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 `local` 配置会启用：
 
-- PostgreSQL 智能体写工具仓储。
+- PostgreSQL 用户、知识空间和文档元数据仓储。
+- PostgreSQL 智能体、学习系统、模型审计和评估仓储。
 - Spring JDBC 事务管理器。
 - pgvector 向量仓储。
+- Redis 会话记忆仓储。
+- 本地 JWT 注册与登录。
 
-不指定 `local` 时仍使用内存仓储，无需数据库。
+不指定任何 profile 时仍使用内存仓储，无需数据库，主要用于自动测试。
 
 ## 手动运行数据库集成测试
 

@@ -6,15 +6,28 @@ spring:
     url: jdbc:postgresql://localhost:5432/agentmind
     username: agentmind
     password: agentmind_dev_password
+  data:
+    redis:
+      host: ${AGENTMIND_REDIS_HOST:localhost}
+      port: ${AGENTMIND_REDIS_PORT:6379}
+      database: ${AGENTMIND_REDIS_DATABASE:0}
+      password: ${AGENTMIND_REDIS_PASSWORD:}
+      connect-timeout: 2s
+      timeout: 2s
 
 agentmind:
   security:
-    mode: ${AGENTMIND_SECURITY_MODE:disabled}
+    # JDBC 模式不依赖固定种子用户；通过注册接口创建真实用户和默认知识空间。
+    mode: ${AGENTMIND_SECURITY_MODE:local-jwt}
+    # 仅供本机开发，生产 profile 不读取该默认值，并会强制校验外部秘密。
+    jwt-secret: ${AGENTMIND_JWT_SECRET:agentmind-local-jwt-signing-secret-change-me}
   core:
     persistence:
-      store: ${AGENTMIND_CORE_PERSISTENCE_STORE:memory}
+      # local 用于真实依赖联调，用户、知识空间和文档元数据必须写入 PostgreSQL。
+      store: jdbc
   agent:
     persistence:
+      # Agent 审计、确认单、笔记、卡片和学习画像共享同一套 JDBC 持久化开关。
       store: jdbc
   vector-store:
     type: pgvector
@@ -26,3 +39,10 @@ agentmind:
       enabled: ${AGENTMIND_KNOWLEDGE_INDEX_OUTBOX_ENABLED:false}
   evaluation:
     store: jdbc
+  rag:
+    # 回答模型仍可使用公共 Mock 默认值，但每次调用的观测记录必须真实持久化。
+    observation-store: jdbc
+  chat:
+    memory:
+      # 本地真实联调使用 Redis，确保重启后会话仍可恢复并验证 TTL 行为。
+      store: redis

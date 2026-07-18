@@ -21,6 +21,9 @@ class ProductionConfigurationValidatorTests {
     void insecureConfigurationShouldFailWithoutLeakingSecret() {
         MockEnvironment environment = validEnvironment()
                 .withProperty("agentmind.security.mode", "disabled")
+                .withProperty("agentmind.agent.persistence.store", "memory")
+                .withProperty("agentmind.rag.observation-store", "memory")
+                .withProperty("agentmind.evaluation.store", "memory")
                 .withProperty("agentmind.rate-limit.mode", "disabled")
                 .withProperty("spring.datasource.password", "agentmind_dev_password");
 
@@ -28,6 +31,9 @@ class ProductionConfigurationValidatorTests {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("正式环境配置验收失败")
                 .hasMessageContaining("agentmind.security.mode")
+                .hasMessageContaining("agentmind.agent.persistence.store")
+                .hasMessageContaining("agentmind.rag.observation-store")
+                .hasMessageContaining("agentmind.evaluation.store")
                 .hasMessageContaining("agentmind.rate-limit.mode")
                 .hasMessageNotContaining("agentmind_dev_password");
     }
@@ -38,6 +44,9 @@ class ProductionConfigurationValidatorTests {
                 .withProperty("agentmind.security.issuer-uri", "https://identity.example.com/realms/agentmind")
                 .withProperty("agentmind.security.audience", "agentmind-api")
                 .withProperty("agentmind.core.persistence.store", "jdbc")
+                .withProperty("agentmind.agent.persistence.store", "jdbc")
+                .withProperty("agentmind.rag.observation-store", "jdbc")
+                .withProperty("agentmind.evaluation.store", "jdbc")
                 .withProperty("agentmind.rate-limit.mode", "redis")
                 .withProperty("agentmind.rate-limit.fail-open", "false")
                 .withProperty("agentmind.rate-limit.client-ip-header", "X-Forwarded-For")

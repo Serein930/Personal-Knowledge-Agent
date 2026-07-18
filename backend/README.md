@@ -319,12 +319,26 @@ spring:
     password: your-local-password
 
 agentmind:
+  core:
+    persistence:
+      store: jdbc
+  agent:
+    persistence:
+      store: jdbc
+  rag:
+    observation-store: jdbc
+  evaluation:
+    store: jdbc
+  chat:
+    memory:
+      store: redis
   vector-store:
     type: pgvector
     embedding-dimensions: 128
 ```
 
-应用服务仍然依赖 `VectorStore` 接口，因此内存实现和 pgvector 实现可以通过配置平滑切换。
+`local` 还会默认启用本地 JWT。先调用注册接口创建真实用户和默认知识空间，再携带访问令牌联调其他接口。
+不启用任何 profile 时仍使用内存适配器，适合自动测试和无需外部依赖的快速启动。
 
 手动 pgvector 集成测试：
 

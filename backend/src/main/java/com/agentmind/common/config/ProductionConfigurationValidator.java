@@ -28,6 +28,9 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         List<String> violations = new ArrayList<>();
         requireOneOf(violations, "agentmind.security.mode", "local-jwt", "oidc");
         requireValue(violations, "agentmind.core.persistence.store", "jdbc");
+        requireValue(violations, "agentmind.agent.persistence.store", "jdbc");
+        requireValue(violations, "agentmind.rag.observation-store", "jdbc");
+        requireValue(violations, "agentmind.evaluation.store", "jdbc");
         requireValue(violations, "agentmind.rate-limit.mode", "redis");
         requireValue(violations, "agentmind.rate-limit.fail-open", "false");
         requireValue(violations, "agentmind.rate-limit.client-ip-header", "X-Forwarded-For");

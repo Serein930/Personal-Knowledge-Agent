@@ -81,6 +81,13 @@ agentmind:
   core:
     persistence:
       store: jdbc
+  agent:
+    persistence:
+      # Agent 确认单、工具审计、笔记和学习系统禁止回退到单实例内存。
+      store: jdbc
+  evaluation:
+    # 评估集、任务租约和逐题结果必须跨实例持久化。
+    store: jdbc
   rate-limit:
     mode: redis
     fail-open: false

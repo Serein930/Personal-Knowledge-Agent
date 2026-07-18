@@ -324,6 +324,8 @@ com.agentmind
 
 数据库正式结构已归并为连续的 `V1-V7` 迁移。`V4-V7` 分别覆盖 pgvector、模型调用审计、Agent 与学习系统、RAG 评估；旧 `db/schema` 只作为已发布 `V1` 的冻结基线保留。所有 JDBC 集成测试统一通过 Flyway 准备结构，并新增空库迁移验收，详细操作见 `FLYWAY_MIGRATION_RUNBOOK.md`。
 
+`local` 与 `production` 的正式 Repository 选择已经收口：核心元数据、Agent/学习、RAG 调用审计和评估统一使用 JDBC，会话记忆使用 Redis，向量使用 pgvector。生产启动校验会拒绝任何内存回退，类路径契约测试会审计所有 Repository 的条件装配；无 profile 模式继续保留内存实现用于稳定自动测试。详细说明见 `PERSISTENCE_PROFILE_RUNBOOK.md`。
+
 # 生产实测证据闭环进展
 
 已建立受保护预发布环境的统一验收工作流，按同一 Git 提交和不可变镜像摘要串联 Vault 秘密轮换、10% 灰度、k6 容量门禁、单实例故障注入及

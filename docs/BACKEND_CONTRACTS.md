@@ -434,7 +434,7 @@ data: {"sequence":1,"proposal":{"confirmation":{"status":"PENDING_CONFIRMATION"}
 
 持久化配置：
 
-- `agentmind.agent.persistence.store=memory`：默认本地和自动测试模式。
+- `agentmind.agent.persistence.store=memory`：无 profile 开发和自动测试模式。
 - `agentmind.agent.persistence.store=jdbc`：启用 PostgreSQL 确认单、工具审计、笔记和复习卡片仓储。
 - JDBC 模式使用数据库事务、条件状态更新和业务表唯一幂等索引。
 
