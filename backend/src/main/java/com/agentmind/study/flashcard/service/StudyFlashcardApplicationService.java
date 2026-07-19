@@ -114,6 +114,16 @@ public class StudyFlashcardApplicationService {
         );
     }
 
+    /** 用户显式删除卡片，不经过智能体写工具确认。 */
+    public void delete(AgentToolExecutionContext context, Long flashcardId) {
+        authorizer.authorize(context);
+        requireFlashcard(context, flashcardId);
+        if (!flashcardRepository.deleteByOwnerUserIdAndWorkspaceIdAndId(
+                context.ownerUserId(), context.workspaceId(), flashcardId)) {
+            throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "卡片状态已经变化，请刷新后重试");
+        }
+    }
+
     public StudyFlashcardResponse suspend(
             AgentToolExecutionContext context,
             Long flashcardId,

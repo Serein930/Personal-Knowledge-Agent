@@ -1,4 +1,4 @@
-import { Button, Empty, InputNumber, Progress, Spin, Tag, Tooltip, message } from 'antd';
+import { Button, Empty, InputNumber, Modal, Popconfirm, Progress, Select, Space, Spin, Tag, Tooltip, message } from 'antd';
 import {
   CalendarClock,
   CheckCircle2,
@@ -6,12 +6,15 @@ import {
   Gauge,
   PauseCircle,
   PlayCircle,
+  Plus,
   RotateCcw,
   Target,
+  Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '../api/client';
 import type {
+  BackendDocumentDto,
   DailyStudyPlanDto,
   PageResult,
   StudyFlashcardDto,
@@ -42,15 +45,21 @@ export function StudyPlanPage() {
   const [answerVisible, setAnswerVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [documents, setDocuments] = useState<BackendDocumentDto[]>([]);
+  const [generationOpen, setGenerationOpen] = useState(false);
+  const [generationDocumentIds, setGenerationDocumentIds] = useState<number[]>([]);
+  const [generationCount, setGenerationCount] = useState(5);
 
   const loadWorkspace = useCallback(async () => {
     const workspacePath = `/v1/workspaces/${workspaceId}`;
-    const [nextStatistics, cardPage] = await Promise.all([
+    const [nextStatistics, cardPage, documentPage] = await Promise.all([
       apiClient.get<StudyReviewStatisticsDto>(`${workspacePath}/flashcards/statistics`),
       apiClient.get<PageResult<StudyFlashcardDto>>(`${workspacePath}/flashcards?page=1&pageSize=100`),
+      apiClient.get<PageResult<BackendDocumentDto>>(`${workspacePath}/documents?page=1&pageSize=100&status=SUCCEEDED`),
     ]);
     setStatistics(nextStatistics);
     setCards(cardPage.records);
+    setDocuments(documentPage.records);
     try {
       const nextPlan = await apiClient.get<DailyStudyPlanDto>(
         `${workspacePath}/study-plans/daily?date=${todayText()}`,
@@ -143,6 +152,41 @@ export function StudyPlanPage() {
     }
   };
 
+  const generateCards = async () => {
+    if (generationDocumentIds.length === 0) {
+      message.warning('请至少选择一个文件或网页');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const created = await apiClient.post<StudyFlashcardDto[]>(
+        `/v1/workspaces/${workspaceId}/flashcards/generate-from-documents`,
+        { documentIds: generationDocumentIds, count: generationCount },
+      );
+      setGenerationOpen(false);
+      setGenerationDocumentIds([]);
+      await loadWorkspace();
+      message.success(`已生成 ${created.length} 张复习卡片`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '复习卡片生成失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteCard = async (card: StudyFlashcardDto) => {
+    setSubmitting(true);
+    try {
+      await apiClient.delete<void>(`/v1/workspaces/${workspaceId}/flashcards/${card.id}`);
+      await loadWorkspace();
+      message.success('复习卡片已删除');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '复习卡片删除失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return <div className="study-loading"><Spin size="large" /></div>;
   }
@@ -153,15 +197,18 @@ export function StudyPlanPage() {
         title="复习工作台"
         description={`知识空间 ${workspaceId}`}
         action={(
-          <Button
-            type="primary"
-            icon={<PlayCircle size={16} />}
-            disabled={!statistics?.dueCount || session?.status === 'IN_PROGRESS'}
-            loading={submitting}
-            onClick={startSession}
-          >
-            开始复习
-          </Button>
+          <Space>
+            <Button icon={<Plus size={16} />} onClick={() => setGenerationOpen(true)}>从知识资产生成</Button>
+            <Button
+              type="primary"
+              icon={<PlayCircle size={16} />}
+              disabled={!statistics?.dueCount || session?.status === 'IN_PROGRESS'}
+              loading={submitting}
+              onClick={startSession}
+            >
+              开始复习
+            </Button>
+          </Space>
         )}
       />
 
@@ -260,20 +307,56 @@ export function StudyPlanPage() {
         <div className="flashcard-management-list">
           {cards.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无复习卡片" /> : cards.map((card) => (
             <article key={card.id}>
-              <div><strong>{card.question}</strong><span>下次复习 {new Date(card.dueAt).toLocaleString()}</span></div>
+              <div>
+                <strong>{card.question}</strong>
+                <span>下次复习 {new Date(card.dueAt).toLocaleString()}{card.sourceDocumentId ? ` · 来源文档 ${card.sourceDocumentId}` : ''}</span>
+              </div>
               <Tag color={card.status === 'SUSPENDED' ? 'default' : 'cyan'}>{card.status}</Tag>
-              <Tooltip title={card.status === 'SUSPENDED' ? '恢复卡片' : '暂停卡片'}>
-                <Button
-                  aria-label={card.status === 'SUSPENDED' ? '恢复卡片' : '暂停卡片'}
-                  icon={card.status === 'SUSPENDED' ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
-                  loading={submitting}
-                  onClick={() => changeCardStatus(card)}
-                />
-              </Tooltip>
+              <Space size={4}>
+                <Tooltip title={card.status === 'SUSPENDED' ? '恢复卡片' : '暂停卡片'}>
+                  <Button
+                    aria-label={card.status === 'SUSPENDED' ? '恢复卡片' : '暂停卡片'}
+                    icon={card.status === 'SUSPENDED' ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
+                    loading={submitting}
+                    onClick={() => changeCardStatus(card)}
+                  />
+                </Tooltip>
+                <Popconfirm title="删除这张复习卡片？" okText="删除" cancelText="取消" onConfirm={() => deleteCard(card)}>
+                  <Tooltip title="删除卡片"><Button aria-label="删除卡片" danger icon={<Trash2 size={16} />} /></Tooltip>
+                </Popconfirm>
+              </Space>
             </article>
           ))}
         </div>
       </section>
+
+      <Modal
+        title="从指定知识资产生成复习卡片"
+        open={generationOpen}
+        okText="生成卡片"
+        cancelText="取消"
+        confirmLoading={submitting}
+        okButtonProps={{ disabled: generationDocumentIds.length === 0 }}
+        onOk={generateCards}
+        onCancel={() => setGenerationOpen(false)}
+      >
+        <div className="form-stack">
+          <label>
+            <span>选择文件或网页</span>
+            <Select
+              mode="multiple"
+              value={generationDocumentIds}
+              placeholder="请选择已完成摄取的知识资产"
+              options={documents.map((document) => ({ value: document.id, label: document.title }))}
+              onChange={setGenerationDocumentIds}
+            />
+          </label>
+          <label>
+            <span>生成数量</span>
+            <InputNumber min={1} max={20} value={generationCount} onChange={(value) => setGenerationCount(value ?? 5)} />
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 }

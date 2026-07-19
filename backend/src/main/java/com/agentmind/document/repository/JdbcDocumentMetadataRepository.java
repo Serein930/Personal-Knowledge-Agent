@@ -81,6 +81,25 @@ public class JdbcDocumentMetadataRepository implements DocumentMetadataRepositor
     }
 
     @Override
+    public Optional<DocumentMetadata> rename(Long workspaceId, Long documentId, String title) {
+        return jdbcTemplate.query("""
+                update knowledge_document set title = ?, updated_at = ?
+                where workspace_id = ? and id = ? and deleted_at is null
+                returning *
+                """, this::mapDocument, title, OffsetDateTime.now(), workspaceId, documentId)
+                .stream().findFirst();
+    }
+
+    @Override
+    public boolean softDelete(Long workspaceId, Long documentId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        return jdbcTemplate.update("""
+                update knowledge_document set deleted_at = ?, updated_at = ?
+                where workspace_id = ? and id = ? and deleted_at is null
+                """, now, now, workspaceId, documentId) == 1;
+    }
+
+    @Override
     public Optional<DocumentMetadata> findByWorkspaceIdAndId(Long workspaceId, Long documentId) {
         return jdbcTemplate.query("""
                 select * from knowledge_document

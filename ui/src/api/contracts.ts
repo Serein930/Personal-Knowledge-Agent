@@ -316,6 +316,31 @@ export interface BackendDocumentDto {
   updatedAt: string;
 }
 
+export interface DocumentKeyPointDto {
+  sequence: number;
+  title: string;
+  summary: string;
+  chunkId: string;
+}
+
+export interface ChatConversationDto {
+  id: number;
+  title: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessageDto {
+  id: number;
+  role: 'USER' | 'ASSISTANT';
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  content?: string;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DocumentCreatedDto {
   documentId: number;
   taskId: number;
@@ -379,6 +404,8 @@ export interface StudyFlashcardDto {
   id: number;
   workspaceId: number;
   sourceConversationId?: number;
+  sourceDocumentId?: number;
+  topic?: string;
   requestId: string;
   question: string;
   answer: string;

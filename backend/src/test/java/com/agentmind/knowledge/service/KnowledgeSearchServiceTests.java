@@ -8,6 +8,7 @@ import com.agentmind.knowledge.vector.DeterministicEmbeddingClient;
 import com.agentmind.knowledge.vector.InMemoryVectorStore;
 import com.agentmind.knowledge.keyword.InMemoryBm25KeywordIndex;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -38,5 +39,21 @@ class KnowledgeSearchServiceTests {
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().getFirst().documentId()).isEqualTo(10L);
         assertThat(response.results().getFirst().content()).contains("backend tasks");
+    }
+
+    @Test
+    void searchShouldRestrictResultsToExplicitlySelectedDocuments() {
+        indexingService.indexChunks(1L, 10L, List.of(
+                new DocumentChunk("10-0", 10L, 0, "线程池", "线程池通过工作线程复用任务。", 0, 15)
+        ));
+        indexingService.indexChunks(1L, 11L, List.of(
+                new DocumentChunk("11-0", 11L, 0, "数据库", "数据库连接池复用连接。", 0, 13)
+        ));
+
+        KnowledgeSearchResponse response = searchService.search(
+                1L, "数据库连接池复用连接。", 5, null, Set.of(11L));
+
+        assertThat(response.results()).isNotEmpty();
+        assertThat(response.results()).allMatch(result -> result.documentId().equals(11L));
     }
 }

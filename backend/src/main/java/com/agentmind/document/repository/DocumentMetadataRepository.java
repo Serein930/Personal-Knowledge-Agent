@@ -29,6 +29,10 @@ public interface DocumentMetadataRepository {
 
     void markFailed(Long documentId);
 
+    Optional<DocumentMetadata> rename(Long workspaceId, Long documentId, String title);
+
+    boolean softDelete(Long workspaceId, Long documentId);
+
     Optional<DocumentMetadata> findByWorkspaceIdAndId(Long workspaceId, Long documentId);
 
     Optional<DocumentMetadata> findById(Long documentId);

@@ -137,4 +137,13 @@ public class InMemoryStudyFlashcardRepository implements StudyFlashcardRepositor
         });
         return Optional.ofNullable(updated.get());
     }
+
+    @Override
+    public boolean deleteByOwnerUserIdAndWorkspaceIdAndId(Long ownerUserId, Long workspaceId, Long flashcardId) {
+        StudyFlashcard current = flashcards.get(flashcardId);
+        return current != null
+                && ownerUserId.equals(current.ownerUserId())
+                && workspaceId.equals(current.workspaceId())
+                && flashcards.remove(flashcardId, current);
+    }
 }

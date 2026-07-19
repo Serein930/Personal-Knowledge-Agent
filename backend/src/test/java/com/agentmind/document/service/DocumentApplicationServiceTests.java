@@ -114,6 +114,26 @@ class DocumentApplicationServiceTests {
         assertThat(vectorStore.search(1L, embeddingClient.embed("thread pool overhead"), 3))
                 .isNotEmpty();
         assertThat(objectStorageService.storeCount).isEqualTo(1);
+        assertThat(service.listDocumentKeyPoints(1L, 1L, response.documentId())).isNotEmpty();
+    }
+
+    @Test
+    void renameAndDeleteShouldUpdateMetadataAndRemoveSearchIndex() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "rename-me.md", "text/markdown",
+                "# JVM\nJVM memory contains heap and stacks.".getBytes(StandardCharsets.UTF_8)
+        );
+        FileDocumentUploadResponse created = service.createFileUploadTask(1L, file, null, List.of());
+
+        DocumentSummaryResponse renamed = service.renameDocument(1L, 1L, created.documentId(), "JVM 内存模型");
+        assertThat(renamed.title()).isEqualTo("JVM 内存模型");
+
+        service.deleteDocument(1L, 1L, created.documentId());
+
+        assertThat(service.listDocuments(1L, 1, 100, "JVM 内存模型", null, null, null).records())
+                .isEmpty();
+        assertThat(vectorStore.search(1L, embeddingClient.embed("JVM memory"), 10))
+                .noneMatch(result -> result.documentId().equals(created.documentId()));
     }
 
     @Test

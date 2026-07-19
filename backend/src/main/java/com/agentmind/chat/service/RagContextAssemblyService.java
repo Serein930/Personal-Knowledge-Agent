@@ -11,6 +11,7 @@ import com.agentmind.chat.memory.service.ChatMemoryService;
 import com.agentmind.chat.memory.service.ChatTurnContext;
 import com.agentmind.user.model.dto.UserWorkspacePreferenceResponse;
 import com.agentmind.user.service.UserWorkspacePreferenceService;
+import com.agentmind.document.repository.DocumentMetadataRepository;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class RagContextAssemblyService {
     private final RagRefusalPolicy refusalPolicy;
     private final ChatMemoryService chatMemoryService;
     private final UserWorkspacePreferenceService preferenceService;
+    private final DocumentMetadataRepository documentRepository;
 
     @Autowired
     public RagContextAssemblyService(
@@ -38,7 +40,8 @@ public class RagContextAssemblyService {
             RagPromptTemplate promptTemplate,
             RagRefusalPolicy refusalPolicy,
             ChatMemoryService chatMemoryService,
-            UserWorkspacePreferenceService preferenceService
+            UserWorkspacePreferenceService preferenceService,
+            DocumentMetadataRepository documentRepository
     ) {
         this.knowledgeSearchService = knowledgeSearchService;
         this.answerGenerator = answerGenerator;
@@ -46,6 +49,7 @@ public class RagContextAssemblyService {
         this.refusalPolicy = refusalPolicy;
         this.chatMemoryService = chatMemoryService;
         this.preferenceService = preferenceService;
+        this.documentRepository = documentRepository;
     }
 
     /** 为不启动 Spring 容器的历史单元测试保留轻量构造方式。 */
@@ -62,6 +66,7 @@ public class RagContextAssemblyService {
         this.refusalPolicy = refusalPolicy;
         this.chatMemoryService = chatMemoryService;
         this.preferenceService = null;
+        this.documentRepository = null;
     }
 
     public RagChatResponse prepareChatContext(Long workspaceId, RagChatRequest request) {
@@ -148,7 +153,9 @@ public class RagContextAssemblyService {
                 workspaceId,
                 request.question(),
                 effectiveTopK,
-                preference == null ? null : preference.embeddingModel()
+                preference == null ? null : preference.embeddingModel(),
+                request.filters() == null || request.filters().documentIds() == null
+                        ? java.util.Set.of() : java.util.Set.copyOf(request.filters().documentIds())
         );
         List<RagCitationResponse> citations = toCitations(searchResponse.results());
         RagRefusalDecision refusalDecision = refusalPolicy.decide(citations);
@@ -198,10 +205,14 @@ public class RagContextAssemblyService {
     }
 
     private RagCitationResponse toCitation(int index, KnowledgeSearchResultResponse result) {
+        String documentTitle = documentRepository == null ? "Document #" + result.documentId()
+                : documentRepository.findById(result.documentId())
+                .map(com.agentmind.document.model.DocumentMetadata::title)
+                .orElse("文档 #" + result.documentId());
         return new RagCitationResponse(
                 index,
                 result.documentId(),
-                "Document #" + result.documentId(),
+                documentTitle,
                 result.chunkId(),
                 result.chunkSequence(),
                 result.headingPath(),

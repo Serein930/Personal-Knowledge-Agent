@@ -168,6 +168,14 @@ public class JdbcStudyFlashcardRepository implements StudyFlashcardRepository {
                 .findFirst();
     }
 
+    @Override
+    public boolean deleteByOwnerUserIdAndWorkspaceIdAndId(Long ownerUserId, Long workspaceId, Long flashcardId) {
+        return jdbcTemplate.update(
+                "delete from study_flashcards where owner_user_id = ? and workspace_id = ? and id = ?",
+                ownerUserId, workspaceId, flashcardId
+        ) == 1;
+    }
+
     private StudyFlashcard mapFlashcard(ResultSet resultSet, int rowNumber) throws SQLException {
         return new StudyFlashcard(
                 resultSet.getLong("id"),

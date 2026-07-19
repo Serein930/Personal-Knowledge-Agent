@@ -14,6 +14,7 @@ import com.agentmind.document.repository.DocumentMetadataRepository;
 import com.agentmind.document.repository.DocumentChunkRepository;
 import com.agentmind.document.repository.InMemoryDocumentChunkRepository;
 import com.agentmind.document.model.dto.DocumentChunkResponse;
+import com.agentmind.document.model.dto.DocumentKeyPointResponse;
 import com.agentmind.document.model.dto.DocumentSummaryResponse;
 import com.agentmind.document.model.dto.FileDocumentUploadResponse;
 import com.agentmind.document.model.dto.WebPageCaptureRequest;
@@ -51,6 +52,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 文档摄取用例的应用服务。
@@ -62,8 +65,10 @@ import jakarta.annotation.PostConstruct;
 @Service
 public class DocumentApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(DocumentApplicationService.class);
     private static final String DEFAULT_WORKSPACE_NAME = "Java Backend Learning";
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_KEY_POINTS = 8;
 
     private final FileUploadValidator fileUploadValidator;
     private final ObjectStorageService objectStorageService;
@@ -355,6 +360,69 @@ public class DocumentApplicationService {
                 .toList();
     }
 
+    /**
+     * 从摄取阶段已经生成的语义片段中归纳核心知识点，不要求用户先发起问答。
+     */
+    public List<DocumentKeyPointResponse> listDocumentKeyPoints(
+            Long ownerUserId,
+            Long workspaceId,
+            Long documentId
+    ) {
+        DocumentMetadata document = requireDocument(ownerUserId, workspaceId, documentId, false);
+        if (document.ingestionStatus() != IngestionStatus.SUCCEEDED) {
+            return List.of();
+        }
+        List<DocumentKeyPointResponse> points = new ArrayList<>();
+        java.util.Set<String> usedTitles = new java.util.LinkedHashSet<>();
+        for (DocumentChunk chunk : chunkRepository.findAllByDocumentId(documentId)) {
+            String summary = normalizeKeyPointSummary(chunk.content());
+            if (!StringUtils.hasText(summary)) {
+                continue;
+            }
+            String title = StringUtils.hasText(chunk.headingPath())
+                    ? chunk.headingPath().trim() : "知识点 " + (points.size() + 1);
+            if (!usedTitles.add(title) && points.size() >= 3) {
+                continue;
+            }
+            points.add(new DocumentKeyPointResponse(points.size() + 1, title, summary, chunk.id()));
+            if (points.size() >= MAX_KEY_POINTS) {
+                break;
+            }
+        }
+        return List.copyOf(points);
+    }
+
+    public DocumentSummaryResponse renameDocument(
+            Long ownerUserId,
+            Long workspaceId,
+            Long documentId,
+            String title
+    ) {
+        requireDocument(ownerUserId, workspaceId, documentId, true);
+        String normalizedTitle = title == null ? "" : title.strip().replaceAll("\\s+", " ");
+        if (!StringUtils.hasText(normalizedTitle)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "文档标题不能为空");
+        }
+        DocumentMetadata updated = documentRepository.rename(workspaceId, documentId, normalizedTitle)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文档不存在"));
+        return toSummaryResponse(updated, workspaceName(workspaceId));
+    }
+
+    /** 删除文档元数据、片段、检索索引和原始存储对象。 */
+    public void deleteDocument(Long ownerUserId, Long workspaceId, Long documentId) {
+        DocumentMetadata document = requireDocument(ownerUserId, workspaceId, documentId, true);
+        if (!documentRepository.softDelete(workspaceId, documentId)) {
+            throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "文档状态已经变化，请刷新后重试");
+        }
+        chunkRepository.deleteAllByDocumentId(documentId);
+        knowledgeIndexingService.deleteDocumentIndex(workspaceId, documentId);
+        try {
+            objectStorageService.delete(document.storageKey());
+        } catch (IOException exception) {
+            log.warn("文档已软删除，但原始对象清理失败：文档编号={}", documentId, exception);
+        }
+    }
+
     public IngestionTaskResponse getTask(Long workspaceId, Long taskId) {
         return getTask(1L, workspaceId, taskId);
     }
@@ -397,6 +465,49 @@ public class DocumentApplicationService {
             return title.trim();
         }
         return StringUtils.hasText(fallbackFilename) ? fallbackFilename : "未命名文档";
+    }
+
+    private DocumentMetadata requireDocument(
+            Long ownerUserId,
+            Long workspaceId,
+            Long documentId,
+            boolean writable
+    ) {
+        validateWorkspaceId(workspaceId);
+        if (writable) {
+            workspaceAccessService.requireWritable(ownerUserId, workspaceId);
+        } else {
+            workspaceAccessService.requireReadable(ownerUserId, workspaceId);
+        }
+        return documentRepository.findByWorkspaceIdAndId(workspaceId, documentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文档不存在"));
+    }
+
+    private String workspaceName(Long workspaceId) {
+        return workspaceRepository.findById(workspaceId)
+                .map(com.agentmind.workspace.model.KnowledgeWorkspace::getName)
+                .orElse("未知知识空间");
+    }
+
+    private String normalizeKeyPointSummary(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "";
+        }
+        String normalized = content.replaceAll("\\s+", " ").trim();
+        int sentenceEnd = findSentenceEnd(normalized);
+        String summary = sentenceEnd > 30 ? normalized.substring(0, sentenceEnd + 1) : normalized;
+        return summary.length() <= 320 ? summary : summary.substring(0, 320) + "...";
+    }
+
+    private int findSentenceEnd(String content) {
+        int result = -1;
+        for (char separator : new char[]{'。', '！', '？', '.', '!', '?'}) {
+            int index = content.indexOf(separator);
+            if (index >= 0 && (result < 0 || index < result)) {
+                result = index;
+            }
+        }
+        return result;
     }
 
     private List<String> normalizeTags(List<String> tags) {

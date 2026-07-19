@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -40,8 +41,20 @@ public class InMemoryVectorStore implements VectorStore {
 
     @Override
     public List<VectorSearchResult> search(Long workspaceId, float[] queryEmbedding, int topK) {
+        return search(workspaceId, queryEmbedding, topK, Set.of());
+    }
+
+    @Override
+    public List<VectorSearchResult> search(
+            Long workspaceId,
+            float[] queryEmbedding,
+            int topK,
+            Set<Long> documentIds
+    ) {
         return vectors.values().stream()
                 .filter(vector -> Objects.equals(vector.workspaceId(), workspaceId))
+                .filter(vector -> documentIds == null || documentIds.isEmpty()
+                        || documentIds.contains(vector.documentId()))
                 .map(vector -> toResult(vector, cosineSimilarity(queryEmbedding, vector.embedding())))
                 .filter(result -> result.score() > 0)
                 .sorted(Comparator.comparingDouble(VectorSearchResult::score).reversed())

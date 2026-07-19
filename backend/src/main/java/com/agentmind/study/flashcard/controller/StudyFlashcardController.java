@@ -19,6 +19,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -64,6 +65,17 @@ public class StudyFlashcardController {
         return ApiResponse.success(flashcardApplicationService.list(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null), page, pageSize
         ));
+    }
+
+    @DeleteMapping("/{flashcardId}")
+    public ApiResponse<Void> delete(
+            @PathVariable @Positive Long workspaceId,
+            @PathVariable @Positive Long flashcardId,
+            @CurrentUserId @Positive Long ownerUserId
+    ) {
+        flashcardApplicationService.delete(
+                new AgentToolExecutionContext(ownerUserId, workspaceId, null), flashcardId);
+        return ApiResponse.success("复习卡片已删除", null);
     }
 
     /**

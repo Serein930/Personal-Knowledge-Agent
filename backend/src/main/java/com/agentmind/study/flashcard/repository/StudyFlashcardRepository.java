@@ -50,4 +50,6 @@ public interface StudyFlashcardRepository {
      * 使用旧版本号原子更新调度状态。版本不匹配时返回空，调用方应重新读取并计算。
      */
     Optional<StudyFlashcard> updateSchedule(StudyFlashcard flashcard, long expectedVersion);
+
+    boolean deleteByOwnerUserIdAndWorkspaceIdAndId(Long ownerUserId, Long workspaceId, Long flashcardId);
 }

@@ -19,10 +19,11 @@ interface RagStreamHandlers {
  * 使用 fetch 读取 POST SSE。浏览器原生 EventSource 只支持 GET，无法携带问答请求体。
  */
 export async function streamRagChat(
-  workspaceId: number,
-  question: string,
-  conversationId: number | undefined,
-  handlers: RagStreamHandlers,
+    workspaceId: number,
+    question: string,
+    conversationId: number | undefined,
+    handlers: RagStreamHandlers,
+    documentIds: number[] = [],
 ) {
   const response = await fetch(buildApiUrl(`/v1/workspaces/${workspaceId}/rag/chat/stream`), {
     method: 'POST',
@@ -31,7 +32,11 @@ export async function streamRagChat(
       'Content-Type': 'application/json',
       ...getApiAuthenticationHeaders(),
     },
-    body: JSON.stringify({ conversationId, question }),
+      body: JSON.stringify({
+        conversationId,
+        question,
+        filters: documentIds.length > 0 ? { documentIds, tags: [], sourceTypes: [] } : undefined,
+      }),
   });
   if (!response.ok || !response.body) {
     handleApiUnauthorized(response.status);

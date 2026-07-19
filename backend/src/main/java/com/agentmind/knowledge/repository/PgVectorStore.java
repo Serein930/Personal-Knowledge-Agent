@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -90,6 +91,36 @@ public class PgVectorStore implements VectorStore {
         String queryVector = PgVectorSqlSupport.toVectorLiteral(queryEmbedding);
         return jdbcTemplate.query(SEARCH_SQL, (resultSet, rowNumber) -> mapSearchResult(resultSet),
                 queryVector, workspaceId, queryVector, topK);
+    }
+
+    @Override
+    public List<VectorSearchResult> search(
+            Long workspaceId,
+            float[] queryEmbedding,
+            int topK,
+            Set<Long> documentIds
+    ) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return search(workspaceId, queryEmbedding, topK);
+        }
+        validateEmbeddingDimensions(queryEmbedding);
+        String queryVector = PgVectorSqlSupport.toVectorLiteral(queryEmbedding);
+        String placeholders = String.join(", ", java.util.Collections.nCopies(documentIds.size(), "?"));
+        String sql = """
+                select chunk_id, document_id, chunk_sequence, heading_path, content,
+                       1 - (embedding <=> cast(? as vector)) as score
+                from knowledge_vector_chunks
+                where workspace_id = ? and document_id in (%s)
+                order by embedding <=> cast(? as vector)
+                limit ?
+                """.formatted(placeholders);
+        List<Object> arguments = new ArrayList<>();
+        arguments.add(queryVector);
+        arguments.add(workspaceId);
+        arguments.addAll(documentIds);
+        arguments.add(queryVector);
+        arguments.add(topK);
+        return jdbcTemplate.query(sql, (resultSet, rowNumber) -> mapSearchResult(resultSet), arguments.toArray());
     }
 
     private VectorSearchResult mapSearchResult(ResultSet resultSet) throws SQLException {

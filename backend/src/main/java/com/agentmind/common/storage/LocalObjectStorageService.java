@@ -47,6 +47,18 @@ public class LocalObjectStorageService implements ObjectStorageService {
         return new StoredObject(storageKey, targetPath, safeOriginalName, contentType, size);
     }
 
+    @Override
+    public void delete(String storageKey) throws IOException {
+        if (!StringUtils.hasText(storageKey)) {
+            return;
+        }
+        Path targetPath = rootPath.resolve(storageKey).normalize();
+        if (!targetPath.startsWith(rootPath)) {
+            throw new IOException("待删除对象路径不合法");
+        }
+        Files.deleteIfExists(targetPath);
+    }
+
     private String sanitizePathSegment(String value) {
         if (!StringUtils.hasText(value)) {
             return "default";

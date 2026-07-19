@@ -57,6 +57,25 @@ public class InMemoryDocumentMetadataRepository implements DocumentMetadataRepos
     }
 
     @Override
+    public Optional<DocumentMetadata> rename(Long workspaceId, Long documentId, String title) {
+        DocumentMetadata updated = documents.computeIfPresent(documentId, (id, current) ->
+                workspaceId.equals(current.workspaceId())
+                        ? new DocumentMetadata(current.id(), current.ownerUserId(), current.workspaceId(), title,
+                        current.sourceType(), current.sourceUri(), current.originalFilename(), current.storageKey(),
+                        current.contentType(), current.contentSize(), current.contentHash(), current.tags(),
+                        current.ingestionStatus(), current.chunkCount(), current.createdAt(), OffsetDateTime.now())
+                        : current);
+        return Optional.ofNullable(updated).filter(document -> workspaceId.equals(document.workspaceId()));
+    }
+
+    @Override
+    public boolean softDelete(Long workspaceId, Long documentId) {
+        DocumentMetadata current = documents.get(documentId);
+        return current != null && workspaceId.equals(current.workspaceId())
+                && documents.remove(documentId, current);
+    }
+
+    @Override
     public Optional<DocumentMetadata> findByWorkspaceIdAndId(Long workspaceId, Long documentId) {
         return Optional.ofNullable(documents.get(documentId))
                 .filter(document -> workspaceId.equals(document.workspaceId()));

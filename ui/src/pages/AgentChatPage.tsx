@@ -1,9 +1,13 @@
-import { Button, Input, Modal, Tag, message } from 'antd';
-import { Bot, Check, SendHorizontal, X } from 'lucide-react';
+import { Button, Input, Modal, Popconfirm, Select, Tag, Tooltip, message } from 'antd';
+import { Bot, Check, History, Plus, SendHorizontal, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import type {
   CreatedToolConfirmationDto,
+  BackendDocumentDto,
+  ChatConversationDto,
+  ChatMessageDto,
+  DocumentKeyPointDto,
   DecidedToolConfirmationDto,
   KnowledgeNoteDto,
   PageResult,
@@ -38,6 +42,10 @@ export function AgentChatPage() {
   const [pendingProposal, setPendingProposal] = useState<CreatedToolConfirmationDto>();
   const [notes, setNotes] = useState<KnowledgeNoteDto[]>([]);
   const [flashcards, setFlashcards] = useState<StudyFlashcardDto[]>([]);
+  const [documents, setDocuments] = useState<BackendDocumentDto[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
+  const [conversations, setConversations] = useState<ChatConversationDto[]>([]);
+  const [keyPoints, setKeyPoints] = useState<Array<DocumentKeyPointDto & { documentId: number }>>([]);
   const [sending, setSending] = useState(false);
   const [deciding, setDeciding] = useState(false);
 
@@ -50,9 +58,77 @@ export function AgentChatPage() {
     setFlashcards(flashcardPage.records);
   }, [workspaceId]);
 
+  const loadChatWorkspace = useCallback(async () => {
+    const [documentPage, conversationPage] = await Promise.all([
+      apiClient.get<PageResult<BackendDocumentDto>>(
+        `/v1/workspaces/${workspaceId}/documents?page=1&pageSize=100&status=SUCCEEDED`,
+      ),
+      apiClient.get<PageResult<ChatConversationDto>>(
+        `/v1/workspaces/${workspaceId}/chat/conversations?page=1&pageSize=50`,
+      ),
+    ]);
+    setDocuments(documentPage.records);
+    setConversations(conversationPage.records);
+  }, [workspaceId]);
+
   useEffect(() => {
     void loadKnowledgeOutputs().catch(() => undefined);
-  }, [loadKnowledgeOutputs]);
+    void loadChatWorkspace().catch(() => undefined);
+  }, [loadChatWorkspace, loadKnowledgeOutputs]);
+
+  useEffect(() => {
+    if (selectedDocumentIds.length === 0) {
+      setKeyPoints([]);
+      return;
+    }
+    void Promise.all(selectedDocumentIds.map(async (documentId) => {
+      const points = await apiClient.get<DocumentKeyPointDto[]>(
+        `/v1/workspaces/${workspaceId}/documents/${documentId}/key-points`,
+      );
+      return points.map((point) => ({ ...point, documentId }));
+    })).then((groups) => setKeyPoints(groups.flat())).catch((error) => {
+      message.error(error instanceof Error ? error.message : '核心知识点加载失败');
+    });
+  }, [selectedDocumentIds, workspaceId]);
+
+  const openConversation = async (nextConversationId: number) => {
+    try {
+      const page = await apiClient.get<PageResult<ChatMessageDto>>(
+        `/v1/workspaces/${workspaceId}/chat/conversations/${nextConversationId}/messages?page=1&pageSize=100`,
+      );
+      setConversationId(nextConversationId);
+      setMessages(page.records.map((item) => ({
+        id: `history-${item.id}`,
+        role: item.role === 'USER' ? 'user' : 'assistant',
+        content: item.content || (item.status === 'FAILED' ? `回答失败：${item.failureReason ?? '未知原因'}` : ''),
+      })));
+      setCitations([]);
+      setToolCalls([]);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '历史会话加载失败');
+    }
+  };
+
+  const startNewConversation = () => {
+    setConversationId(undefined);
+    setMessages([]);
+    setCitations([]);
+    setToolCalls([]);
+  };
+
+  const deleteCurrentConversation = async () => {
+    if (!conversationId) return;
+    try {
+      await apiClient.delete<void>(
+        `/v1/workspaces/${workspaceId}/chat/conversations/${conversationId}`,
+      );
+      startNewConversation();
+      await loadChatWorkspace();
+      message.success('历史会话已删除');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '会话删除失败');
+    }
+  };
 
   const sendQuestion = async () => {
     const normalizedQuestion = question.trim();
@@ -76,7 +152,7 @@ export function AgentChatPage() {
         onCitation: (event) => setCitations((current) => [...current, event.citation]),
         onToolCall: (event) => setToolCalls((current) => [...current, event.toolCall]),
         onConfirmationRequired: (event) => setPendingProposal(event.proposal),
-      });
+      }, selectedDocumentIds);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '问答请求失败');
       setMessages((current) => current.map((item) => (
@@ -84,6 +160,7 @@ export function AgentChatPage() {
       )));
     } finally {
       setSending(false);
+      void loadChatWorkspace();
     }
   };
 
@@ -112,6 +189,49 @@ export function AgentChatPage() {
 
       <div className="chat-layout">
         <section className="panel chat-panel">
+          <div className="chat-scope-toolbar">
+            <div className="chat-scope-field">
+              <span><History size={15} /> 历史会话</span>
+              <Select
+                value={conversationId}
+                allowClear
+                placeholder="新会话"
+                options={conversations.map((item) => ({ value: item.id, label: item.title }))}
+                onChange={(value) => value ? void openConversation(value) : startNewConversation()}
+              />
+            </div>
+            <Tooltip title="新建会话">
+              <Button aria-label="新建会话" icon={<Plus size={16} />} onClick={startNewConversation} />
+            </Tooltip>
+            <Popconfirm title="删除当前历史会话？" okText="删除" cancelText="取消" disabled={!conversationId} onConfirm={deleteCurrentConversation}>
+              <Tooltip title="删除当前会话">
+                <Button aria-label="删除当前会话" danger disabled={!conversationId} icon={<Trash2 size={16} />} />
+              </Tooltip>
+            </Popconfirm>
+          </div>
+
+          <div className="chat-document-scope">
+            <span>问答资料范围</span>
+            <Select
+              mode="multiple"
+              allowClear
+              maxTagCount="responsive"
+              value={selectedDocumentIds}
+              placeholder="不选择时检索整个知识空间"
+              options={documents.map((document) => ({ value: document.id, label: document.title }))}
+              onChange={setSelectedDocumentIds}
+            />
+          </div>
+
+          {keyPoints.length > 0 ? (
+            <div className="chat-key-points">
+              <strong>已选资料核心知识点</strong>
+              <div>{keyPoints.slice(0, 12).map((point) => (
+                <Tag key={`${point.documentId}-${point.chunkId}`}>{point.title}</Tag>
+              ))}</div>
+            </div>
+          ) : null}
+
           {messages.length === 0 ? <p className="muted">输入问题开始知识库问答</p> : null}
           {messages.map((item) => (
             <div key={item.id} className={`chat-message chat-message--${item.role === 'user' ? 'user' : 'agent'}`}>

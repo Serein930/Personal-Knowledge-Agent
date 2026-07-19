@@ -6,6 +6,8 @@ import com.agentmind.common.security.CurrentUserId;
 import com.agentmind.document.model.DocumentSourceType;
 import com.agentmind.document.model.IngestionStatus;
 import com.agentmind.document.model.dto.DocumentChunkResponse;
+import com.agentmind.document.model.dto.DocumentKeyPointResponse;
+import com.agentmind.document.model.dto.RenameDocumentRequest;
 import com.agentmind.document.model.dto.DocumentSummaryResponse;
 import com.agentmind.document.model.dto.FileDocumentUploadResponse;
 import com.agentmind.document.model.dto.WebPageCaptureRequest;
@@ -18,6 +20,8 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -95,5 +99,36 @@ public class DocumentController {
             @PathVariable @Positive(message = "文档ID必须为正数") Long documentId
     ) {
         return ApiResponse.success(documentApplicationService.listDocumentChunks(ownerUserId, workspaceId, documentId));
+    }
+
+    @GetMapping("/{documentId}/key-points")
+    public ApiResponse<List<DocumentKeyPointResponse>> listDocumentKeyPoints(
+            @CurrentUserId Long ownerUserId,
+            @PathVariable @Positive Long workspaceId,
+            @PathVariable @Positive Long documentId
+    ) {
+        return ApiResponse.success(documentApplicationService.listDocumentKeyPoints(
+                ownerUserId, workspaceId, documentId));
+    }
+
+    @PatchMapping("/{documentId}")
+    public ApiResponse<DocumentSummaryResponse> renameDocument(
+            @CurrentUserId Long ownerUserId,
+            @PathVariable @Positive Long workspaceId,
+            @PathVariable @Positive Long documentId,
+            @Valid @RequestBody RenameDocumentRequest request
+    ) {
+        return ApiResponse.success(documentApplicationService.renameDocument(
+                ownerUserId, workspaceId, documentId, request.title()));
+    }
+
+    @DeleteMapping("/{documentId}")
+    public ApiResponse<Void> deleteDocument(
+            @CurrentUserId Long ownerUserId,
+            @PathVariable @Positive Long workspaceId,
+            @PathVariable @Positive Long documentId
+    ) {
+        documentApplicationService.deleteDocument(ownerUserId, workspaceId, documentId);
+        return ApiResponse.success("知识资产已删除", null);
     }
 }

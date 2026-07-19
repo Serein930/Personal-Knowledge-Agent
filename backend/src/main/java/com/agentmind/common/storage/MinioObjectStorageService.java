@@ -4,6 +4,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
@@ -50,6 +51,18 @@ public class MinioObjectStorageService implements ObjectStorageService {
             return new StoredObject(objectKey, null, safeName, contentType, size);
         } catch (Exception exception) {
             throw new IOException("写入 MinIO 对象失败", exception);
+        }
+    }
+
+    @Override
+    public void delete(String storageKey) throws IOException {
+        if (!StringUtils.hasText(storageKey)) {
+            return;
+        }
+        try {
+            client.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(storageKey).build());
+        } catch (Exception exception) {
+            throw new IOException("删除 MinIO 对象失败", exception);
         }
     }
 

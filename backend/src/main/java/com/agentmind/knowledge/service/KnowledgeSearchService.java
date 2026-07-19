@@ -8,6 +8,7 @@ import com.agentmind.knowledge.model.dto.KnowledgeSearchResultResponse;
 import com.agentmind.knowledge.vector.EmbeddingClient;
 import com.agentmind.knowledge.vector.VectorStore;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -37,6 +38,16 @@ public class KnowledgeSearchService {
 
     /** 使用与文档索引一致的向量模型生成查询向量，避免混用不同向量空间。 */
     public KnowledgeSearchResponse search(Long workspaceId, String query, Integer topK, String embeddingModel) {
+        return search(workspaceId, query, topK, embeddingModel, Set.of());
+    }
+
+    public KnowledgeSearchResponse search(
+            Long workspaceId,
+            String query,
+            Integer topK,
+            String embeddingModel,
+            Set<Long> documentIds
+    ) {
         validateWorkspaceId(workspaceId);
         if (!StringUtils.hasText(query)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "查询内容不能为空");
@@ -45,7 +56,12 @@ public class KnowledgeSearchService {
         float[] queryEmbedding = StringUtils.hasText(embeddingModel)
                 ? embeddingClient.embed(query, embeddingModel)
                 : embeddingClient.embed(query);
-        List<KnowledgeSearchResultResponse> results = vectorStore.search(workspaceId, queryEmbedding, safeTopK)
+        Set<Long> safeDocumentIds = documentIds == null ? Set.of() : Set.copyOf(documentIds);
+        if (safeDocumentIds.size() > 20 || safeDocumentIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "文档过滤条件不合法");
+        }
+        List<KnowledgeSearchResultResponse> results = vectorStore.search(
+                        workspaceId, queryEmbedding, safeTopK, safeDocumentIds)
                 .stream()
                 .map(this::toResponse)
                 .toList();
