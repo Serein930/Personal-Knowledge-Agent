@@ -2,6 +2,8 @@ package com.agentmind.chat.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.agentmind.chat.config.RagAnswerGenerationProperties;
 import com.agentmind.chat.model.RagModelCallStatus;
@@ -65,6 +67,23 @@ class SpringAiStreamingAnswerGeneratorTests {
     }
 
     @Test
+    void generateShouldIgnoreMetadataEventWhoseTextIsNull() {
+        RagAnswerGenerationProperties successProperties = new RagAnswerGenerationProperties();
+        successProperties.setToolCallingEnabled(false);
+        SpringAiStreamingAnswerGenerator successGenerator = new SpringAiStreamingAnswerGenerator(
+                new NullTextThenContentStreamingChatModel(),
+                successProperties,
+                new RagModelCallLogger(new InMemoryRagModelCallObservationRepository())
+        );
+        List<String> deltas = new ArrayList<>();
+
+        StreamingGeneratedAnswer answer = successGenerator.generate(request(), deltas::add, () -> { });
+
+        assertThat(String.join("", deltas)).isEqualTo("空事件后的正常回答");
+        assertThat(answer.metadata().refused()).isFalse();
+    }
+
+    @Test
     void generateShouldThrowAndSaveOneFailureObservationWhenFallbackIsDisabled() {
         properties.setSpringAiFailureFallbackEnabled(false);
 
@@ -116,6 +135,21 @@ class SpringAiStreamingAnswerGeneratorTests {
                             .build()
             );
             return Flux.just(first, last);
+        }
+    }
+
+    /** 模拟兼容服务先返回无文本元数据事件，再返回真实正文。 */
+    private static class NullTextThenContentStreamingChatModel implements StreamingChatModel {
+
+        @Override
+        public Flux<ChatResponse> stream(Prompt prompt) {
+            AssistantMessage emptyOutput = mock(AssistantMessage.class);
+            when(emptyOutput.getText()).thenReturn(null);
+            ChatResponse metadataOnly = new ChatResponse(List.of(new Generation(emptyOutput)));
+            ChatResponse content = new ChatResponse(
+                    List.of(new Generation(new AssistantMessage("空事件后的正常回答")))
+            );
+            return Flux.just(metadataOnly, content);
         }
     }
 }

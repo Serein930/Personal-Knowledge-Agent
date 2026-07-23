@@ -323,6 +323,16 @@ export interface DocumentKeyPointDto {
   chunkId: string;
 }
 
+export interface DocumentChunkDto {
+  id: string;
+  documentId: number;
+  sequence: number;
+  headingPath: string;
+  content: string;
+  charStart: number;
+  charEnd: number;
+}
+
 export interface ChatConversationDto {
   id: number;
   title: string;

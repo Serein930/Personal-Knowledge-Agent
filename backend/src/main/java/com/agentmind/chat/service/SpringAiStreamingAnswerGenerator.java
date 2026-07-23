@@ -232,11 +232,19 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
                         || response.getResult() == null
                         || response.getResult().getOutput() == null
                         ? ""
-                        : response.getResult().getOutput().getText())
-                .filter(delta -> delta != null && !delta.isEmpty())
+                        : nullToEmpty(response.getResult().getOutput().getText()))
+                .filter(delta -> !delta.isEmpty())
                 .doOnNext(delta -> emitDelta(delta, streamedAnswer, deltaConsumer, cancellationCheck))
                 .blockLast();
         return latestUsage.get();
+    }
+
+    /**
+     * 部分 OpenAI 兼容服务会在流中先发送只包含角色或结束原因的事件，此时文本字段可能为 null。
+     * Reactor 禁止 map 操作返回 null，因此必须在进入后续过滤器前转换为空字符串。
+     */
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private void validatePlanningResponse(ChatResponse response) {
