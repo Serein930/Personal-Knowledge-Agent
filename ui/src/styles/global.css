@@ -449,46 +449,112 @@ textarea {
   min-height: 420px;
 }
 
-.review-card {
-  display: grid;
-  gap: 20px;
-  min-height: 330px;
-  align-content: center;
-  padding: 24px 4%;
-  text-align: center;
-}
+  .review-card {
+    display: grid;
+    gap: 20px;
+    min-height: 330px;
+    align-content: start;
+    padding: 28px 4%;
+    text-align: left;
+  }
 
-.review-card h3 {
-  margin: 0;
-  font-size: 22px;
-  line-height: 1.5;
-}
+  .review-question {
+    display: grid;
+    gap: 8px;
+    width: min(100%, 900px);
+    margin: 0 auto;
+  }
 
-.review-card__position {
-  color: #0f766e;
-  font-size: 13px;
-  font-weight: 700;
-}
+  .review-question > span {
+    color: #0f766e;
+    font-size: 13px;
+    font-weight: 700;
+  }
 
-.review-answer {
-  display: grid;
-  gap: 8px;
-  border-left: 3px solid #0f766e;
-  background: #f8fafc;
-  padding: 16px;
-  text-align: left;
-}
+  .review-question h3 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
 
-.review-answer p {
-  margin: 0;
-  color: #182230;
-  line-height: 1.7;
-}
+  .review-card__position {
+    display: block;
+    width: min(100%, 900px);
+    margin: 0 auto;
+    color: #0f766e;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+  }
 
-.review-answer span {
-  color: #64748b;
-  font-size: 13px;
-}
+  .review-answer {
+    display: grid;
+    gap: 10px;
+    width: min(100%, 900px);
+    max-height: 360px;
+    margin: 0 auto;
+    border-left: 3px solid #0f766e;
+    background: #f8fafc;
+    padding: 18px 20px;
+    overflow-y: auto;
+    text-align: left;
+  }
+
+  .review-answer__source {
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .readable-text {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .readable-text p {
+    margin: 0;
+    color: inherit;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .readable-text__space {
+    height: 2px;
+  }
+
+  .readable-text__heading {
+    display: block;
+    margin-top: 4px;
+    color: #182230;
+    line-height: 1.6;
+  }
+
+  .readable-text__bullet {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 6px;
+    align-items: start;
+  }
+
+  .readable-text__bullet > span {
+    color: #0f766e;
+    line-height: 1.75;
+  }
+
+  .chat-message__content {
+    margin-top: 8px;
+  }
+
+  .form-hint {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.6;
+  }
 
 .score-grid {
   display: grid;

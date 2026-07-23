@@ -25,8 +25,11 @@ spring:
       embedding: ${AGENTMIND_SPRING_AI_EMBEDDING_MODEL:openai}
     openai:
       # 生产环境不允许使用本地占位值，未注入密钥时应在启动阶段暴露配置错误。
-      api-key: ${OPENAI_API_KEY}
+      api-key: ${AGENTMIND_CHAT_API_KEY:${OPENAI_API_KEY}}
       chat:
+        api-key: ${AGENTMIND_CHAT_API_KEY:${OPENAI_API_KEY}}
+        base-url: ${AGENTMIND_CHAT_BASE_URL:https://api.openai.com}
+        completions-path: ${AGENTMIND_CHAT_COMPLETIONS_PATH:/v1/chat/completions}
         options:
           model: ${AGENTMIND_CHAT_MODEL:gpt-4o-mini}
           temperature: ${AGENTMIND_CHAT_TEMPERATURE:0.2}
@@ -67,6 +70,7 @@ agentmind:
     answer-generator: spring-ai
     model-name: ${AGENTMIND_RAG_MODEL_NAME:${AGENTMIND_CHAT_MODEL:gpt-4o-mini}}
     spring-ai-failure-fallback-enabled: ${AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED:true}
+    tool-calling-enabled: ${AGENTMIND_RAG_TOOL_CALLING_ENABLED:true}
     observation-store: jdbc
   embedding:
     provider: spring-ai
@@ -119,3 +123,7 @@ agentmind:
   chat:
     memory:
       store: redis
+  study:
+    flashcard:
+      generation:
+        provider: ${AGENTMIND_FLASHCARD_GENERATOR:spring-ai}

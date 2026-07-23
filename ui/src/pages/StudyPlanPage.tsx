@@ -23,6 +23,7 @@ import type {
   SubmittedSessionReviewDto,
 } from '../api/contracts';
 import { MetricCard } from '../components/MetricCard';
+import { ReadableText } from '../components/ReadableText';
 import { SectionHeader } from '../components/SectionHeader';
 import { useAppSession } from '../contexts/AppSessionContext';
 
@@ -232,12 +233,17 @@ export function StudyPlanPage() {
           ) : (
             <div className="review-card">
               <span className="review-card__position">第 {currentItem.position} 张</span>
-              <h3>{currentItem.flashcard.question}</h3>
+              <div className="review-question">
+                <span>问题</span>
+                <h3>{currentItem.flashcard.question}</h3>
+              </div>
               {answerVisible ? (
                 <div className="review-answer">
                   <strong>答案</strong>
-                  <p>{currentItem.flashcard.answer}</p>
-                  {currentItem.flashcard.explanation ? <span>{currentItem.flashcard.explanation}</span> : null}
+                  <ReadableText className="readable-text" content={currentItem.flashcard.answer} />
+                  {currentItem.flashcard.explanation ? (
+                    <span className="review-answer__source">{currentItem.flashcard.explanation}</span>
+                  ) : null}
                 </div>
               ) : (
                 <Button icon={<RotateCcw size={16} />} onClick={() => setAnswerVisible(true)}>显示答案</Button>
@@ -341,6 +347,7 @@ export function StudyPlanPage() {
         onCancel={() => setGenerationOpen(false)}
       >
         <div className="form-stack">
+          <p className="form-hint">系统会从所选资料中自动提取具体问题，并为每个问题生成一条简短答案。</p>
           <label>
             <span>选择文件或网页</span>
             <Select

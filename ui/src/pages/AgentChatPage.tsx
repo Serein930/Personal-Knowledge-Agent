@@ -16,6 +16,7 @@ import type {
   ToolCallSummaryDto,
 } from '../api/contracts';
 import { streamRagChat } from '../api/ragStream';
+import { ReadableText } from '../components/ReadableText';
 import { SectionHeader } from '../components/SectionHeader';
 import { useAppSession } from '../contexts/AppSessionContext';
 
@@ -236,7 +237,10 @@ export function AgentChatPage() {
           {messages.map((item) => (
             <div key={item.id} className={`chat-message chat-message--${item.role === 'user' ? 'user' : 'agent'}`}>
               <strong>{item.role === 'user' ? '我' : <><Bot size={16} /> AgentMind</>}</strong>
-              <p>{item.content || '正在生成...'}</p>
+              <ReadableText
+                className="chat-message__content readable-text"
+                content={item.content || '正在生成...'}
+              />
             </div>
           ))}
 

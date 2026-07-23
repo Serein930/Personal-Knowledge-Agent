@@ -75,6 +75,8 @@ public class RagPromptTemplate {
         }
         builder.append("3. 不要编造上下文之外的事实。\n");
         builder.append("4. 如果拒答判断为真，直接说明资料不足原因。\n\n");
+        builder.append("5. 使用简洁的 Markdown 排版：先给结论，再按要点分段；避免把所有内容堆在一个段落中。\n");
+        builder.append("6. 除非用户明确要求长文，回答控制在必要范围内，每个要点只解释一个主题。\n\n");
         builder.append("拒答判断：").append(refusalDecision.shouldRefuse() ? "是" : "否").append("\n");
         if (refusalDecision.shouldRefuse()) {
             builder.append("拒答原因：").append(refusalDecision.reason()).append("\n");

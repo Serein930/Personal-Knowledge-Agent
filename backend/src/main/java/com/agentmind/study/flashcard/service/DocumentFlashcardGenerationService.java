@@ -21,7 +21,7 @@ import org.springframework.util.StringUtils;
  * 根据用户明确选择的文件或网页片段直接创建复习卡片。
  *
  * <p>该入口是显式用户操作，因此不需要智能体确认单。每张卡片仍保留来源文档编号，
- * 后续可追溯到原始知识资产。生成策略使用摄取阶段的语义标题和正文片段，保证离线可重复。</p>
+ * 后续可追溯到原始知识资产。具体问答由独立生成端口负责，应用服务只编排权限、来源和写入流程。</p>
  */
 @Service
 public class DocumentFlashcardGenerationService {
@@ -30,17 +30,20 @@ public class DocumentFlashcardGenerationService {
     private final DocumentChunkRepository chunkRepository;
     private final StudyFlashcardApplicationService flashcardService;
     private final WorkspaceAccessService workspaceAccessService;
+    private final DocumentFlashcardCandidateGenerator candidateGenerator;
 
     public DocumentFlashcardGenerationService(
             DocumentMetadataRepository documentRepository,
             DocumentChunkRepository chunkRepository,
             StudyFlashcardApplicationService flashcardService,
-            WorkspaceAccessService workspaceAccessService
+            WorkspaceAccessService workspaceAccessService,
+            DocumentFlashcardCandidateGenerator candidateGenerator
     ) {
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
         this.flashcardService = flashcardService;
         this.workspaceAccessService = workspaceAccessService;
+        this.candidateGenerator = candidateGenerator;
     }
 
     public List<StudyFlashcardResponse> generate(
@@ -49,7 +52,7 @@ public class DocumentFlashcardGenerationService {
             GenerateFlashcardsFromDocumentsRequest request
     ) {
         workspaceAccessService.requireWritable(ownerUserId, workspaceId);
-        List<SourceChunk> candidates = new ArrayList<>();
+        List<DocumentFlashcardSource> sources = new ArrayList<>();
         for (Long documentId : request.documentIds().stream().distinct().toList()) {
             DocumentMetadata document = documentRepository.findByWorkspaceIdAndId(workspaceId, documentId)
                     .orElseThrow(() -> new BusinessException(
@@ -59,39 +62,44 @@ public class DocumentFlashcardGenerationService {
             }
             chunkRepository.findAllByDocumentId(documentId).stream()
                     .filter(chunk -> StringUtils.hasText(chunk.content()))
-                    .forEach(chunk -> candidates.add(new SourceChunk(document, chunk)));
+                    .forEach(chunk -> sources.add(toSource(document, chunk)));
         }
-        if (candidates.isEmpty()) {
+        if (sources.isEmpty()) {
             throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "所选文档没有可用于制卡的文本片段");
         }
 
-        int targetCount = Math.min(request.count(), candidates.size());
+        List<GeneratedDocumentFlashcard> candidates = candidateGenerator.generate(sources, request.count());
+        if (candidates.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_CONFLICT,
+                    "所选资料缺少能够形成具体问答的内容，请选择包含定义、原理或解释的资料"
+            );
+        }
         List<StudyFlashcardResponse> created = new ArrayList<>();
-        for (int index = 0; index < targetCount; index++) {
-            int candidateIndex = targetCount == 1 ? 0 : index * (candidates.size() - 1) / (targetCount - 1);
-            SourceChunk source = candidates.get(candidateIndex);
-            String topic = StringUtils.hasText(source.chunk().headingPath())
-                    ? source.chunk().headingPath().trim() : source.document().title();
-            String question = "《" + source.document().title() + "》中“" + limit(topic, 120) + "”的核心内容是什么？";
-            String answer = limit(source.chunk().content().replaceAll("\\s+", " ").trim(), 1800);
+        for (GeneratedDocumentFlashcard candidate : candidates.stream().limit(request.count()).toList()) {
             AgentToolExecutionContext context = new AgentToolExecutionContext(ownerUserId, workspaceId, null)
                     .withRequestId("direct-card-" + UUID.randomUUID());
             created.add(flashcardService.createFromAgent(
                     context,
-                    question,
-                    answer,
-                    "由用户从指定知识资产直接生成，来源片段：" + source.chunk().id(),
-                    source.document().id(),
-                    limit(topic, 100)
+                    candidate.question(),
+                    candidate.answer(),
+                    candidate.explanation() + " 来源片段：" + candidate.sourceChunkId(),
+                    candidate.sourceDocumentId(),
+                    candidate.topic()
             ));
         }
         return List.copyOf(created);
     }
 
-    private String limit(String value, int maxLength) {
-        return value.length() <= maxLength ? value : value.substring(0, maxLength);
-    }
-
-    private record SourceChunk(DocumentMetadata document, DocumentChunk chunk) {
+    private DocumentFlashcardSource toSource(DocumentMetadata document, DocumentChunk chunk) {
+        String topic = StringUtils.hasText(chunk.headingPath())
+                ? chunk.headingPath().trim() : document.title();
+        return new DocumentFlashcardSource(
+                document.id(),
+                document.title(),
+                chunk.id(),
+                topic,
+                chunk.content().trim()
+        );
     }
 }

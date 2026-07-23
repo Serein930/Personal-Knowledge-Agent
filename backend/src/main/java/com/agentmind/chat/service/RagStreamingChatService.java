@@ -112,15 +112,18 @@ public class RagStreamingChatService {
                     completeAnswer.toString()
             );
             sendToolCalls(emitter, sessionState, preparedChat.messageId(), generatedAnswer);
-            sendWriteToolProposals(
-                    emitter,
-                    sessionState,
-                    new AgentToolExecutionContext(
-                            ownerUserId, workspaceId, preparedChat.conversationId(), preparedChat.messageId()
-                    ),
-                    request.question(),
-                    completeAnswer.toString()
-            );
+            // 拒答和模型降级结果不是有效知识内容，禁止继续生成笔记或复习卡片确认单。
+            if (!generatedAnswer.metadata().refused()) {
+                sendWriteToolProposals(
+                        emitter,
+                        sessionState,
+                        new AgentToolExecutionContext(
+                                ownerUserId, workspaceId, preparedChat.conversationId(), preparedChat.messageId()
+                        ),
+                        request.question(),
+                        completeAnswer.toString()
+                );
+            }
             sendEvent(
                     emitter,
                     sessionState,

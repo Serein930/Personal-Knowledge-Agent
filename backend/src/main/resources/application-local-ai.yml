@@ -7,9 +7,13 @@ spring:
       # local-ai 只负责打开真实聊天模型；向量模型仍由 embedding 配置独立控制。
       chat: ${AGENTMIND_SPRING_AI_CHAT_MODEL:openai}
     openai:
-      # 本地真实联调必须显式提供密钥，禁止沿用公共配置中的占位值。
-      api-key: ${OPENAI_API_KEY}
+      # 同时兼容 OpenAI 与实现 OpenAI Chat Completions 协议的模型服务。
+      # DeepSeek 或第三方平台代理必须显式填写服务地址，避免请求误发到 OpenAI 默认端点。
+      api-key: ${AGENTMIND_CHAT_API_KEY:${OPENAI_API_KEY}}
       chat:
+        api-key: ${AGENTMIND_CHAT_API_KEY:${OPENAI_API_KEY}}
+        base-url: ${AGENTMIND_CHAT_BASE_URL:https://api.openai.com}
+        completions-path: ${AGENTMIND_CHAT_COMPLETIONS_PATH:/v1/chat/completions}
         options:
           model: ${AGENTMIND_CHAT_MODEL:gpt-4o-mini}
           temperature: ${AGENTMIND_CHAT_TEMPERATURE:0.2}
@@ -19,3 +23,9 @@ agentmind:
     answer-generator: spring-ai
     model-name: ${AGENTMIND_RAG_MODEL_NAME:${AGENTMIND_CHAT_MODEL:gpt-4o-mini}}
     spring-ai-failure-fallback-enabled: ${AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED:true}
+    # 部分 OpenAI 兼容服务不完整支持 Tool Calling。本地问答已有 RAG 上下文，默认关闭可提升兼容性。
+    tool-calling-enabled: ${AGENTMIND_RAG_TOOL_CALLING_ENABLED:false}
+  study:
+    flashcard:
+      generation:
+        provider: ${AGENTMIND_FLASHCARD_GENERATOR:spring-ai}

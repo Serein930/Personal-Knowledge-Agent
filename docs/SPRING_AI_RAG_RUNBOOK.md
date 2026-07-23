@@ -20,7 +20,7 @@
 真实模型密钥只能通过当前终端、操作系统密钥存储或外部密钥管理系统注入：
 
 ```powershell
-$env:OPENAI_API_KEY = "你的真实模型密钥"
+$env:AGENTMIND_CHAT_API_KEY = "你的真实模型密钥"
 ```
 
 可选配置：
@@ -28,17 +28,34 @@ $env:OPENAI_API_KEY = "你的真实模型密钥"
 ```powershell
 $env:AGENTMIND_CHAT_MODEL = "gpt-4o-mini"
 $env:AGENTMIND_RAG_MODEL_NAME = "gpt-4o-mini"
+$env:AGENTMIND_CHAT_BASE_URL = "https://api.openai.com"
+$env:AGENTMIND_CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
 $env:AGENTMIND_CHAT_TEMPERATURE = "0.2"
 $env:AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED = "true"
+$env:AGENTMIND_RAG_TOOL_CALLING_ENABLED = "false"
 ```
 
 说明：
 
 - `AGENTMIND_CHAT_MODEL` 是实际发送给 Spring AI 的供应商模型名称。
 - `AGENTMIND_RAG_MODEL_NAME` 是写入回答元数据和审计记录的模型名称，通常应与实际模型一致。
+- `AGENTMIND_CHAT_BASE_URL` 是 OpenAI 兼容服务的主地址，不确定时不要在地址末尾重复填写 `/v1`。
+- 若供应商给出的主地址已经包含 `/v1`，可把 `AGENTMIND_CHAT_COMPLETIONS_PATH` 改为 `/chat/completions`。
+- 本地真实联调默认关闭 Tool Calling，以兼容只实现 Chat Completions 的供应商；确认供应商支持工具调用后可显式设为 `true`。
 - 温度默认 `0.2`，减少知识问答中的随机扩写。
-- 本地占位密钥只服务于默认 Mock 启动；`local-ai` 和 `production` 都要求真实 `OPENAI_API_KEY`。
+- `OPENAI_API_KEY` 仍可作为兼容变量，但推荐使用语义更明确的 `AGENTMIND_CHAT_API_KEY`。
 - 禁止把密钥写入 YAML、测试代码、截图、日志或 Git 提交。
+
+OpenAI 兼容供应商示例：
+
+```powershell
+$env:AGENTMIND_CHAT_API_KEY = "你的供应商密钥"
+$env:AGENTMIND_CHAT_BASE_URL = "供应商提供的 OpenAI 兼容地址"
+$env:AGENTMIND_CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
+$env:AGENTMIND_CHAT_MODEL = "供应商实际支持的模型编号"
+$env:AGENTMIND_RAG_MODEL_NAME = $env:AGENTMIND_CHAT_MODEL
+$env:AGENTMIND_RAG_TOOL_CALLING_ENABLED = "false"
+```
 
 ## 启动本地真实模式
 
@@ -83,7 +100,7 @@ Invoke-RestMethod `
 
 ## 独立真实模型测试
 
-设置 `OPENAI_API_KEY` 后运行：
+设置 `AGENTMIND_CHAT_API_KEY` 后运行：
 
 ```powershell
 Set-Location D:\Program\AgentMind\backend

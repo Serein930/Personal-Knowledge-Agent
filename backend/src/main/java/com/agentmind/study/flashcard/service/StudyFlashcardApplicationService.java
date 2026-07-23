@@ -12,13 +12,21 @@ import com.agentmind.study.flashcard.model.dto.RescheduleFlashcardRequest;
 import com.agentmind.study.flashcard.model.dto.StudyFlashcardResponse;
 import com.agentmind.study.flashcard.repository.StudyFlashcardRepository;
 import java.time.OffsetDateTime;
+import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * 复习卡片应用服务。
  */
 @Service
 public class StudyFlashcardApplicationService {
+
+    private static final int MAX_QUESTION_LENGTH = 240;
+    private static final int MAX_ANSWER_LENGTH = 800;
+    private static final List<String> FORBIDDEN_FAILURE_TEXTS = List.of(
+            "模型调用失败", "流式调用失败", "降级模式", "请稍后重试", "回答生成失败"
+    );
 
     private final StudyFlashcardRepository flashcardRepository;
     private final AgentToolExecutionAuthorizer authorizer;
@@ -52,6 +60,7 @@ public class StudyFlashcardApplicationService {
             Long sourceDocumentId,
             String topic
     ) {
+        requireValidCardContent(question, answer);
         OffsetDateTime now = OffsetDateTime.now();
         StudyFlashcard saved = flashcardRepository.save(new StudyFlashcard(
                 null, context.ownerUserId(), context.workspaceId(), context.conversationId(),
@@ -61,6 +70,25 @@ public class StudyFlashcardApplicationService {
                 now, now
         ));
         return responseMapper.toFlashcardResponse(saved);
+    }
+
+    /**
+     * 所有卡片写入口统一执行质量底线，防止模型异常提示、空答案或整段超长内容进入复习队列。
+     */
+    private void requireValidCardContent(String question, String answer) {
+        if (!StringUtils.hasText(question) || !StringUtils.hasText(answer)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "复习卡片的问题和答案不能为空");
+        }
+        if (question.trim().length() > MAX_QUESTION_LENGTH) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "复习卡片问题过长，请只保留一个具体知识点");
+        }
+        if (answer.trim().length() > MAX_ANSWER_LENGTH) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "复习卡片答案过长，请拆分为多张单知识点卡片");
+        }
+        String combinedText = question + " " + answer;
+        if (FORBIDDEN_FAILURE_TEXTS.stream().anyMatch(combinedText::contains)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "模型失败提示不能保存为复习卡片");
+        }
     }
 
     private String normalizeTopic(String topic) {

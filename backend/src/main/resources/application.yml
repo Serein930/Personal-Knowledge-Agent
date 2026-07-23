@@ -198,6 +198,14 @@ agentmind:
     time-zone: Asia/Shanghai
     flashcard:
       algorithm: sm2
+      generation:
+        # 默认使用可重复的本地生成器；local-ai 与 production 可切换到真实模型。
+        provider: ${AGENTMIND_FLASHCARD_GENERATOR:local}
+        prompt-version: flashcard-atomic-v1
+        model-name: ${AGENTMIND_FLASHCARD_MODEL:${AGENTMIND_RAG_MODEL_NAME:mock-local}}
+        maximum-source-characters: 16000
+        maximum-answer-characters: 360
+        failure-fallback-enabled: true
     maintenance:
       enabled: false
       fixed-delay-millis: 21600000

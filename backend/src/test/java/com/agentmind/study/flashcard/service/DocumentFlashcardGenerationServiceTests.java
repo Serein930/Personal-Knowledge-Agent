@@ -37,7 +37,8 @@ class DocumentFlashcardGenerationServiceTests {
                 documentRepository,
                 chunkRepository,
                 flashcardService,
-                new WorkspaceAccessService(new InMemoryKnowledgeWorkspaceRepository())
+                new WorkspaceAccessService(new InMemoryKnowledgeWorkspaceRepository()),
+                new LocalDocumentFlashcardCandidateGenerator()
         );
 
         List<StudyFlashcardResponse> created = service.generate(
@@ -47,6 +48,8 @@ class DocumentFlashcardGenerationServiceTests {
         assertThat(created).allMatch(card -> card.sourceDocumentId().equals(metadata.id()));
         assertThat(created).allMatch(card -> !card.dueAt().isAfter(java.time.OffsetDateTime.now()));
         assertThat(created).extracting(StudyFlashcardResponse::question)
-                .anyMatch(question -> question.contains("核心参数"));
+                .anyMatch(question -> question.contains("核心线程数"));
+        assertThat(created).allMatch(card -> card.answer().length() <= 260);
+        assertThat(created).noneMatch(card -> card.question().contains("核心内容是什么"));
     }
 }
