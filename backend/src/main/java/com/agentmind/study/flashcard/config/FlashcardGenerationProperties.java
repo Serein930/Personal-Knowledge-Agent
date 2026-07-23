@@ -14,10 +14,10 @@ import org.springframework.stereotype.Component;
 public class FlashcardGenerationProperties {
 
     private String provider = "local";
-    private String promptVersion = "flashcard-atomic-v1";
+    private String promptVersion = "flashcard-atomic-v2";
     private String modelName = "mock-local";
     private int maximumSourceCharacters = 16_000;
-    private int maximumAnswerCharacters = 360;
+    private int maximumAnswerCharacters = 480;
     private boolean failureFallbackEnabled = true;
 
     public String getProvider() {

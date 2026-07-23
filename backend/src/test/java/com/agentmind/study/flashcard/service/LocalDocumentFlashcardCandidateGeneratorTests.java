@@ -44,4 +44,19 @@ class LocalDocumentFlashcardCandidateGeneratorTests {
 
         assertThat(cards).isEmpty();
     }
+
+    @Test
+    void shouldIgnoreQuestionOutlineWithoutQuestionMark() {
+        List<GeneratedDocumentFlashcard> cards = generator.generate(List.of(
+                new DocumentFlashcardSource(
+                        1L,
+                        "面试题纲",
+                        "1-0",
+                        "异常处理",
+                        "throw 与 throws 的核心区别\nfinally 中的代码一定会执行吗"
+                )
+        ), 5);
+
+        assertThat(cards).isEmpty();
+    }
 }

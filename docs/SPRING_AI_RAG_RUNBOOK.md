@@ -57,6 +57,26 @@ $env:AGENTMIND_RAG_MODEL_NAME = $env:AGENTMIND_CHAT_MODEL
 $env:AGENTMIND_RAG_TOOL_CALLING_ENABLED = "false"
 ```
 
+DeepSeek V4 示例：
+
+```powershell
+$env:AGENTMIND_CHAT_API_KEY = "你的 DeepSeek API 密钥"
+$env:AGENTMIND_CHAT_BASE_URL = "https://api.deepseek.com"
+$env:AGENTMIND_CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
+$env:AGENTMIND_CHAT_MODEL = "deepseek-v4-pro"
+$env:AGENTMIND_RAG_MODEL_NAME = "deepseek-v4-pro"
+$env:AGENTMIND_RAG_TOOL_CALLING_ENABLED = "false"
+```
+
+注意事项：
+
+- 本项目当前使用 Spring AI 的 OpenAI Chat Completions 适配器，因此基础地址不能填写
+  `https://api.deepseek.com/anthropic`；该地址属于 Anthropic 协议兼容入口。
+- 模型编号必须使用供应商实际公布的完整名称，例如 `deepseek-v4-pro`，不能写成
+  `deepseekv4-pro`。
+- 修改环境变量后必须停止并重新启动后端。`local-ai` 或 `production` 启动时会主动校验
+  协议地址、重复的 `/v1` 和常见的 DeepSeek 模型名称拼写错误。
+
 ## 启动本地真实模式
 
 先启动本地 PostgreSQL 等依赖，然后执行：

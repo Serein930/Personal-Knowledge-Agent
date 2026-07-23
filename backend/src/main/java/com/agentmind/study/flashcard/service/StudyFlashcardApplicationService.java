@@ -13,6 +13,7 @@ import com.agentmind.study.flashcard.model.dto.StudyFlashcardResponse;
 import com.agentmind.study.flashcard.repository.StudyFlashcardRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -85,10 +86,28 @@ public class StudyFlashcardApplicationService {
         if (answer.trim().length() > MAX_ANSWER_LENGTH) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "复习卡片答案过长，请拆分为多张单知识点卡片");
         }
+        if (isQuestionRestatement(question, answer)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "复习卡片答案不能只是重复或改写问题");
+        }
         String combinedText = question + " " + answer;
         if (FORBIDDEN_FAILURE_TEXTS.stream().anyMatch(combinedText::contains)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "模型失败提示不能保存为复习卡片");
         }
+    }
+
+    private boolean isQuestionRestatement(String question, String answer) {
+        String compactQuestion = normalizeForComparison(question);
+        String compactAnswer = normalizeForComparison(answer);
+        if (compactQuestion.equals(compactAnswer)) {
+            return true;
+        }
+        return compactAnswer.length() <= compactQuestion.length() + 6
+                && (compactQuestion.contains(compactAnswer) || compactAnswer.contains(compactQuestion));
+    }
+
+    private String normalizeForComparison(String value) {
+        return value.replaceAll("[\\s，。！？!?：:、“”‘’《》]", "")
+                .toLowerCase(Locale.ROOT);
     }
 
     private String normalizeTopic(String topic) {

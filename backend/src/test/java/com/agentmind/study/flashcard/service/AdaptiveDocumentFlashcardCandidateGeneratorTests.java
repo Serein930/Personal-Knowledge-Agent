@@ -65,6 +65,40 @@ class AdaptiveDocumentFlashcardCandidateGeneratorTests {
         });
     }
 
+    @Test
+    void shouldRejectAnswerThatOnlyRestatesQuestion() {
+        String modelJson = """
+                {
+                  "cards": [
+                    {
+                      "sourceChunkId": "1-0",
+                      "topic": "异常处理",
+                      "question": "throw 与 throws 的核心区别是什么？",
+                      "answer": "throw 与 throws 的核心区别。",
+                      "explanation": "无"
+                    },
+                    {
+                      "sourceChunkId": "1-0",
+                      "topic": "异常处理",
+                      "question": "throw 与 throws 分别用于什么场景？",
+                      "answer": "throw 在方法体内主动抛出一个具体异常对象；throws 写在方法声明上，用于声明该方法可能向调用方传播的异常类型。",
+                      "explanation": "完整说明两个关键字的职责。"
+                    }
+                  ]
+                }
+                """;
+        AdaptiveDocumentFlashcardCandidateGenerator generator = generator(prompt -> new ChatResponse(
+                List.of(new Generation(new AssistantMessage(modelJson)))
+        ));
+
+        List<GeneratedDocumentFlashcard> cards = generator.generate(sources(), 1);
+
+        assertThat(cards).singleElement().satisfies(card -> {
+            assertThat(card.question()).contains("分别用于什么场景");
+            assertThat(card.answer()).contains("异常对象", "方法声明");
+        });
+    }
+
     private AdaptiveDocumentFlashcardCandidateGenerator generator(ChatModel chatModel) {
         DefaultListableBeanFactory beanFactory = new DefaultListableBeanFactory();
         beanFactory.registerSingleton("testChatModel", chatModel);

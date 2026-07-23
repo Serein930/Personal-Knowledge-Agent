@@ -23,7 +23,10 @@ public class LocalDocumentFlashcardCandidateGenerator implements DocumentFlashca
             "(?:\\r?\\n)+|\\s*[●•▪◆]\\s*|(?<=[。！？!?；;])\\s*"
     );
     private static final List<String> PREDICATES = List.of(
-            "是", "指", "用于", "用来", "决定", "负责", "包括", "分为", "通过", "表示", "能够", "可以"
+            "是", "指", "用于", "用来", "决定", "负责", "包括", "分为", "通过", "表示", "能够", "可以", "由"
+    );
+    private static final List<String> QUESTION_OUTLINE_CUES = List.of(
+            "什么", "如何", "为什么", "怎么", "哪些", "是否", "区别", "原理", "流程", "面试题"
     );
 
     @Override
@@ -55,7 +58,9 @@ public class LocalDocumentFlashcardCandidateGenerator implements DocumentFlashca
         List<String> units = new ArrayList<>();
         for (String rawUnit : UNIT_SEPARATOR.split(content.trim())) {
             String normalized = normalize(rawUnit);
-            if (normalized.length() < 8 || looksLikeStandaloneQuestion(normalized)) {
+            if (normalized.length() < 8
+                    || looksLikeQuestionOutline(normalized)
+                    || !hasDeclarativeRelation(normalized)) {
                 continue;
             }
             splitLongUnit(normalized, units);
@@ -121,6 +126,7 @@ public class LocalDocumentFlashcardCandidateGenerator implements DocumentFlashca
                         case "通过" -> ensureQuestion(limit(subject, 80) + "通过什么方式实现");
                         case "表示" -> ensureQuestion(limit(subject, 80) + "表示什么");
                         case "能够", "可以" -> ensureQuestion(limit(subject, 80) + "具有什么能力");
+                        case "由" -> ensureQuestion(limit(subject, 80) + "由什么负责处理");
                         default -> ensureQuestion(limit(subject, 80) + "是什么");
                     };
                 }
@@ -130,8 +136,27 @@ public class LocalDocumentFlashcardCandidateGenerator implements DocumentFlashca
         return ensureQuestion("在“" + limit(topic, 60) + "”中，如何理解“" + cleanSubject(focus) + "”");
     }
 
-    private boolean looksLikeStandaloneQuestion(String value) {
-        return value.endsWith("?") || value.endsWith("？");
+    private boolean looksLikeQuestionOutline(String value) {
+        if (value.endsWith("?") || value.endsWith("？")) {
+            return true;
+        }
+        return QUESTION_OUTLINE_CUES.stream().anyMatch(value::contains)
+                && !hasDeclarativeRelation(value);
+    }
+
+    /**
+     * 本地生成器只接受能够直接作为答案的陈述句。
+     * 没有明确谓词或冒号解释关系的目录、关键词和题纲会被跳过，等待真实模型补全。
+     */
+    private boolean hasDeclarativeRelation(String value) {
+        int colonIndex = firstIndex(value, "：", ":");
+        if (colonIndex >= 2 && colonIndex < value.length() - 2) {
+            return true;
+        }
+        return PREDICATES.stream().anyMatch(predicate -> {
+            int index = value.indexOf(predicate);
+            return index >= 2 && index <= 50 && index + predicate.length() < value.length();
+        });
     }
 
     private String cleanSubject(String value) {

@@ -1,6 +1,19 @@
-import { Button, Input, Modal, Popconfirm, Select, Tag, Tooltip, message } from 'antd';
-import { Bot, Check, History, Plus, SendHorizontal, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Button, Input, Modal, Popconfirm, Select, Tabs, Tag, Tooltip, message } from 'antd';
+import {
+  BookOpen,
+  Bot,
+  Check,
+  FileText,
+  History,
+  NotebookPen,
+  Plus,
+  SendHorizontal,
+  Sparkles,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
 import type {
   CreatedToolConfirmationDto,
@@ -17,7 +30,6 @@ import type {
 } from '../api/contracts';
 import { streamRagChat } from '../api/ragStream';
 import { ReadableText } from '../components/ReadableText';
-import { SectionHeader } from '../components/SectionHeader';
 import { useAppSession } from '../contexts/AppSessionContext';
 
 interface ChatMessageView {
@@ -32,6 +44,12 @@ const toolLabel: Record<string, string> = {
   'note.create': '创建笔记',
   'flashcard.create': '创建复习卡片',
 };
+
+const promptSuggestions = [
+  '总结所选资料的三个核心知识点',
+  '解释资料中最容易混淆的两个概念',
+  '根据资料给我一道面试题并讲解答案',
+];
 
 export function AgentChatPage() {
   const { workspaceId = 0 } = useAppSession();
@@ -49,6 +67,7 @@ export function AgentChatPage() {
   const [keyPoints, setKeyPoints] = useState<Array<DocumentKeyPointDto & { documentId: number }>>([]);
   const [sending, setSending] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const threadRef = useRef<HTMLDivElement>(null);
 
   const loadKnowledgeOutputs = useCallback(async () => {
     const [notePage, flashcardPage] = await Promise.all([
@@ -91,6 +110,13 @@ export function AgentChatPage() {
       message.error(error instanceof Error ? error.message : '核心知识点加载失败');
     });
   }, [selectedDocumentIds, workspaceId]);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread) {
+      thread.scrollTo({ top: thread.scrollHeight, behavior: sending ? 'smooth' : 'auto' });
+    }
+  }, [messages, sending]);
 
   const openConversation = async (nextConversationId: number) => {
     try {
@@ -185,132 +211,222 @@ export function AgentChatPage() {
   };
 
   return (
-    <div className="page-stack">
-      <SectionHeader title="Agent 问答" description={`知识空间 ${workspaceId}`} />
-
-      <div className="chat-layout">
-        <section className="panel chat-panel">
-          <div className="chat-scope-toolbar">
-            <div className="chat-scope-field">
-              <span><History size={15} /> 历史会话</span>
-              <Select
-                value={conversationId}
-                allowClear
-                placeholder="新会话"
-                options={conversations.map((item) => ({ value: item.id, label: item.title }))}
-                onChange={(value) => value ? void openConversation(value) : startNewConversation()}
-              />
-            </div>
-            <Tooltip title="新建会话">
-              <Button aria-label="新建会话" icon={<Plus size={16} />} onClick={startNewConversation} />
-            </Tooltip>
-            <Popconfirm title="删除当前历史会话？" okText="删除" cancelText="取消" disabled={!conversationId} onConfirm={deleteCurrentConversation}>
-              <Tooltip title="删除当前会话">
-                <Button aria-label="删除当前会话" danger disabled={!conversationId} icon={<Trash2 size={16} />} />
-              </Tooltip>
-            </Popconfirm>
+    <div className="agent-chat-page">
+      <div className="agent-chat-shell">
+        <aside className="chat-history-rail">
+          <Button
+            className="chat-new-button"
+            icon={<Plus size={16} />}
+            onClick={startNewConversation}
+          >
+            新对话
+          </Button>
+          <div className="chat-history-rail__title">
+            <History size={15} />
+            <span>历史会话</span>
           </div>
+          <div className="chat-conversation-list">
+            {conversations.length === 0 ? (
+              <span className="chat-empty-label">暂无历史会话</span>
+            ) : conversations.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`chat-conversation-item${conversationId === item.id ? ' is-active' : ''}`}
+                onClick={() => void openConversation(item.id)}
+              >
+                <span>{item.title}</span>
+                <time>{new Date(item.updatedAt).toLocaleDateString()}</time>
+              </button>
+            ))}
+          </div>
+          <Popconfirm
+            title="删除当前历史会话？"
+            okText="删除"
+            cancelText="取消"
+            disabled={!conversationId}
+            onConfirm={deleteCurrentConversation}
+          >
+            <Button
+              className="chat-delete-button"
+              danger
+              disabled={!conversationId}
+              icon={<Trash2 size={15} />}
+            >
+              删除当前会话
+            </Button>
+          </Popconfirm>
+        </aside>
 
-          <div className="chat-document-scope">
-            <span>问答资料范围</span>
+        <main className="chat-conversation-stage">
+          <header className="chat-conversation-header">
+            <div className="chat-agent-identity">
+              <span className="chat-agent-avatar"><Bot size={18} /></span>
+              <div>
+                <strong>AgentMind</strong>
+                <span>知识空间 {workspaceId}</span>
+              </div>
+            </div>
+            <Select
+              className="chat-mobile-history"
+              value={conversationId}
+              allowClear
+              placeholder="新会话"
+              options={conversations.map((item) => ({ value: item.id, label: item.title }))}
+              onChange={(value) => value ? void openConversation(value) : startNewConversation()}
+            />
+          </header>
+
+          <div className="chat-resource-scope">
+            <BookOpen size={16} />
             <Select
               mode="multiple"
               allowClear
               maxTagCount="responsive"
               value={selectedDocumentIds}
-              placeholder="不选择时检索整个知识空间"
+              placeholder="检索整个知识空间"
               options={documents.map((document) => ({ value: document.id, label: document.title }))}
               onChange={setSelectedDocumentIds}
+              aria-label="问答资料范围"
             />
           </div>
 
           {keyPoints.length > 0 ? (
-            <div className="chat-key-points">
-              <strong>已选资料核心知识点</strong>
-              <div>{keyPoints.slice(0, 12).map((point) => (
+            <div className="chat-key-point-strip">
+              <Sparkles size={15} />
+              <div>{keyPoints.slice(0, 8).map((point) => (
                 <Tag key={`${point.documentId}-${point.chunkId}`}>{point.title}</Tag>
               ))}</div>
             </div>
           ) : null}
 
-          {messages.length === 0 ? <p className="muted">输入问题开始知识库问答</p> : null}
-          {messages.map((item) => (
-            <div key={item.id} className={`chat-message chat-message--${item.role === 'user' ? 'user' : 'agent'}`}>
-              <strong>{item.role === 'user' ? '我' : <><Bot size={16} /> AgentMind</>}</strong>
-              <ReadableText
-                className="chat-message__content readable-text"
-                content={item.content || '正在生成...'}
-              />
-            </div>
-          ))}
-
-          <div className="chat-input-row">
-            <Input.TextArea
-              rows={3}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="例如：根据资料生成一张线程池复习卡片"
-              disabled={sending}
-            />
-            <Button
-              type="primary"
-              icon={<SendHorizontal size={16} />}
-              loading={sending}
-              disabled={!question.trim()}
-              onClick={sendQuestion}
-            >
-              发送
-            </Button>
+          <div ref={threadRef} className="chat-thread">
+            {messages.length === 0 ? (
+              <div className="chat-welcome">
+                <span><Sparkles size={24} /></span>
+                <h2>今天想从资料中弄懂什么？</h2>
+                <div className="chat-suggestions">
+                  {promptSuggestions.map((suggestion) => (
+                    <button key={suggestion} type="button" onClick={() => setQuestion(suggestion)}>
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : messages.map((item) => (
+              <article
+                key={item.id}
+                className={`chat-turn chat-turn--${item.role === 'user' ? 'user' : 'assistant'}`}
+              >
+                {item.role === 'assistant' ? (
+                  <span className="chat-turn__avatar"><Bot size={17} /></span>
+                ) : null}
+                <div className="chat-turn__content">
+                  {item.role === 'assistant' ? <strong>AgentMind</strong> : null}
+                  <ReadableText
+                    className="chat-message__content readable-text"
+                    content={item.content || '正在生成...'}
+                  />
+                </div>
+              </article>
+            ))}
           </div>
-        </section>
 
-        <aside className="side-panel">
-          <section className="panel">
-            <h3>引用来源</h3>
-            <div className="compact-list">
-              {citations.length === 0 ? <span>暂无引用</span> : citations.map((citation) => (
-                <article key={`${citation.documentId}-${citation.chunkId}`}>
-                  <strong>{citation.documentTitle}</strong>
-                  <span>{citation.excerpt}</span>
-                  <Tag color="blue">相关度 {citation.score.toFixed(3)}</Tag>
-                </article>
-              ))}
+          <footer className="chat-composer-area">
+            <div className="chat-composer">
+              <Input.TextArea
+                autoSize={{ minRows: 1, maxRows: 6 }}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onPressEnter={(event) => {
+                  if (!event.shiftKey) {
+                    event.preventDefault();
+                    void sendQuestion();
+                  }
+                }}
+                placeholder="向你的知识库提问"
+                disabled={sending}
+                variant="borderless"
+              />
+              <Tooltip title="发送">
+                <Button
+                  type="primary"
+                  shape="circle"
+                  aria-label="发送问题"
+                  icon={<SendHorizontal size={17} />}
+                  loading={sending}
+                  disabled={!question.trim()}
+                  onClick={sendQuestion}
+                />
+              </Tooltip>
             </div>
-          </section>
+            <span>
+              {selectedDocumentIds.length > 0
+                ? `仅检索已选的 ${selectedDocumentIds.length} 份资料`
+                : '检索当前知识空间'}
+            </span>
+          </footer>
+        </main>
 
-          <section className="panel">
-            <h3>工具调用</h3>
-            <div className="compact-list">
-              {toolCalls.length === 0 ? <span>暂无调用</span> : toolCalls.map((toolCall) => (
-                <article key={toolCall.id}>
-                  <strong>{toolLabel[toolCall.toolName] ?? toolCall.toolName}</strong>
-                  <span>{toolCall.responseSummary ?? toolCall.errorMessage ?? '已记录调用结果'}</span>
-                  <Tag color={toolCall.status === 'SUCCEEDED' ? 'green' : 'red'}>{toolCall.status}</Tag>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel">
-            <h3>最近笔记</h3>
-            <div className="compact-list">
-              {notes.length === 0 ? <span>暂无笔记</span> : notes.map((note) => (
-                <article key={note.id}><strong>{note.title}</strong><span>{note.content}</span></article>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel">
-            <h3>最近复习卡片</h3>
-            <div className="compact-list">
-              {flashcards.length === 0 ? <span>暂无卡片</span> : flashcards.map((flashcard) => (
-                <article key={flashcard.id}>
-                  <strong>{flashcard.question}</strong>
-                  <span>{flashcard.answer}</span>
-                </article>
-              ))}
-            </div>
-          </section>
+        <aside className="chat-context-inspector">
+          <Tabs
+            defaultActiveKey="citations"
+            items={[
+              {
+                key: 'citations',
+                label: <span><FileText size={15} />引用</span>,
+                children: (
+                  <div className="chat-inspector-list">
+                    {citations.length === 0 ? <span className="chat-empty-label">暂无引用</span> : citations.map((citation) => (
+                      <article key={`${citation.documentId}-${citation.chunkId}`}>
+                        <strong>{citation.documentTitle}</strong>
+                        <ReadableText content={citation.excerpt} />
+                        <Tag color="blue">相关度 {citation.score.toFixed(3)}</Tag>
+                      </article>
+                    ))}
+                  </div>
+                ),
+              },
+              {
+                key: 'tools',
+                label: <span><Wrench size={15} />工具</span>,
+                children: (
+                  <div className="chat-inspector-list">
+                    {toolCalls.length === 0 ? <span className="chat-empty-label">暂无调用</span> : toolCalls.map((toolCall) => (
+                      <article key={toolCall.id}>
+                        <strong>{toolLabel[toolCall.toolName] ?? toolCall.toolName}</strong>
+                        <span>{toolCall.responseSummary ?? toolCall.errorMessage ?? '已记录调用结果'}</span>
+                        <Tag color={toolCall.status === 'SUCCEEDED' ? 'green' : 'red'}>{toolCall.status}</Tag>
+                      </article>
+                    ))}
+                  </div>
+                ),
+              },
+              {
+                key: 'assets',
+                label: <span><NotebookPen size={15} />资产</span>,
+                children: (
+                  <div className="chat-inspector-assets">
+                    <h3>最近笔记</h3>
+                    <div className="chat-inspector-list">
+                      {notes.length === 0 ? <span className="chat-empty-label">暂无笔记</span> : notes.map((note) => (
+                        <article key={note.id}><strong>{note.title}</strong><span>{note.content}</span></article>
+                      ))}
+                    </div>
+                    <h3>最近复习卡片</h3>
+                    <div className="chat-inspector-list">
+                      {flashcards.length === 0 ? <span className="chat-empty-label">暂无卡片</span> : flashcards.map((flashcard) => (
+                        <article key={flashcard.id}>
+                          <strong>{flashcard.question}</strong>
+                          <span>{flashcard.answer}</span>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </aside>
       </div>
 
