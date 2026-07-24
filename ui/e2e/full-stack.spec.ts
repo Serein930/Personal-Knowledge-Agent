@@ -10,7 +10,7 @@ test('文件摄取、知识库展示和流式问答形成真实闭环', async ({
   expect(healthResponse.ok()).toBeTruthy();
 
   await page.goto('/');
-  await page.getByRole('tab', { name: '注册' }).click();
+  await page.locator('.ant-tabs-tab').filter({ hasText: '创建账号' }).click();
   const registrationPanel = page.locator('.ant-tabs-tabpane-active');
   const registrationInputs = registrationPanel.locator('input');
   const uniqueUsername = `e2e_${Date.now()}`;
@@ -18,20 +18,17 @@ test('文件摄取、知识库展示和流式问答形成真实闭环', async ({
   await registrationInputs.nth(1).fill('全链路测试用户');
   await registrationInputs.nth(2).fill(`${uniqueUsername}@example.com`);
   await registrationInputs.nth(3).fill('AgentMind-E2E-Password-2026');
-  await registrationPanel.getByRole('button', { name: '创建账号' }).click();
+  await registrationPanel.getByRole('button', { name: '创建个人知识空间' }).click();
   await expect(page.getByText('AgentMind', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '采集中心' }).click();
   const fixturePath = path.resolve(process.cwd(), 'e2e/fixtures/agentmind-e2e.md');
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
-  await page.getByRole('button', { name: '提交文件' }).click();
+  await page.getByRole('button', { name: '上传并开始解析' }).click();
 
   await expect(page.getByText('文件摄取任务已创建')).toBeVisible();
-  const ingestionTaskPanel = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: '本次联调任务' }),
-  });
-  await expect(ingestionTaskPanel.getByText('agentmind-e2e.md')).toBeVisible();
-  await expect(ingestionTaskPanel.getByText('已完成', { exact: true })).toBeVisible();
+  await expect(page.getByText(/任务 #.+· 已完成/)).toBeVisible();
+  await expect(page.getByText(/agentmind-e2e\.md/).last()).toBeVisible();
 
   await page.getByRole('button', { name: '知识库' }).click();
   const uploadedDocumentRow = page.getByRole('row').filter({ hasText: 'agentmind-e2e.md' });
@@ -41,15 +38,13 @@ test('文件摄取、知识库展示和流式问答形成真实闭环', async ({
 
   await page.getByRole('button', { name: 'Agent 问答' }).click();
   const question = 'AgentMind-E2E-2026 的知识处理闭环包含哪些步骤？';
-  await page.getByPlaceholder('例如：根据资料生成一张线程池复习卡片').fill(question);
-  await page.getByRole('button', { name: '发送' }).click();
+  await page.getByPlaceholder('向你的知识库提问').fill(question);
+  await page.getByRole('button', { name: '发送问题' }).click();
 
   await expect(page.getByText(question, { exact: true })).toBeVisible();
-  const assistantAnswer = page.locator('.chat-message--agent p').last();
+  const assistantAnswer = page.locator('.chat-turn--assistant .chat-message__content').last();
   await expect(assistantAnswer).toContainText('根据当前知识库检索结果', { timeout: 30_000 });
-  const citationPanel = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: '引用来源' }),
-  });
+  const citationPanel = page.locator('.chat-context-inspector');
   await expect(citationPanel).toContainText('AgentMind-E2E-2026');
   await expect(citationPanel.getByText('暂无引用')).toHaveCount(0);
 

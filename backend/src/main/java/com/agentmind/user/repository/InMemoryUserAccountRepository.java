@@ -50,4 +50,18 @@ public class InMemoryUserAccountRepository implements UserAccountRepository {
         return users.values().stream().anyMatch(user -> user.username().equalsIgnoreCase(username)
                 || user.email().equalsIgnoreCase(email));
     }
+
+    @Override
+    public synchronized boolean updatePasswordHash(Long userId, String passwordHash) {
+        UserAccount current = users.get(userId);
+        if (current == null) {
+            return false;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        users.put(userId, new UserAccount(
+                current.id(), current.username(), current.displayName(), current.email(), passwordHash,
+                current.role(), current.status(), current.createdAt(), now
+        ));
+        return true;
+    }
 }

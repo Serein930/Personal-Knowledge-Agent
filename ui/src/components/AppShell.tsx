@@ -1,6 +1,6 @@
 import { Button, Select, Tooltip } from 'antd';
 import {
-  BarChart3,
+  TrendingUp,
   BookOpenText,
   BrainCircuit,
   Database,
@@ -26,7 +26,7 @@ const navItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
   { key: 'ingestion', label: '采集中心', icon: <FileUp size={18} /> },
   { key: 'chat', label: 'Agent 问答', icon: <BrainCircuit size={18} /> },
   { key: 'study', label: '学习计划', icon: <GraduationCap size={18} /> },
-  { key: 'evaluation', label: '评估观测', icon: <BarChart3 size={18} /> },
+  { key: 'evaluation', label: '学习洞察', icon: <TrendingUp size={18} /> },
 ];
 
 const systemNavItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
@@ -39,7 +39,7 @@ const pageTitle: Record<PageKey, string> = {
   ingestion: '采集中心',
   chat: 'Agent 问答',
   study: '学习计划',
-  evaluation: '评估观测',
+  evaluation: '学习洞察',
   settings: '系统设置',
 };
 

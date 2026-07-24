@@ -206,6 +206,11 @@ agentmind:
         maximum-source-characters: 16000
         maximum-answer-characters: 480
         failure-fallback-enabled: true
+      web-supplement:
+        enabled: ${AGENTMIND_FLASHCARD_WEB_SEARCH_ENABLED:false}
+        base-url: ${AGENTMIND_WEB_SEARCH_BASE_URL:https://api.search.brave.com}
+        api-key: ${AGENTMIND_WEB_SEARCH_API_KEY:}
+        result-count: ${AGENTMIND_WEB_SEARCH_RESULT_COUNT:3}
     maintenance:
       enabled: false
       fixed-delay-millis: 21600000

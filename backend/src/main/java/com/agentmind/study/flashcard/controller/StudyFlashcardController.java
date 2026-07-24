@@ -4,6 +4,8 @@ import com.agentmind.agent.tool.model.AgentToolExecutionContext;
 import com.agentmind.common.response.ApiResponse;
 import com.agentmind.common.response.PageResponse;
 import com.agentmind.study.flashcard.model.dto.StudyFlashcardResponse;
+import com.agentmind.study.flashcard.model.dto.BulkDeleteFlashcardsRequest;
+import com.agentmind.study.flashcard.model.dto.BulkDeleteFlashcardsResponse;
 import com.agentmind.study.flashcard.model.dto.StudyFlashcardReviewResponse;
 import com.agentmind.study.flashcard.model.dto.ManageFlashcardRequest;
 import com.agentmind.study.flashcard.model.dto.RescheduleFlashcardRequest;
@@ -76,6 +78,16 @@ public class StudyFlashcardController {
         flashcardApplicationService.delete(
                 new AgentToolExecutionContext(ownerUserId, workspaceId, null), flashcardId);
         return ApiResponse.success("复习卡片已删除", null);
+    }
+
+    @PostMapping("/bulk-delete")
+    public ApiResponse<BulkDeleteFlashcardsResponse> bulkDelete(
+            @PathVariable @Positive Long workspaceId,
+            @CurrentUserId @Positive Long ownerUserId,
+            @Valid @RequestBody BulkDeleteFlashcardsRequest request
+    ) {
+        return ApiResponse.success(flashcardApplicationService.deleteBatch(
+                new AgentToolExecutionContext(ownerUserId, workspaceId, null), request));
     }
 
     /**

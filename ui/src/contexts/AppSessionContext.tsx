@@ -9,7 +9,12 @@ const TOKEN_KEY = 'agentmind.access-token';
 const TOKEN_EXPIRY_KEY = 'agentmind.access-token-expiry';
 const WORKSPACE_KEY = 'agentmind.workspace-id';
 
-interface LoginInput { username: string; password: string }
+interface LoginInput {
+  username: string;
+  password: string;
+  captchaChallengeId: string;
+  captchaCode: string;
+}
 interface RegisterInput extends LoginInput { displayName: string; email: string }
 
 interface AppSessionValue {

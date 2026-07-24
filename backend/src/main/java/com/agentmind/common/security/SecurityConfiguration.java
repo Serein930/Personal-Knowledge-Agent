@@ -53,6 +53,7 @@ public class SecurityConfiguration {
             http.authorizeHttpRequests(authorize -> authorize
                             .requestMatchers("/actuator/health", "/actuator/health/**", "/livez", "/readyz",
                                     "/actuator/info", "/api/v1/auth/login", "/api/v1/auth/register").permitAll()
+                            .requestMatchers("/api/v1/auth/captcha", "/api/v1/auth/password").permitAll()
                             .anyRequest().authenticated())
                     .oauth2ResourceServer(resourceServer -> resourceServer
                             .jwt(Customizer.withDefaults())

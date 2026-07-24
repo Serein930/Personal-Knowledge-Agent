@@ -6,6 +6,8 @@ import {
   FileText,
   Globe2,
   Layers3,
+  ListTree,
+  CircleHelp,
   Link,
   RefreshCw,
   UploadCloud,
@@ -340,9 +342,14 @@ export function IngestionPage() {
                   <span><FileText size={17} /></span>
                   <div>
                     <strong>{insight.title}</strong>
-                    <small>{insight.chunks.length} 个语义片段 · {insight.keyPoints.length} 个核心重点</small>
+                    <small>{new Set(insight.chunks.map((chunk) => chunk.headingPath).filter(Boolean)).size || 1} 个章节 · {insight.chunks.length} 个语义片段 · {insight.keyPoints.length} 个核心重点</small>
                   </div>
                 </header>
+                <div className="ingestion-insight-metrics">
+                  <div><ListTree size={15} /><span>章节覆盖</span><strong>{Math.min(100, Math.round(insight.keyPoints.length * 100 / Math.max(1, insight.chunks.length)))}%</strong></div>
+                  <div><Sparkline value={insight.chunks.length} /><span>平均片段</span><strong>{Math.round(insight.chunks.reduce((total, chunk) => total + chunk.content.length, 0) / Math.max(1, insight.chunks.length))} 字</strong></div>
+                  <div><CircleHelp size={15} /><span>可探索问题</span><strong>{insight.keyPoints.length} 个</strong></div>
+                </div>
                 <div className="knowledge-outline-list">
                   {insight.keyPoints.map((point, index) => {
                     const chunk = insight.chunks.find((item) => item.id === point.chunkId);
@@ -356,6 +363,7 @@ export function IngestionPage() {
                         <span className="knowledge-outline-content">
                           <strong>{point.title}</strong>
                           <small>{point.summary}</small>
+                          <em>建议探索：如何理解“{point.title}”？</em>
                         </span>
                         <ChevronRight size={17} />
                       </button>
@@ -383,6 +391,10 @@ export function IngestionPage() {
               <strong>重点摘要</strong>
               <p>{selectedPoint.point.summary}</p>
             </div>
+            <div className="knowledge-detail__question">
+              <CircleHelp size={17} />
+              <div><strong>建议进一步思考</strong><p>“{selectedPoint.point.title}”解决了什么问题，在实际场景中如何应用？</p></div>
+            </div>
             <div className="knowledge-detail__content">
               <div>
                 <strong>原文片段</strong>
@@ -397,4 +409,8 @@ export function IngestionPage() {
       </Drawer>
     </div>
   );
+}
+
+function Sparkline({ value }: { value: number }) {
+  return <span className="mini-sparkline" aria-label={`${value} 个片段`}><i /><i /><i /><i /></span>;
 }

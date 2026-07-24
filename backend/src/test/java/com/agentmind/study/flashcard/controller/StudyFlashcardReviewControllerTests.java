@@ -109,6 +109,44 @@ class StudyFlashcardReviewControllerTests {
                 .andExpect(jsonPath("$.code", equalTo("BAD_REQUEST")));
     }
 
+    @Test
+    void bulkDeleteShouldSupportSelectedCardsAndClearingWorkspace() throws Exception {
+        long workspaceId = 44_005L;
+        StudyFlashcard selectedCard = saveCard(workspaceId, OffsetDateTime.now());
+        StudyFlashcard retainedCard = saveCard(workspaceId, OffsetDateTime.now());
+
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/flashcards/bulk-delete",
+                            workspaceId
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cardIds":[%d],"deleteAll":false}
+                                """.formatted(selectedCard.id())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount", equalTo(1)));
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/flashcards", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total", equalTo(1)))
+                .andExpect(jsonPath("$.data.records[0].id", equalTo(retainedCard.id().intValue())));
+
+        mockMvc.perform(post(
+                            "/api/v1/workspaces/{workspaceId}/flashcards/bulk-delete",
+                            workspaceId
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cardIds":[],"deleteAll":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount", equalTo(1)));
+
+        mockMvc.perform(get("/api/v1/workspaces/{workspaceId}/flashcards", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total", equalTo(0)));
+    }
+
     private org.springframework.test.web.servlet.ResultActions submit(
             long workspaceId,
             long flashcardId,

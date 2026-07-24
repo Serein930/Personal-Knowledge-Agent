@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.agentmind.study.flashcard.config.FlashcardWebSupplementProperties;
 
 /**
  * 根据用户明确选择的文件或网页片段直接创建复习卡片。
@@ -31,7 +33,26 @@ public class DocumentFlashcardGenerationService {
     private final StudyFlashcardApplicationService flashcardService;
     private final WorkspaceAccessService workspaceAccessService;
     private final DocumentFlashcardCandidateGenerator candidateGenerator;
+    private final FlashcardWebSupplementService webSupplementService;
 
+    @Autowired
+    public DocumentFlashcardGenerationService(
+            DocumentMetadataRepository documentRepository,
+            DocumentChunkRepository chunkRepository,
+            StudyFlashcardApplicationService flashcardService,
+            WorkspaceAccessService workspaceAccessService,
+            DocumentFlashcardCandidateGenerator candidateGenerator,
+            FlashcardWebSupplementService webSupplementService
+    ) {
+        this.documentRepository = documentRepository;
+        this.chunkRepository = chunkRepository;
+        this.flashcardService = flashcardService;
+        this.workspaceAccessService = workspaceAccessService;
+        this.candidateGenerator = candidateGenerator;
+        this.webSupplementService = webSupplementService;
+    }
+
+    /** 保留给离线服务测试使用，默认不访问外部搜索服务。 */
     public DocumentFlashcardGenerationService(
             DocumentMetadataRepository documentRepository,
             DocumentChunkRepository chunkRepository,
@@ -39,11 +60,14 @@ public class DocumentFlashcardGenerationService {
             WorkspaceAccessService workspaceAccessService,
             DocumentFlashcardCandidateGenerator candidateGenerator
     ) {
-        this.documentRepository = documentRepository;
-        this.chunkRepository = chunkRepository;
-        this.flashcardService = flashcardService;
-        this.workspaceAccessService = workspaceAccessService;
-        this.candidateGenerator = candidateGenerator;
+        this(
+                documentRepository,
+                chunkRepository,
+                flashcardService,
+                workspaceAccessService,
+                candidateGenerator,
+                new FlashcardWebSupplementService(new FlashcardWebSupplementProperties())
+        );
     }
 
     public List<StudyFlashcardResponse> generate(
@@ -82,13 +106,18 @@ public class DocumentFlashcardGenerationService {
             created.add(flashcardService.createFromAgent(
                     context,
                     candidate.question(),
-                    candidate.answer(),
+                    composeAnswer(candidate),
                     candidate.explanation() + " 来源片段：" + candidate.sourceChunkId(),
                     candidate.sourceDocumentId(),
                     candidate.topic()
             ));
         }
         return List.copyOf(created);
+    }
+
+    private String composeAnswer(GeneratedDocumentFlashcard candidate) {
+        return "【资料依据】\n" + candidate.answer().trim()
+                + "\n\n【联网补充】\n" + webSupplementService.supplement(candidate.question());
     }
 
     private DocumentFlashcardSource toSource(DocumentMetadata document, DocumentChunk chunk) {

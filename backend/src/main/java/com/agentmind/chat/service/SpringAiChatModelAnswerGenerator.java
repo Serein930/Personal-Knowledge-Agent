@@ -194,6 +194,11 @@ public class SpringAiChatModelAnswerGenerator implements AnswerGenerator {
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
             throw new IllegalStateException("真实模型没有返回有效回答");
         }
+        // 工具调用中间轮次可以只有 tool call 而没有自然语言文本；最终回答仍必须包含有效文本。
+        if (!response.hasToolCalls()
+                && !org.springframework.util.StringUtils.hasText(response.getResult().getOutput().getText())) {
+            throw new IllegalStateException("真实模型没有返回有效回答");
+        }
     }
 
     private List<AgentToolCallSummaryResponse> findToolCalls(AnswerGenerationRequest request) {

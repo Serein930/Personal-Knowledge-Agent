@@ -17,6 +17,7 @@ import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.StreamingChatModel;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
 
@@ -84,6 +85,24 @@ class SpringAiStreamingAnswerGeneratorTests {
     }
 
     @Test
+    void generateShouldUseSynchronousModelWhenProviderStreamFailsBeforeContent() {
+        RagAnswerGenerationProperties successProperties = new RagAnswerGenerationProperties();
+        successProperties.setToolCallingEnabled(false);
+        SpringAiStreamingAnswerGenerator compatibleGenerator = new SpringAiStreamingAnswerGenerator(
+                new FailingStreamingChatModel(),
+                new SuccessfulSynchronousChatModel(),
+                successProperties,
+                new RagModelCallLogger(new InMemoryRagModelCallObservationRepository())
+        );
+        List<String> deltas = new ArrayList<>();
+
+        StreamingGeneratedAnswer answer = compatibleGenerator.generate(request(), deltas::add, () -> { });
+
+        assertThat(String.join("", deltas)).isEqualTo("同步兼容回答");
+        assertThat(answer.metadata().refused()).isFalse();
+    }
+
+    @Test
     void generateShouldThrowAndSaveOneFailureObservationWhenFallbackIsDisabled() {
         properties.setSpringAiFailureFallbackEnabled(false);
 
@@ -116,6 +135,14 @@ class SpringAiStreamingAnswerGeneratorTests {
         @Override
         public Flux<ChatResponse> stream(Prompt prompt) {
             return Flux.error(new IllegalStateException("流式模型不可用：供应商内部细节"));
+        }
+    }
+
+    private static class SuccessfulSynchronousChatModel implements ChatModel {
+
+        @Override
+        public ChatResponse call(Prompt prompt) {
+            return new ChatResponse(List.of(new Generation(new AssistantMessage("同步兼容回答"))));
         }
     }
 

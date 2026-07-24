@@ -39,6 +39,12 @@ export interface AuthTokenDto {
   defaultWorkspaceId: number;
 }
 
+export interface CaptchaChallengeDto {
+  challengeId: string;
+  imageDataUri: string;
+  expiresAt: string;
+}
+
 export interface KnowledgeDocumentDto {
   id: string;
   title: string;

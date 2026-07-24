@@ -78,6 +78,22 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
         this.toolCallingManager = null;
     }
 
+    /** 供兼容性测试显式组合“流式失败、同步成功”的两个模型端口。 */
+    SpringAiStreamingAnswerGenerator(
+            StreamingChatModel streamingChatModel,
+            ChatModel synchronousChatModel,
+            RagAnswerGenerationProperties properties,
+            RagModelCallLogger modelCallLogger
+    ) {
+        this.streamingChatModel = streamingChatModel;
+        this.planningChatModel = synchronousChatModel;
+        this.properties = properties;
+        this.modelCallLogger = modelCallLogger;
+        this.toolCallbackAdapter = null;
+        this.toolCallingOrchestrator = null;
+        this.toolCallingManager = null;
+    }
+
     @Override
     public String generatorType() {
         return GENERATOR_TYPE;
@@ -220,23 +236,63 @@ public class SpringAiStreamingAnswerGenerator implements StreamingAnswerGenerato
     ) {
         java.util.concurrent.atomic.AtomicReference<TokenUsageResponse> latestUsage =
                 new java.util.concurrent.atomic.AtomicReference<>(ChatModelTokenUsage.zero());
-        streamingChatModel.stream(prompt)
-                .timeout(timeout)
-                .doOnNext(response -> {
-                    TokenUsageResponse usage = ChatModelTokenUsage.from(response);
-                    if (usage.totalTokens() > 0) {
-                        latestUsage.set(usage);
-                    }
-                })
-                .map(response -> response == null
-                        || response.getResult() == null
-                        || response.getResult().getOutput() == null
-                        ? ""
-                        : nullToEmpty(response.getResult().getOutput().getText()))
-                .filter(delta -> !delta.isEmpty())
-                .doOnNext(delta -> emitDelta(delta, streamedAnswer, deltaConsumer, cancellationCheck))
-                .blockLast();
+        try {
+            streamingChatModel.stream(prompt)
+                    .timeout(timeout)
+                    .doOnNext(response -> {
+                        TokenUsageResponse usage = ChatModelTokenUsage.from(response);
+                        if (usage.totalTokens() > 0) {
+                            latestUsage.set(usage);
+                        }
+                    })
+                    .map(response -> response == null
+                            || response.getResult() == null
+                            || response.getResult().getOutput() == null
+                            ? ""
+                            : nullToEmpty(response.getResult().getOutput().getText()))
+                    .filter(delta -> !delta.isBlank())
+                    .doOnNext(delta -> emitDelta(delta, streamedAnswer, deltaConsumer, cancellationCheck))
+                    .blockLast();
+        } catch (RuntimeException streamException) {
+            if (!streamedAnswer.isEmpty() || planningChatModel == null) {
+                throw streamException;
+            }
+            return callSynchronousCompatibilityFallback(
+                    prompt, streamedAnswer, deltaConsumer, cancellationCheck, streamException);
+        }
+        if (streamedAnswer.isEmpty() && planningChatModel != null) {
+            return callSynchronousCompatibilityFallback(
+                    prompt, streamedAnswer, deltaConsumer, cancellationCheck, null);
+        }
         return latestUsage.get();
+    }
+
+    /**
+     * 部分 OpenAI 兼容供应商不完整实现 SSE，但普通 Chat Completions 调用可用。
+     * 流尚未产生任何正文时，使用相同模型执行一次同步请求，再按应用层分片继续发送 SSE。
+     */
+    private TokenUsageResponse callSynchronousCompatibilityFallback(
+            Prompt prompt,
+            StringBuilder streamedAnswer,
+            Consumer<String> deltaConsumer,
+            RagStreamCancellationCheck cancellationCheck,
+            RuntimeException streamException
+    ) {
+        try {
+            ChatResponse response = planningChatModel.call(prompt);
+            validatePlanningResponse(response);
+            String content = nullToEmpty(response.getResult().getOutput().getText());
+            if (content.isBlank()) {
+                throw new IllegalStateException("真实模型同步兼容调用未返回正文");
+            }
+            emitText(content, streamedAnswer, deltaConsumer, cancellationCheck);
+            return ChatModelTokenUsage.from(response);
+        } catch (RuntimeException synchronousException) {
+            if (streamException != null) {
+                synchronousException.addSuppressed(streamException);
+            }
+            throw synchronousException;
+        }
     }
 
     /**

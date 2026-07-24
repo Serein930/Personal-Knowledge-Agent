@@ -10,11 +10,14 @@ import com.agentmind.study.flashcard.model.StudyFlashcardStatus;
 import com.agentmind.study.flashcard.model.dto.ManageFlashcardRequest;
 import com.agentmind.study.flashcard.model.dto.RescheduleFlashcardRequest;
 import com.agentmind.study.flashcard.model.dto.StudyFlashcardResponse;
+import com.agentmind.study.flashcard.model.dto.BulkDeleteFlashcardsRequest;
+import com.agentmind.study.flashcard.model.dto.BulkDeleteFlashcardsResponse;
 import com.agentmind.study.flashcard.repository.StudyFlashcardRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
@@ -24,7 +27,7 @@ import org.springframework.util.StringUtils;
 public class StudyFlashcardApplicationService {
 
     private static final int MAX_QUESTION_LENGTH = 240;
-    private static final int MAX_ANSWER_LENGTH = 800;
+    private static final int MAX_ANSWER_LENGTH = 1600;
     private static final List<String> FORBIDDEN_FAILURE_TEXTS = List.of(
             "模型调用失败", "流式调用失败", "降级模式", "请稍后重试", "回答生成失败"
     );
@@ -169,6 +172,34 @@ public class StudyFlashcardApplicationService {
                 context.ownerUserId(), context.workspaceId(), flashcardId)) {
             throw new BusinessException(ErrorCode.RESOURCE_CONFLICT, "卡片状态已经变化，请刷新后重试");
         }
+    }
+
+    /**
+     * 在同一业务事务中批量删除用户明确选择的卡片，支持清空当前知识空间。
+     * 每张卡片都再次执行归属检查，不能通过批量入口绕过知识空间隔离。
+     */
+    @Transactional
+    public BulkDeleteFlashcardsResponse deleteBatch(
+            AgentToolExecutionContext context,
+            BulkDeleteFlashcardsRequest request
+    ) {
+        authorizer.authorize(context);
+        List<Long> targetIds = request.deleteAll()
+                ? flashcardRepository.findAllByOwnerUserIdAndWorkspaceId(
+                        context.ownerUserId(), context.workspaceId()).stream().map(StudyFlashcard::id).toList()
+                : request.cardIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (targetIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "请选择需要删除的复习卡片");
+        }
+        int deletedCount = 0;
+        for (Long flashcardId : targetIds) {
+            requireFlashcard(context, flashcardId);
+            if (flashcardRepository.deleteByOwnerUserIdAndWorkspaceIdAndId(
+                    context.ownerUserId(), context.workspaceId(), flashcardId)) {
+                deletedCount++;
+            }
+        }
+        return new BulkDeleteFlashcardsResponse(deletedCount);
     }
 
     public StudyFlashcardResponse suspend(

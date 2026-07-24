@@ -25,6 +25,7 @@ agentmind:
     spring-ai-failure-fallback-enabled: ${AGENTMIND_RAG_FAILURE_FALLBACK_ENABLED:true}
     # 部分 OpenAI 兼容服务不完整支持 Tool Calling。本地问答已有 RAG 上下文，默认关闭可提升兼容性。
     tool-calling-enabled: ${AGENTMIND_RAG_TOOL_CALLING_ENABLED:false}
+    # 供应商 SSE 不兼容时会自动回退到同一模型的同步调用，不会直接返回模拟回答。
   study:
     flashcard:
       generation:

@@ -13,4 +13,6 @@ public interface UserAccountRepository {
     Optional<UserAccount> findByUsername(String username);
 
     boolean existsByUsernameOrEmail(String username, String email);
+
+    boolean updatePasswordHash(Long userId, String passwordHash);
 }

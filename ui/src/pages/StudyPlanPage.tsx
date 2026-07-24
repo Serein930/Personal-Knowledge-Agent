@@ -1,4 +1,4 @@
-import { Button, Empty, InputNumber, Modal, Popconfirm, Progress, Select, Space, Spin, Tag, Tooltip, message } from 'antd';
+import { Button, Checkbox, Empty, InputNumber, Modal, Popconfirm, Progress, Select, Space, Spin, Tag, Tooltip, message } from 'antd';
 import {
   CalendarClock,
   CheckCircle2,
@@ -50,6 +50,7 @@ export function StudyPlanPage() {
   const [generationOpen, setGenerationOpen] = useState(false);
   const [generationDocumentIds, setGenerationDocumentIds] = useState<number[]>([]);
   const [generationCount, setGenerationCount] = useState(5);
+  const [selectedCardIds, setSelectedCardIds] = useState<number[]>([]);
 
   const loadWorkspace = useCallback(async () => {
     const workspacePath = `/v1/workspaces/${workspaceId}`;
@@ -188,6 +189,24 @@ export function StudyPlanPage() {
     }
   };
 
+  const bulkDeleteCards = async (deleteAll = false) => {
+    if (!deleteAll && selectedCardIds.length === 0) return;
+    setSubmitting(true);
+    try {
+      const result = await apiClient.post<{ deletedCount: number }>(
+        `/v1/workspaces/${workspaceId}/flashcards/bulk-delete`,
+        { cardIds: deleteAll ? [] : selectedCardIds, deleteAll },
+      );
+      setSelectedCardIds([]);
+      await loadWorkspace();
+      message.success(`已删除 ${result.deletedCount} 张复习卡片`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批量删除失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return <div className="study-loading"><Spin size="large" /></div>;
   }
@@ -238,9 +257,8 @@ export function StudyPlanPage() {
                 <h3>{currentItem.flashcard.question}</h3>
               </div>
               {answerVisible ? (
-                <div className="review-answer">
-                  <strong>答案</strong>
-                  <ReadableText className="readable-text" content={currentItem.flashcard.answer} />
+                <div className="review-answer answer-evidence-stack">
+                  <FlashcardAnswer answer={currentItem.flashcard.answer} />
                   {currentItem.flashcard.explanation ? (
                     <span className="review-answer__source">{currentItem.flashcard.explanation}</span>
                   ) : null}
@@ -309,10 +327,44 @@ export function StudyPlanPage() {
       </div>
 
       <section className="panel">
-        <h3>卡片管理</h3>
+        <div className="flashcard-management-header">
+          <div>
+            <h3>卡片管理</h3>
+            <span>共 {cards.length} 张，已选择 {selectedCardIds.length} 张</span>
+          </div>
+          <Space>
+            <Checkbox
+              checked={cards.length > 0 && selectedCardIds.length === cards.length}
+              indeterminate={selectedCardIds.length > 0 && selectedCardIds.length < cards.length}
+              onChange={(event) => setSelectedCardIds(event.target.checked ? cards.map((card) => card.id) : [])}
+            >
+              全选
+            </Checkbox>
+            <Popconfirm
+              title={`删除已选择的 ${selectedCardIds.length} 张卡片？`}
+              disabled={selectedCardIds.length === 0}
+              onConfirm={() => bulkDeleteCards(false)}
+            >
+              <Button danger disabled={selectedCardIds.length === 0} icon={<Trash2 size={15} />}>删除所选</Button>
+            </Popconfirm>
+            <Popconfirm
+              title="清空当前知识空间的全部复习卡片？"
+              description="该操作不可撤销，相关复习队列也会同步失效。"
+              onConfirm={() => bulkDeleteCards(true)}
+            >
+              <Button danger type="primary" disabled={cards.length === 0}>清空全部</Button>
+            </Popconfirm>
+          </Space>
+        </div>
         <div className="flashcard-management-list">
           {cards.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无复习卡片" /> : cards.map((card) => (
-            <article key={card.id}>
+            <article key={card.id} className={selectedCardIds.includes(card.id) ? 'is-selected' : undefined}>
+              <Checkbox
+                checked={selectedCardIds.includes(card.id)}
+                onChange={(event) => setSelectedCardIds((current) => (
+                  event.target.checked ? [...current, card.id] : current.filter((id) => id !== card.id)
+                ))}
+              />
               <div>
                 <strong>{card.question}</strong>
                 <span>下次复习 {new Date(card.dueAt).toLocaleString()}{card.sourceDocumentId ? ` · 来源文档 ${card.sourceDocumentId}` : ''}</span>
@@ -365,5 +417,37 @@ export function StudyPlanPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+function FlashcardAnswer({ answer }: { answer: string }) {
+  const sourceMarker = '【资料依据】';
+  const supplementMarker = '【联网补充】';
+  if (!answer.includes(sourceMarker)) {
+    return (
+      <section className="answer-evidence answer-evidence--source">
+        <strong>资料依据</strong>
+        <ReadableText className="readable-text" content={answer} />
+      </section>
+    );
+  }
+  const sourceStart = answer.indexOf(sourceMarker) + sourceMarker.length;
+  const supplementStart = answer.indexOf(supplementMarker);
+  const sourceAnswer = answer.slice(sourceStart, supplementStart > -1 ? supplementStart : undefined).trim();
+  const supplement = supplementStart > -1
+    ? answer.slice(supplementStart + supplementMarker.length).trim() : '';
+  return (
+    <>
+      <section className="answer-evidence answer-evidence--source">
+        <strong>知识库资料依据</strong>
+        <ReadableText className="readable-text" content={sourceAnswer} />
+      </section>
+      {supplement ? (
+        <section className="answer-evidence answer-evidence--web">
+          <strong>联网搜索补充</strong>
+          <ReadableText className="readable-text" content={supplement} />
+        </section>
+      ) : null}
+    </>
   );
 }

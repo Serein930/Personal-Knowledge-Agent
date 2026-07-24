@@ -2,6 +2,7 @@ import { Button, Input, Modal, Popconfirm, Select, Tabs, Tag, Tooltip, message }
 import {
   BookOpen,
   Bot,
+  Activity,
   Check,
   FileText,
   History,
@@ -67,6 +68,7 @@ export function AgentChatPage() {
   const [keyPoints, setKeyPoints] = useState<Array<DocumentKeyPointDto & { documentId: number }>>([]);
   const [sending, setSending] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const [modelStatus, setModelStatus] = useState<'ready' | 'generating' | 'success' | 'error'>('ready');
   const threadRef = useRef<HTMLDivElement>(null);
 
   const loadKnowledgeOutputs = useCallback(async () => {
@@ -170,6 +172,7 @@ export function AgentChatPage() {
     setCitations([]);
     setToolCalls([]);
     setSending(true);
+    setModelStatus('generating');
     try {
       await streamRagChat(workspaceId, normalizedQuestion, conversationId, {
         onMetadata: (event) => setConversationId(event.conversationId),
@@ -179,11 +182,15 @@ export function AgentChatPage() {
         onCitation: (event) => setCitations((current) => [...current, event.citation]),
         onToolCall: (event) => setToolCalls((current) => [...current, event.toolCall]),
         onConfirmationRequired: (event) => setPendingProposal(event.proposal),
+        onComplete: () => setModelStatus('success'),
       }, selectedDocumentIds);
     } catch (error) {
+      setModelStatus('error');
       message.error(error instanceof Error ? error.message : '问答请求失败');
       setMessages((current) => current.map((item) => (
-        item.id === assistantViewId && !item.content ? { ...item, content: '回答生成失败，请稍后重试。' } : item
+        item.id === assistantViewId && !item.content
+          ? { ...item, content: '真实模型未能返回回答。请检查模型服务地址、模型名称和 API Key 后重试。' }
+          : item
       )));
     } finally {
       setSending(false);
@@ -267,6 +274,10 @@ export function AgentChatPage() {
                 <span>知识空间 {workspaceId}</span>
               </div>
             </div>
+            <div className={`chat-model-status is-${modelStatus}`}>
+              <Activity size={14} />
+              <span>{modelStatus === 'generating' ? '模型生成中' : modelStatus === 'error' ? '模型异常' : '模型已连接'}</span>
+            </div>
             <Select
               className="chat-mobile-history"
               value={conversationId}
@@ -289,13 +300,20 @@ export function AgentChatPage() {
               onChange={setSelectedDocumentIds}
               aria-label="问答资料范围"
             />
+            <Tag>{selectedDocumentIds.length || documents.length} 份资料</Tag>
           </div>
 
           {keyPoints.length > 0 ? (
             <div className="chat-key-point-strip">
               <Sparkles size={15} />
               <div>{keyPoints.slice(0, 8).map((point) => (
-                <Tag key={`${point.documentId}-${point.chunkId}`}>{point.title}</Tag>
+                <button
+                  type="button"
+                  key={`${point.documentId}-${point.chunkId}`}
+                  onClick={() => setQuestion(`请结合原文详细解释“${point.title}”，并给出具体出处。`)}
+                >
+                  {point.title}
+                </button>
               ))}</div>
             </div>
           ) : null}
@@ -312,6 +330,7 @@ export function AgentChatPage() {
                     </button>
                   ))}
                 </div>
+                <p className="chat-welcome__hint">回答将优先引用当前知识空间，并在资料不足时明确说明。</p>
               </div>
             ) : messages.map((item) => (
               <article
@@ -379,9 +398,9 @@ export function AgentChatPage() {
                   <div className="chat-inspector-list">
                     {citations.length === 0 ? <span className="chat-empty-label">暂无引用</span> : citations.map((citation) => (
                       <article key={`${citation.documentId}-${citation.chunkId}`}>
-                        <strong>{citation.documentTitle}</strong>
+                        <div className="citation-heading"><strong>{citation.documentTitle}</strong><span>#{citation.chunkId}</span></div>
                         <ReadableText content={citation.excerpt} />
-                        <Tag color="blue">相关度 {citation.score.toFixed(3)}</Tag>
+                        <Tag color="cyan">相关度 {(citation.score * 100).toFixed(1)}%</Tag>
                       </article>
                     ))}
                   </div>

@@ -70,6 +70,14 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
         return count != null && count > 0;
     }
 
+    @Override
+    public boolean updatePasswordHash(Long userId, String passwordHash) {
+        return jdbcTemplate.update(
+                "update app_user set password_hash = ?, updated_at = ? where id = ? and status = 'ACTIVE'",
+                passwordHash, OffsetDateTime.now(), userId
+        ) == 1;
+    }
+
     private UserAccount mapUser(ResultSet resultSet, int rowNumber) throws SQLException {
         return new UserAccount(
                 resultSet.getLong("id"),

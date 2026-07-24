@@ -8,6 +8,7 @@ import com.agentmind.common.security.AgentMindSecurityProperties;
 import com.agentmind.common.security.SecurityConfiguration;
 import com.agentmind.common.security.SecurityMode;
 import com.agentmind.user.model.dto.LoginRequest;
+import com.agentmind.user.model.dto.ChangePasswordRequest;
 import com.agentmind.user.model.dto.RegisterUserRequest;
 import com.agentmind.user.repository.InMemoryUserAccountRepository;
 import com.agentmind.workspace.repository.InMemoryKnowledgeWorkspaceRepository;
@@ -54,6 +55,26 @@ class LocalAuthenticationServiceTests {
         assertThatThrownBy(() -> service.login(new LoginRequest("missing", "wrong-password")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("用户名或密码错误");
+    }
+
+    @Test
+    void shouldChangePasswordAndInvalidateOldCredential() {
+        AgentMindSecurityProperties properties = properties();
+        SecurityConfiguration configuration = new SecurityConfiguration();
+        LocalAuthenticationService service = new LocalAuthenticationService(
+                new InMemoryUserAccountRepository(), new InMemoryKnowledgeWorkspaceRepository(),
+                configuration.passwordEncoder(), configuration.localJwtEncoder(properties), properties);
+        service.register(new RegisterUserRequest(
+                "password-user", "密码用户", "password@example.com", "old-password-2026"));
+
+        service.changePassword(new ChangePasswordRequest(
+                "password-user", "old-password-2026", "new-password-2026", "test", "TEST"));
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("password-user", "old-password-2026")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("用户名或密码错误");
+        assertThat(service.login(new LoginRequest("password-user", "new-password-2026")).accessToken())
+                .isNotBlank();
     }
 
     private AgentMindSecurityProperties properties() {
