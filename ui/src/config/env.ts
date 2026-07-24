@@ -4,9 +4,10 @@ function readPositiveNumber(value: string | undefined, fallback: number): number
 }
 
 export const env = {
-  // 后端接口地址和认证模式来自构建环境，业务页面不再读取固定知识空间编号。
+  // 本地开发默认直接连接 start-local.ps1 启动的后端，并与其 local-jwt 模式保持一致。
+  // 部署环境仍可通过 VITE_ 变量覆盖，业务页面不读取固定知识空间编号。
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081/api',
-  authMode: import.meta.env.VITE_AUTH_MODE ?? 'disabled',
+  authMode: import.meta.env.VITE_AUTH_MODE ?? 'local-jwt',
   oidcAuthority: import.meta.env.VITE_OIDC_AUTHORITY ?? '',
   oidcClientId: import.meta.env.VITE_OIDC_CLIENT_ID ?? '',
   oidcScope: import.meta.env.VITE_OIDC_SCOPE ?? 'openid profile email',

@@ -44,6 +44,14 @@ npm run dev
 http://localhost:5173
 ```
 
+本地开发已经内置以下默认值，无需创建 `.env.local` 或临时设置变量：
+
+- 后端地址：`http://localhost:8081/api`
+- 认证模式：`local-jwt`
+- 上传大小提示：`150MB`
+
+只有连接其他环境或切换 OIDC 时才需要通过 `VITE_` 环境变量覆盖。
+
 ## 当前阶段检查重点
 
 - 侧边栏导航是否可以切换所有页面。
@@ -60,12 +68,6 @@ http://localhost:5173
 ## 本阶段说明
 
 工作台、采集中心、知识库、Agent 问答、复习工作台和设置页已经接入真实后端。知识空间列表来自当前登录用户的后端接口，选择结果只在浏览器保存空间编号，不再使用构建期固定编号。后端地址默认是 `http://localhost:8081/api`。
-
-```powershell
-$env:VITE_API_BASE_URL = "http://localhost:8081/api"
-$env:VITE_AUTH_MODE = "local-jwt"
-npm run dev
-```
 
 `VITE_AUTH_MODE` 应与后端 `AGENTMIND_SECURITY_MODE` 保持一致，可选 `disabled`、`local-jwt` 或 `oidc`。
 本地 JWT 令牌由统一 API Client 和 SSE Client 自动携带；收到 `401` 后会清理会话并返回登录页。

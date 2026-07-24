@@ -5,13 +5,14 @@
 复习卡片可以通过自建 SearXNG 补充公开互联网资料，不依赖 Brave Search API Key。
 知识库原文始终是卡片的主要依据；联网结果只显示在“联网补充”区域，搜索失败不会阻断制卡。
 
-## 启动 SearXNG
+## 日常启动
 
-在项目根目录执行：
+后端本地启动脚本会自动启动并等待 PostgreSQL、Redis、OpenSearch 和 SearXNG，
+无需单独执行 Docker 命令或设置临时搜索变量：
 
 ```powershell
-docker compose --profile searxng up -d agentmind-searxng
-docker compose ps agentmind-searxng
+cd D:\Program\AgentMind\backend
+.\scripts\start-local.ps1
 ```
 
 默认访问地址为 `http://localhost:8888`。端口冲突时可在本地 `.env` 中设置：
@@ -36,20 +37,8 @@ Invoke-RestMethod "http://localhost:8888/search?q=Java%20virtual%20thread&format
 docker compose --profile searxng up -d --force-recreate agentmind-searxng
 ```
 
-## 启动后端
-
-在启动后端的 PowerShell 会话中设置：
-
-```powershell
-$env:AGENTMIND_FLASHCARD_WEB_SEARCH_ENABLED = "true"
-$env:AGENTMIND_WEB_SEARCH_PROVIDER = "searxng"
-$env:AGENTMIND_WEB_SEARCH_BASE_URL = "http://localhost:8888"
-$env:AGENTMIND_WEB_SEARCH_RESULT_COUNT = "3"
-
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=local,local-ai,opensearch"
-```
-
-SearXNG 模式不需要设置 `AGENTMIND_WEB_SEARCH_API_KEY`。
+SearXNG 模式不需要设置 `AGENTMIND_WEB_SEARCH_API_KEY`。脚本参数
+`-SkipDependencies` 只用于已经手动管理容器的排障场景，日常启动不需要使用。
 
 ## 切回 Brave Search
 

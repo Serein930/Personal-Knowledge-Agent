@@ -55,6 +55,13 @@ agentmind:
   rag:
     # 回答模型仍可使用公共 Mock 默认值，但每次调用的观测记录必须真实持久化。
     observation-store: jdbc
+  study:
+    flashcard:
+      web-supplement:
+        # 本地启动脚本会自动拉起 SearXNG，因此本地 profile 默认开启联网补充。
+        enabled: ${AGENTMIND_FLASHCARD_WEB_SEARCH_ENABLED:true}
+        provider: ${AGENTMIND_WEB_SEARCH_PROVIDER:searxng}
+        base-url: ${AGENTMIND_WEB_SEARCH_BASE_URL:http://localhost:8888}
   chat:
     memory:
       # 本地真实联调使用 Redis，确保重启后会话仍可恢复并验证 TTL 行为。
