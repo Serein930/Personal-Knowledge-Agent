@@ -23,6 +23,7 @@
         <!-- 文档解析版本独立管理，便于跟踪解析器安全修复并避免测试与生产版本漂移。 -->
         <tika.version>3.3.1</tika.version>
         <pdfbox.version>3.0.8</pdfbox.version>
+        <jsoup.version>1.22.2</jsoup.version>
         <!-- 1.21.4 保持 1.x API，同时兼容 Docker Engine 29 提高后的最低 API 版本。 -->
         <testcontainers.version>1.21.4</testcontainers.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -132,6 +133,13 @@
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-parsers-standard-package</artifactId>
+        </dependency>
+
+        <!-- 联网搜索摘要可能包含高亮标签，显式依赖 Jsoup 完成安全的纯文本清洗。 -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
         </dependency>
 
         <dependency>

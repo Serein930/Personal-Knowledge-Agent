@@ -208,7 +208,9 @@ agentmind:
         failure-fallback-enabled: true
       web-supplement:
         enabled: ${AGENTMIND_FLASHCARD_WEB_SEARCH_ENABLED:false}
-        base-url: ${AGENTMIND_WEB_SEARCH_BASE_URL:https://api.search.brave.com}
+        # 默认适配本机自建 SearXNG；切换为 brave 时必须同时配置 Brave 地址与 API Key。
+        provider: ${AGENTMIND_WEB_SEARCH_PROVIDER:searxng}
+        base-url: ${AGENTMIND_WEB_SEARCH_BASE_URL:http://localhost:8888}
         api-key: ${AGENTMIND_WEB_SEARCH_API_KEY:}
         result-count: ${AGENTMIND_WEB_SEARCH_RESULT_COUNT:3}
     maintenance:

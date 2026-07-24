@@ -1,0 +1,20 @@
+# AgentMind 本地 SearXNG 配置。
+# 继承官方默认配置，只覆盖本项目需要的 JSON API 和基础隐私选项。
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "AgentMind Search"
+
+search:
+  safe_search: 1
+  autocomplete: ""
+  formats:
+    - html
+    - json
+
+server:
+  # 本地实例由 AgentMind 后端调用，不对公网提供匿名搜索，因此关闭公共实例限流器。
+  # 若后续暴露到公网，应启用 limiter、Valkey 和反向代理访问控制。
+  limiter: false
+  image_proxy: true

@@ -80,6 +80,27 @@ services:
       retries: 10
       start_period: 30s
 
+  agentmind-searxng:
+    image: searxng/searxng:latest
+    container_name: agentmind-searxng
+    profiles: ["searxng"]
+    restart: unless-stopped
+    environment:
+      # 官方镜像会使用该变量覆盖 settings.yml 中的服务密钥。
+      SEARXNG_SECRET: ${AGENTMIND_SEARXNG_SECRET:-agentmind-local-only-change-me}
+      SEARXNG_BASE_URL: http://localhost:${AGENTMIND_SEARXNG_PORT:-8888}/
+    ports:
+      - "${AGENTMIND_SEARXNG_PORT:-8888}:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - agentmind-searxng-cache:/var/cache/searxng
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   agentmind-prometheus:
     image: prom/prometheus:v3.4.1
     container_name: agentmind-prometheus
@@ -126,3 +147,4 @@ volumes:
   agentmind-opensearch-snapshots:
   agentmind-grafana-data:
   agentmind-minio-data:
+  agentmind-searxng-cache:
